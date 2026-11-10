@@ -5,7 +5,10 @@ import type { ActionResult } from '@/ui/action-form';
 import { act, text } from '../../../_lib/actions';
 import { requirePlatformContext } from '../../../_lib/session';
 
-export async function saveFlagAction(_previous: ActionResult | null, formData: FormData): Promise<ActionResult> {
+export async function saveFlagAction(
+  _previous: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
   return act(async () => {
     const businessId = text(formData, 'businessId');
     await setFlag(await requirePlatformContext(), {
@@ -18,7 +21,11 @@ export async function saveFlagAction(_previous: ActionResult | null, formData: F
   });
 }
 
-export async function toggleFlagAction(key: string, businessId: string | null, enabled: boolean): Promise<ActionResult> {
+export async function toggleFlagAction(
+  key: string,
+  businessId: string | null,
+  enabled: boolean,
+): Promise<ActionResult> {
   return act(async () => {
     await setFlag(await requirePlatformContext(), { key, businessId, enabled });
   });

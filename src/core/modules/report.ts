@@ -20,7 +20,9 @@ export type InstalledModule = {
   portals: Record<'staff' | 'customer' | 'field', { built: boolean; on: boolean }>;
 };
 
-export async function moduleRegistryReport(ctx: PlatformContext): Promise<{ installed: InstalledModule[]; problems: string[]; registered: number }> {
+export async function moduleRegistryReport(
+  ctx: PlatformContext,
+): Promise<{ installed: InstalledModule[]; problems: string[]; registered: number }> {
   authorize(ctx, 'platform.modules.read');
   const rows = await getDb()
     .select({ business: businesses, mod: businessModules })
@@ -40,14 +42,20 @@ export async function moduleRegistryReport(ctx: PlatformContext): Promise<{ inst
       manifest,
       portals: {
         staff: { built: Boolean(manifest?.portals.staff), on: mod?.staffPortalEnabled ?? false },
-        customer: { built: Boolean(manifest?.portals.customer), on: mod?.customerPortalEnabled ?? false },
+        customer: {
+          built: Boolean(manifest?.portals.customer),
+          on: mod?.customerPortalEnabled ?? false,
+        },
         field: { built: Boolean(manifest?.portals.field), on: mod?.fieldPortalEnabled ?? false },
       },
     };
   });
   const problems = [...validateRegistry()];
   for (const row of installed) {
-    if (row.moduleKey && !row.manifest) problems.push(`${row.businessName} expects module "${row.moduleKey}", which is not in src/modules/registry.ts.`);
+    if (row.moduleKey && !row.manifest)
+      problems.push(
+        `${row.businessName} expects module "${row.moduleKey}", which is not in src/modules/registry.ts.`,
+      );
   }
   return { installed, problems, registered: getModules().length };
 }

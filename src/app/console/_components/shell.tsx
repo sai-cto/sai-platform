@@ -1,7 +1,21 @@
 'use client';
 
 import { Command } from 'cmdk';
-import { Activity, Boxes, ChartNoAxesColumn, Flag, HeartPulse, House, LogOut, Menu, Search, Settings, Upload, Users, X } from 'lucide-react';
+import {
+  Activity,
+  Boxes,
+  ChartNoAxesColumn,
+  Flag,
+  HeartPulse,
+  House,
+  LogOut,
+  Menu,
+  Search,
+  Settings,
+  Upload,
+  Users,
+  X,
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Dialog } from 'radix-ui';
@@ -30,7 +44,15 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function NavItem({ link, pathname, onNavigate }: { link: NavLink; pathname: string; onNavigate?: () => void }) {
+function NavItem({
+  link,
+  pathname,
+  onNavigate,
+}: {
+  link: NavLink;
+  pathname: string;
+  onNavigate?: () => void;
+}) {
   const Icon = ICONS[link.icon];
   const active = isActive(pathname, link.href);
   return (
@@ -71,7 +93,9 @@ function SidebarContent({
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-12 shrink-0 items-center gap-2 px-3">
-        <span className="flex size-6 items-center justify-center rounded bg-zinc-900 text-[9px] font-bold tracking-tight text-white">SAI</span>
+        <span className="flex size-6 items-center justify-center rounded bg-zinc-900 text-[9px] font-bold tracking-tight text-white">
+          SAI
+        </span>
         <span className="text-sm font-semibold tracking-tight text-zinc-900">Console</span>
       </div>
 
@@ -83,7 +107,9 @@ function SidebarContent({
         >
           <Search className="size-3.5" aria-hidden="true" />
           <span className="flex-1">Go to…</span>
-          <kbd className="rounded border border-zinc-200 bg-zinc-50 px-1 font-sans text-[10px] text-zinc-500">⌘K</kbd>
+          <kbd className="rounded border border-zinc-200 bg-zinc-50 px-1 font-sans text-[10px] text-zinc-500">
+            ⌘K
+          </kbd>
         </button>
       </div>
 
@@ -96,7 +122,9 @@ function SidebarContent({
 
         {platform.length > 0 ? (
           <div data-testid="nav-platform">
-            <div className="px-2 pb-1 text-[11px] font-medium tracking-wide text-zinc-400 uppercase">Platform</div>
+            <div className="px-2 pb-1 text-[11px] font-medium tracking-wide text-zinc-400 uppercase">
+              Platform
+            </div>
             <div className="space-y-0.5">
               {platform.map((link) => (
                 <NavItem key={link.href} link={link} pathname={pathname} onNavigate={onNavigate} />
@@ -106,7 +134,9 @@ function SidebarContent({
         ) : null}
 
         <div data-testid="nav-businesses">
-          <div className="px-2 pb-1 text-[11px] font-medium tracking-wide text-zinc-400 uppercase">Businesses</div>
+          <div className="px-2 pb-1 text-[11px] font-medium tracking-wide text-zinc-400 uppercase">
+            Businesses
+          </div>
           <div className="space-y-0.5">
             {businesses.map((b) => {
               const active = isActive(pathname, `/console/${b.slug}`);
@@ -127,7 +157,11 @@ function SidebarContent({
                 </Link>
               );
             })}
-            {businesses.length === 0 ? <p className="px-2 py-1 text-xs text-zinc-500">You have not been given access to a business yet.</p> : null}
+            {businesses.length === 0 ? (
+              <p className="px-2 py-1 text-xs text-zinc-500">
+                You have not been given access to a business yet.
+              </p>
+            ) : null}
           </div>
         </div>
       </nav>
@@ -135,8 +169,12 @@ function SidebarContent({
       <div className="shrink-0 border-t border-zinc-200 p-2">
         <div className="flex items-center gap-2 px-1">
           <div className="min-w-0 flex-1">
-            <div data-testid="whoami" className="truncate text-[13px] font-medium text-zinc-900">{user.name}</div>
-            <div data-testid="whoami-role" className="truncate text-[11px] text-zinc-500">{user.roleLabel}</div>
+            <div data-testid="whoami" className="truncate text-[13px] font-medium text-zinc-900">
+              {user.name}
+            </div>
+            <div data-testid="whoami-role" className="truncate text-[11px] text-zinc-500">
+              {user.roleLabel}
+            </div>
           </div>
           <form action={signOut}>
             <button
@@ -197,7 +235,14 @@ export function Shell({
   const openPalette = () => {
     const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[data-business-tab]'));
     const code = current?.business.code ?? '';
-    setTabItems(links.map((a) => ({ label: `${code}: ${a.textContent ?? ''}`, href: a.getAttribute('href') ?? '', group: 'This business', keywords: `g ${a.dataset.shortcut ?? ''}` })));
+    setTabItems(
+      links.map((a) => ({
+        label: `${code}: ${a.textContent ?? ''}`,
+        href: a.getAttribute('href') ?? '',
+        group: 'This business',
+        keywords: `g ${a.dataset.shortcut ?? ''}`,
+      })),
+    );
     setPaletteOpen(true);
   };
   const openPaletteRef = useRef(openPalette);
@@ -210,7 +255,12 @@ export function Shell({
       ...tabItems,
       ...top.map((l) => ({ label: l.label, href: l.href, group: 'Go to' })),
       ...platform.map((l) => ({ label: l.label, href: l.href, group: 'Platform' })),
-      ...businesses.map((b) => ({ label: b.name, href: `/console/${b.slug}`, group: 'Businesses', keywords: b.code })),
+      ...businesses.map((b) => ({
+        label: b.name,
+        href: `/console/${b.slug}`,
+        group: 'Businesses',
+        keywords: b.code,
+      })),
     ],
     [tabItems, top, platform, businesses],
   );
@@ -223,20 +273,29 @@ export function Shell({
         return;
       }
       const target = event.target as HTMLElement | null;
-      const typing = target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+      const typing =
+        target &&
+        (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
       if (typing || event.metaKey || event.ctrlKey || event.altKey) return;
 
       if (event.key === '[' || event.key === ']') {
         if (businesses.length === 0) return;
         const index = current ? businesses.findIndex((b) => b.slug === current.business.slug) : -1;
-        const next = event.key === ']' ? (index + 1) % businesses.length : (index - 1 + businesses.length) % businesses.length;
+        const next =
+          event.key === ']'
+            ? (index + 1) % businesses.length
+            : (index - 1 + businesses.length) % businesses.length;
         router.push(`/console/${businesses[next].slug}`);
         return;
       }
       if (pendingG.current) {
         pendingG.current = false;
         const key = event.key.toLowerCase();
-        const link = /^[a-z]$/.test(key) ? document.querySelector<HTMLAnchorElement>(`a[data-business-tab][data-shortcut="${key}"]`) : null;
+        const link = /^[a-z]$/.test(key)
+          ? document.querySelector<HTMLAnchorElement>(
+              `a[data-business-tab][data-shortcut="${key}"]`,
+            )
+          : null;
         const href = link?.getAttribute('href');
         if (href) {
           event.preventDefault();
@@ -268,28 +327,44 @@ export function Shell({
 
   return (
     <div className="flex min-h-screen bg-white">
-      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-zinc-900 focus:px-3 focus:py-2 focus:text-sm focus:text-white">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-zinc-900 focus:px-3 focus:py-2 focus:text-sm focus:text-white"
+      >
         Skip to content
       </a>
 
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 border-r border-zinc-200 bg-zinc-50 lg:block">{sidebar()}</aside>
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 border-r border-zinc-200 bg-zinc-50 lg:block">
+        {sidebar()}
+      </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Phone / tablet top bar */}
         <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-2 border-b border-zinc-200 bg-white px-3 lg:hidden">
           <Dialog.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
             <Dialog.Trigger asChild>
-              <button type="button" aria-label="Open menu" className="flex size-8 items-center justify-center rounded-md text-zinc-700 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-zinc-900">
+              <button
+                type="button"
+                aria-label="Open menu"
+                className="flex size-8 items-center justify-center rounded-md text-zinc-700 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-zinc-900"
+              >
                 <Menu className="size-5" aria-hidden="true" />
               </button>
             </Dialog.Trigger>
             <Dialog.Portal>
               <Dialog.Overlay className="fixed inset-0 z-40 bg-zinc-950/40" />
-              <Dialog.Content aria-describedby={undefined} className="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] border-r border-zinc-200 bg-zinc-50 shadow-xl focus:outline-none">
+              <Dialog.Content
+                aria-describedby={undefined}
+                className="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] border-r border-zinc-200 bg-zinc-50 shadow-xl focus:outline-none"
+              >
                 <Dialog.Title className="sr-only">Menu</Dialog.Title>
                 <Dialog.Close asChild>
-                  <button type="button" aria-label="Close menu" className="absolute top-2 right-2 flex size-8 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-200/60">
+                  <button
+                    type="button"
+                    aria-label="Close menu"
+                    className="absolute top-2 right-2 flex size-8 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-200/60"
+                  >
                     <X className="size-4" aria-hidden="true" />
                   </button>
                 </Dialog.Close>
@@ -297,9 +372,18 @@ export function Shell({
               </Dialog.Content>
             </Dialog.Portal>
           </Dialog.Root>
-          <span className="flex size-6 items-center justify-center rounded bg-zinc-900 text-[9px] font-bold text-white">SAI</span>
-          <span className="truncate text-sm font-semibold text-zinc-900">{current ? current.business.name : 'Console'}</span>
-          <button type="button" aria-label="Go to…" onClick={openPalette} className="ml-auto flex size-8 items-center justify-center rounded-md text-zinc-700 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-zinc-900">
+          <span className="flex size-6 items-center justify-center rounded bg-zinc-900 text-[9px] font-bold text-white">
+            SAI
+          </span>
+          <span className="truncate text-sm font-semibold text-zinc-900">
+            {current ? current.business.name : 'Console'}
+          </span>
+          <button
+            type="button"
+            aria-label="Go to…"
+            onClick={openPalette}
+            className="ml-auto flex size-8 items-center justify-center rounded-md text-zinc-700 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-zinc-900"
+          >
             <Search className="size-4" aria-hidden="true" />
           </button>
         </header>
@@ -312,14 +396,27 @@ export function Shell({
       <Dialog.Root open={paletteOpen} onOpenChange={setPaletteOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-zinc-950/40" />
-          <Dialog.Content aria-describedby={undefined} className="fixed top-[15vh] left-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-2xl focus:outline-none">
+          <Dialog.Content
+            aria-describedby={undefined}
+            className="fixed top-[15vh] left-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-2xl focus:outline-none"
+          >
             <Dialog.Title className="sr-only">Go to a page</Dialog.Title>
             <Command label="Go to a page">
-              <Command.Input autoFocus placeholder="Type a page or business…" className="h-11 w-full border-b border-zinc-200 px-4 text-sm outline-none placeholder:text-zinc-400" />
+              <Command.Input
+                autoFocus
+                placeholder="Type a page or business…"
+                className="h-11 w-full border-b border-zinc-200 px-4 text-sm outline-none placeholder:text-zinc-400"
+              />
               <Command.List className="max-h-80 overflow-y-auto p-1.5">
-                <Command.Empty className="px-3 py-6 text-center text-sm text-zinc-500">Nothing matches.</Command.Empty>
+                <Command.Empty className="px-3 py-6 text-center text-sm text-zinc-500">
+                  Nothing matches.
+                </Command.Empty>
                 {[...new Set(paletteItems.map((i) => i.group))].map((group) => (
-                  <Command.Group key={group} heading={group} className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-zinc-400 [&_[cmdk-group-heading]]:uppercase">
+                  <Command.Group
+                    key={group}
+                    heading={group}
+                    className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-zinc-400 [&_[cmdk-group-heading]]:uppercase"
+                  >
                     {paletteItems
                       .filter((i) => i.group === group)
                       .map((item) => (

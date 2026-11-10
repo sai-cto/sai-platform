@@ -7,7 +7,12 @@ import { Badge } from '@/ui/badge';
 import { ConfirmButton } from '@/ui/confirm-button';
 import { Card, EmptyState, Field, PageHeader, inputClass } from '@/ui/layout';
 import { guarded, requireBusinessContext } from '../../../_lib/session';
-import { addMemberAction, changeMemberRoleAction, removeMemberAction, setMemberPermissionsAction } from './actions';
+import {
+  addMemberAction,
+  changeMemberRoleAction,
+  removeMemberAction,
+  setMemberPermissionsAction,
+} from './actions';
 
 export const metadata: Metadata = { title: 'People and access' };
 
@@ -40,13 +45,28 @@ export default async function PeoplePage({ params }: { params: Promise<{ busines
                     <div className="truncate text-sm font-medium text-zinc-900">{m.name}</div>
                     <div className="truncate text-xs text-zinc-500">{m.email}</div>
                   </div>
-                  <Badge tone={m.role === 'business_admin' ? 'blue' : 'neutral'}>{ROLE_LABELS[m.role]}</Badge>
+                  <Badge tone={m.role === 'business_admin' ? 'blue' : 'neutral'}>
+                    {ROLE_LABELS[m.role]}
+                  </Badge>
                   {canManage ? (
                     <span className="flex gap-1.5">
                       <ConfirmButton
-                        action={changeMemberRoleAction.bind(null, slug, m.membershipId, m.role === 'business_admin' ? 'business_staff' : 'business_admin')}
-                        confirmTitle={m.role === 'business_admin' ? `Make ${m.name} staff?` : `Make ${m.name} an admin?`}
-                        confirmBody={m.role === 'business_admin' ? ROLE_DESCRIPTIONS.business_staff : ROLE_DESCRIPTIONS.business_admin}
+                        action={changeMemberRoleAction.bind(
+                          null,
+                          slug,
+                          m.membershipId,
+                          m.role === 'business_admin' ? 'business_staff' : 'business_admin',
+                        )}
+                        confirmTitle={
+                          m.role === 'business_admin'
+                            ? `Make ${m.name} staff?`
+                            : `Make ${m.name} an admin?`
+                        }
+                        confirmBody={
+                          m.role === 'business_admin'
+                            ? ROLE_DESCRIPTIONS.business_staff
+                            : ROLE_DESCRIPTIONS.business_admin
+                        }
                         confirmLabel="Change role"
                       >
                         {m.role === 'business_admin' ? 'Make staff' : 'Make admin'}
@@ -70,12 +90,27 @@ export default async function PeoplePage({ params }: { params: Promise<{ busines
                       Permissions: {m.grants.length} of {grantable.length} switched on
                     </summary>
                     {canManage ? (
-                      <ActionForm action={setMemberPermissionsAction.bind(null, slug, m.membershipId)} submitLabel="Save permissions" submitVariant="secondary" resetOnSuccess={false} className="mt-2">
+                      <ActionForm
+                        action={setMemberPermissionsAction.bind(null, slug, m.membershipId)}
+                        submitLabel="Save permissions"
+                        submitVariant="secondary"
+                        resetOnSuccess={false}
+                        className="mt-2"
+                      >
                         <fieldset className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
                           <legend className="sr-only">Permissions for {m.name}</legend>
                           {grantable.map((a) => (
-                            <label key={a.key} className="flex items-start gap-2 text-sm text-zinc-800">
-                              <input type="checkbox" name="permission" value={a.key} defaultChecked={m.grants.includes(a.key)} className="mt-0.5 size-4 rounded border-zinc-300" />
+                            <label
+                              key={a.key}
+                              className="flex items-start gap-2 text-sm text-zinc-800"
+                            >
+                              <input
+                                type="checkbox"
+                                name="permission"
+                                value={a.key}
+                                defaultChecked={m.grants.includes(a.key)}
+                                className="mt-0.5 size-4 rounded border-zinc-300"
+                              />
                               <span>{a.label}</span>
                             </label>
                           ))}
@@ -83,14 +118,18 @@ export default async function PeoplePage({ params }: { params: Promise<{ busines
                       </ActionForm>
                     ) : (
                       <ul className="mt-2 list-disc pl-5 text-sm text-zinc-700">
-                        {grantable.filter((a) => m.grants.includes(a.key)).map((a) => (
-                          <li key={a.key}>{a.label}</li>
-                        ))}
+                        {grantable
+                          .filter((a) => m.grants.includes(a.key))
+                          .map((a) => (
+                            <li key={a.key}>{a.label}</li>
+                          ))}
                       </ul>
                     )}
                   </details>
                 ) : (
-                  <p className="mt-1 text-xs text-zinc-500">Admins hold every day-to-day permission of this business.</p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Admins hold every day-to-day permission of this business.
+                  </p>
                 )}
               </li>
             ))}
@@ -99,11 +138,18 @@ export default async function PeoplePage({ params }: { params: Promise<{ busines
       </Card>
 
       {canManage ? (
-        <Card title="Add a person" description="If they do not have an account yet, one is created for them.">
+        <Card
+          title="Add a person"
+          description="If they do not have an account yet, one is created for them."
+        >
           <ActionForm action={addMemberAction.bind(null, slug)} submitLabel="Add person">
             <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Full name" htmlFor="name"><input id="name" name="name" required className={inputClass} /></Field>
-              <Field label="Email" htmlFor="email"><input id="email" name="email" type="email" required className={inputClass} /></Field>
+              <Field label="Full name" htmlFor="name">
+                <input id="name" name="name" required className={inputClass} />
+              </Field>
+              <Field label="Email" htmlFor="email">
+                <input id="email" name="email" type="email" required className={inputClass} />
+              </Field>
               <Field label="Role" htmlFor="role">
                 <select id="role" name="role" defaultValue="business_staff" className={inputClass}>
                   <option value="business_staff">{ROLE_LABELS.business_staff}</option>
@@ -116,10 +162,15 @@ export default async function PeoplePage({ params }: { params: Promise<{ busines
       ) : null}
 
       {removed.length > 0 ? (
-        <Card title={`Removed (${removed.length})`} description="No longer have access. Add them again above to restore it.">
+        <Card
+          title={`Removed (${removed.length})`}
+          description="No longer have access. Add them again above to restore it."
+        >
           <ul className="space-y-1 text-sm text-zinc-600">
             {removed.map((m) => (
-              <li key={m.membershipId}>{m.name} <span className="text-zinc-400">· {m.email}</span></li>
+              <li key={m.membershipId}>
+                {m.name} <span className="text-zinc-400">· {m.email}</span>
+              </li>
             ))}
           </ul>
         </Card>

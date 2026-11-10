@@ -76,12 +76,18 @@ export async function sandboxSummary(ctx: BusinessContext): Promise<SandboxSumma
   return withScope(sandboxCtx, 'business.sandbox.use', async (s) => {
     const counts = [];
     for (const entity of entitiesFor(ctx.business.moduleKey)) {
-      counts.push({ entityKey: entity.key, label: entity.labelPlural, rows: await s.db.$count(entity.table, s.where(entity.table)) });
+      counts.push({
+        entityKey: entity.key,
+        label: entity.labelPlural,
+        rows: await s.db.$count(entity.table, s.where(entity.table)),
+      });
     }
     const [reset] = await s.db
       .select({ at: activityLog.occurredAt, by: activityLog.actorName })
       .from(activityLog)
-      .where(and(eq(activityLog.businessId, ctx.business.id), eq(activityLog.action, 'sandbox_reset')))
+      .where(
+        and(eq(activityLog.businessId, ctx.business.id), eq(activityLog.action, 'sandbox_reset')),
+      )
       .orderBy(desc(activityLog.occurredAt))
       .limit(1);
     return { counts, lastResetAt: reset?.at ?? null, lastResetBy: reset?.by ?? null };

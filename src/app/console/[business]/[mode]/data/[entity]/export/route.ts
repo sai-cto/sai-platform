@@ -7,7 +7,10 @@ import { buildBusinessContext } from '@/core/tenancy/context';
 import { currentUserId } from '../../../../../../_lib/session';
 
 /** CSV download of an entity's records. Needs business.data.export; every export is logged. */
-export async function GET(request: Request, { params }: { params: Promise<{ business: string; mode: string; entity: string }> }) {
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ business: string; mode: string; entity: string }> },
+) {
   const { business, mode, entity: entityKey } = await params;
   const notFound = new NextResponse('Not found', { status: 404 });
   const userId = await currentUserId();
@@ -23,10 +26,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ busi
       search: url.searchParams.get('q') ?? undefined,
       archived: show === 'archived' ? 'only' : show === 'all' ? 'include' : 'exclude',
     });
-    const csv = Papa.unparse({ fields: columns.map((c) => c.label), data: rows.map((row) => columns.map((c) => safeCell(row[c.key]))) });
+    const csv = Papa.unparse({
+      fields: columns.map((c) => c.label),
+      data: rows.map((row) => columns.map((c) => safeCell(row[c.key]))),
+    });
     const filename = `${ctx.business.slug}-${entity.key.replace(/\./g, '-')}-${ctx.environment}-${new Date().toISOString().slice(0, 10)}.csv`;
     return new NextResponse(csv, {
-      headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${filename}"`, 'Cache-Control': 'no-store' },
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Cache-Control': 'no-store',
+      },
     });
   } catch (error) {
     // Another business, a mode you cannot use, or no export permission: all look the same.

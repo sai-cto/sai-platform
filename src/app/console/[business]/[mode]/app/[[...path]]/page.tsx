@@ -24,7 +24,9 @@ export default async function StaffPortalPage({
   if (!mod) {
     return (
       <Card title="No app yet">
-        <p className="text-sm text-zinc-600">No module is registered for {ctx.business.name}, so there is no staff portal to show.</p>
+        <p className="text-sm text-zinc-600">
+          No module is registered for {ctx.business.name}, so there is no staff portal to show.
+        </p>
       </Card>
     );
   }

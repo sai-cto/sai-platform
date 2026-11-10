@@ -23,7 +23,12 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
       user={{ name: ctx.actor.name, email: ctx.actor.email, roleLabel }}
       top={topLinks(ctx)}
       platform={platformLinks(ctx)}
-      businesses={businesses.map((b) => ({ slug: b.slug, code: b.code, name: b.name, accentColor: b.accentColor }))}
+      businesses={businesses.map((b) => ({
+        slug: b.slug,
+        code: b.code,
+        name: b.name,
+        accentColor: b.accentColor,
+      }))}
       signOut={logoutAction}
     >
       {children}

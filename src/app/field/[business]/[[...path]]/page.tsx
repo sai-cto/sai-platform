@@ -20,11 +20,19 @@ export default async function FieldPortalPage({
 }) {
   const { business, path } = await params;
   const ctx = await requireBusinessContext(business, 'live');
-  const portal = ctx.business.moduleKey ? getModule(ctx.business.moduleKey)?.portals.field : undefined;
+  const portal = ctx.business.moduleKey
+    ? getModule(ctx.business.moduleKey)?.portals.field
+    : undefined;
   if (!portal || !(await isPortalAvailable(ctx.business.id, 'field'))) notFound();
   return (
     <main className="mx-auto max-w-3xl px-4 py-6">
-      <PortalHost ctx={ctx} portal={portal} segments={path ?? []} searchParams={await searchParams} basePath={`/field/${ctx.business.slug}`} />
+      <PortalHost
+        ctx={ctx}
+        portal={portal}
+        segments={path ?? []}
+        searchParams={await searchParams}
+        basePath={`/field/${ctx.business.slug}`}
+      />
     </main>
   );
 }

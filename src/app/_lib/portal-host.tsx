@@ -27,7 +27,10 @@ export async function PortalHost({
   if (!match || !ctx.permissions.has(match.route.permission)) notFound();
   const Page = match.route.component;
   const flatSearch: PortalPageProps['searchParams'] = Object.fromEntries(
-    Object.entries(searchParams).map(([key, value]) => [key, Array.isArray(value) ? value[0] : value]),
+    Object.entries(searchParams).map(([key, value]) => [
+      key,
+      Array.isArray(value) ? value[0] : value,
+    ]),
   );
   const current = segments.join('/');
   const nav = portal.nav.filter((item) => {
@@ -38,15 +41,24 @@ export async function PortalHost({
   return (
     <div>
       {nav.length > 1 ? (
-        <nav aria-label="App sections" className="mb-4 flex gap-1 overflow-x-auto rounded-lg border border-zinc-200 bg-zinc-50 p-1">
+        <nav
+          aria-label="App sections"
+          className="mb-4 flex gap-1 overflow-x-auto rounded-lg border border-zinc-200 bg-zinc-50 p-1"
+        >
           {nav.map((item) => {
-            const active = item.path === '' ? current === '' : current === item.path || current.startsWith(`${item.path}/`);
+            const active =
+              item.path === ''
+                ? current === ''
+                : current === item.path || current.startsWith(`${item.path}/`);
             return (
               <Link
                 key={item.path}
                 href={item.path ? `${basePath}/${item.path}` : basePath}
                 aria-current={active ? 'page' : undefined}
-                className={cn('shrink-0 rounded-md px-3 py-1.5 text-[13px] whitespace-nowrap text-zinc-600 hover:text-zinc-900', active && 'bg-white font-medium text-zinc-900 shadow-sm ring-1 ring-zinc-200')}
+                className={cn(
+                  'shrink-0 rounded-md px-3 py-1.5 text-[13px] whitespace-nowrap text-zinc-600 hover:text-zinc-900',
+                  active && 'bg-white font-medium text-zinc-900 shadow-sm ring-1 ring-zinc-200',
+                )}
               >
                 {item.label}
               </Link>
@@ -54,7 +66,9 @@ export async function PortalHost({
           })}
         </nav>
       ) : null}
-      {await guarded(async () => <Page ctx={ctx} params={match.params} searchParams={flatSearch} basePath={basePath} />)}
+      {await guarded(async () => (
+        <Page ctx={ctx} params={match.params} searchParams={flatSearch} basePath={basePath} />
+      ))}
     </div>
   );
 }

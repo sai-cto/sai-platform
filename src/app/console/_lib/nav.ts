@@ -4,17 +4,53 @@
  */
 import type { BusinessContext, PlatformContext } from '@/core/tenancy/context';
 
-export type NavIcon = 'home' | 'chart' | 'users' | 'boxes' | 'flag' | 'activity' | 'upload' | 'heart' | 'settings';
+export type NavIcon =
+  'home' | 'chart' | 'users' | 'boxes' | 'flag' | 'activity' | 'upload' | 'heart' | 'settings';
 export type NavLink = { label: string; href: string; icon: NavIcon; permission?: string };
 
 const PLATFORM_LINKS: NavLink[] = [
-  { label: 'Users and roles', href: '/console/platform/users', icon: 'users', permission: 'platform.users.read' },
-  { label: 'Module registry', href: '/console/platform/modules', icon: 'boxes', permission: 'platform.modules.read' },
-  { label: 'Feature flags', href: '/console/platform/flags', icon: 'flag', permission: 'platform.flags.read' },
-  { label: 'Activity log', href: '/console/platform/activity', icon: 'activity', permission: 'platform.activity.read' },
-  { label: 'Data imports', href: '/console/platform/imports', icon: 'upload', permission: 'platform.imports.read' },
-  { label: 'System health', href: '/console/platform/health', icon: 'heart', permission: 'platform.health.read' },
-  { label: 'Platform settings', href: '/console/platform/settings', icon: 'settings', permission: 'platform.settings.read' },
+  {
+    label: 'Users and roles',
+    href: '/console/platform/users',
+    icon: 'users',
+    permission: 'platform.users.read',
+  },
+  {
+    label: 'Module registry',
+    href: '/console/platform/modules',
+    icon: 'boxes',
+    permission: 'platform.modules.read',
+  },
+  {
+    label: 'Feature flags',
+    href: '/console/platform/flags',
+    icon: 'flag',
+    permission: 'platform.flags.read',
+  },
+  {
+    label: 'Activity log',
+    href: '/console/platform/activity',
+    icon: 'activity',
+    permission: 'platform.activity.read',
+  },
+  {
+    label: 'Data imports',
+    href: '/console/platform/imports',
+    icon: 'upload',
+    permission: 'platform.imports.read',
+  },
+  {
+    label: 'System health',
+    href: '/console/platform/health',
+    icon: 'heart',
+    permission: 'platform.health.read',
+  },
+  {
+    label: 'Platform settings',
+    href: '/console/platform/settings',
+    icon: 'settings',
+    permission: 'platform.settings.read',
+  },
 ];
 
 export function topLinks(ctx: PlatformContext): NavLink[] {
@@ -40,13 +76,43 @@ export type BusinessTab = {
 };
 
 const BUSINESS_TABS: BusinessTab[] = [
-  { key: 'overview', label: 'Overview', usesMode: true, permission: 'business.overview.read', shortcut: 'o' },
+  {
+    key: 'overview',
+    label: 'Overview',
+    usesMode: true,
+    permission: 'business.overview.read',
+    shortcut: 'o',
+  },
   { key: 'app', label: 'App', usesMode: true, permission: 'business.app.use', shortcut: 'a' },
-  { key: 'people', label: 'People and access', usesMode: false, permission: 'business.people.read', shortcut: 'p' },
+  {
+    key: 'people',
+    label: 'People and access',
+    usesMode: false,
+    permission: 'business.people.read',
+    shortcut: 'p',
+  },
   { key: 'data', label: 'Data', usesMode: true, permission: 'business.data.read', shortcut: 'd' },
-  { key: 'activity', label: 'Activity log', usesMode: true, permission: 'business.activity.read', shortcut: 'l' },
-  { key: 'settings', label: 'Settings', usesMode: false, permission: 'business.settings.read', shortcut: 's' },
-  { key: 'test-mode', label: 'Test mode', usesMode: false, permission: 'business.sandbox.use', shortcut: 't' },
+  {
+    key: 'activity',
+    label: 'Activity log',
+    usesMode: true,
+    permission: 'business.activity.read',
+    shortcut: 'l',
+  },
+  {
+    key: 'settings',
+    label: 'Settings',
+    usesMode: false,
+    permission: 'business.settings.read',
+    shortcut: 's',
+  },
+  {
+    key: 'test-mode',
+    label: 'Test mode',
+    usesMode: false,
+    permission: 'business.sandbox.use',
+    shortcut: 't',
+  },
 ];
 
 export function businessTabs(ctx: BusinessContext): BusinessTab[] {

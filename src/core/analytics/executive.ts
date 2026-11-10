@@ -40,14 +40,23 @@ export type ExecutiveDashboard = {
   days: number;
   bucket: Bucket;
   rows: ExecutiveRow[];
-  totals: { revenueCents: number; refundedCents: number; payments: number; workItems: number; activity: number };
+  totals: {
+    revenueCents: number;
+    refundedCents: number;
+    payments: number;
+    workItems: number;
+    activity: number;
+  };
   /** All-SAI revenue per bucket. */
   totalTrend: SeriesPoint[];
 };
 
 export const EXECUTIVE_RANGES = [30, 90, 365] as const;
 
-export async function executiveDashboard(ctx: PlatformContext, days: number): Promise<ExecutiveDashboard> {
+export async function executiveDashboard(
+  ctx: PlatformContext,
+  days: number,
+): Promise<ExecutiveDashboard> {
   const range = lastDays(days);
   const bucket: Bucket = days <= 30 ? 'day' : days <= 90 ? 'week' : 'month';
   return withPlatformScope(ctx, 'executive.dashboard.read', async (s) => {
@@ -60,9 +69,13 @@ export async function executiveDashboard(ctx: PlatformContext, days: number): Pr
     for (const b of all) {
       const mod = getModule(b.slug);
       const workEntity = mod?.workItem ? findEntity(b.slug, mod.workItem.entityKey) : undefined;
-      const workCounts = workEntity ? await createdCountByBusiness(s, workEntity.table, range) : null;
+      const workCounts = workEntity
+        ? await createdCountByBusiness(s, workEntity.table, range)
+        : null;
       const r = revenue.get(b.id);
-      const own = series.filter((p) => p.businessId === b.id).map((p) => ({ bucket: p.bucket, value: p.value }));
+      const own = series
+        .filter((p) => p.businessId === b.id)
+        .map((p) => ({ bucket: p.bucket, value: p.value }));
       rows.push({
         businessId: b.id,
         slug: b.slug,
@@ -81,7 +94,12 @@ export async function executiveDashboard(ctx: PlatformContext, days: number): Pr
 
     const byBucket = new Map<string, number>();
     for (const p of series) byBucket.set(p.bucket, (byBucket.get(p.bucket) ?? 0) + p.value);
-    const totalTrend = fillSeries([...byBucket].map(([b, value]) => ({ bucket: b, value })), range, bucket, PLATFORM_TIME_ZONE);
+    const totalTrend = fillSeries(
+      [...byBucket].map(([b, value]) => ({ bucket: b, value })),
+      range,
+      bucket,
+      PLATFORM_TIME_ZONE,
+    );
 
     return {
       days,

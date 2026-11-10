@@ -10,7 +10,12 @@
  */
 import { revalidatePath } from 'next/cache';
 import { unstable_rethrow } from 'next/navigation';
-import { ForbiddenError, NotFoundError, UnauthenticatedError, ValidationError } from '@/core/errors';
+import {
+  ForbiddenError,
+  NotFoundError,
+  UnauthenticatedError,
+  ValidationError,
+} from '@/core/errors';
 import type { ActionResult } from '@/ui/action-form';
 
 export async function act(fn: () => Promise<string | void>): Promise<ActionResult> {
@@ -22,9 +27,12 @@ export async function act(fn: () => Promise<string | void>): Promise<ActionResul
   } catch (error) {
     unstable_rethrow(error); // lets redirect() and notFound() do their job
     if (error instanceof ValidationError) return { ok: false, message: error.message };
-    if (error instanceof ForbiddenError) return { ok: false, message: 'You do not have permission to do that.' };
-    if (error instanceof NotFoundError) return { ok: false, message: 'That no longer exists, or you cannot access it.' };
-    if (error instanceof UnauthenticatedError) return { ok: false, message: 'Your session has ended. Sign in again.' };
+    if (error instanceof ForbiddenError)
+      return { ok: false, message: 'You do not have permission to do that.' };
+    if (error instanceof NotFoundError)
+      return { ok: false, message: 'That no longer exists, or you cannot access it.' };
+    if (error instanceof UnauthenticatedError)
+      return { ok: false, message: 'Your session has ended. Sign in again.' };
     throw error;
   }
 }

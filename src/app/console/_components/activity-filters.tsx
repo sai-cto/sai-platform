@@ -2,7 +2,14 @@ import { buttonClass } from '@/ui/button';
 import { Field, inputClass } from '@/ui/layout';
 import { ACTIVITY_ACTIONS, actionLabel } from './activity-table';
 
-export type ActivitySearch = { q?: string; action?: string; from?: string; to?: string; business?: string; page?: string };
+export type ActivitySearch = {
+  q?: string;
+  action?: string;
+  from?: string;
+  to?: string;
+  business?: string;
+  page?: string;
+};
 
 /** Turns the filter form's query-string values into filters for the core. */
 export function parseActivitySearch(search: ActivitySearch) {
@@ -27,43 +34,82 @@ export function parseActivitySearch(search: ActivitySearch) {
 }
 
 /** A plain GET form: filters live in the URL, so a filtered view can be bookmarked or shared. */
-export function ActivityFilters({ search, businesses }: { search: ActivitySearch; businesses?: { id: string; name: string }[] }) {
+export function ActivityFilters({
+  search,
+  businesses,
+}: {
+  search: ActivitySearch;
+  businesses?: { id: string; name: string }[];
+}) {
   return (
-    <form method="get" className="grid grid-cols-2 items-end gap-3 border-b border-zinc-200 p-3 md:grid-cols-[minmax(0,1fr)_10rem_9rem_9rem_auto]">
+    <form
+      method="get"
+      className="grid grid-cols-2 items-end gap-3 border-b border-zinc-200 p-3 md:grid-cols-[minmax(0,1fr)_10rem_9rem_9rem_auto]"
+    >
       <Field label="Search" htmlFor="q" className="col-span-2 md:col-span-1">
-        <input id="q" name="q" defaultValue={search.q ?? ''} placeholder="Person or description" className={inputClass} />
+        <input
+          id="q"
+          name="q"
+          defaultValue={search.q ?? ''}
+          placeholder="Person or description"
+          className={inputClass}
+        />
       </Field>
       <Field label="Action" htmlFor="action">
         <select id="action" name="action" defaultValue={search.action ?? ''} className={inputClass}>
           <option value="">All actions</option>
           {ACTIVITY_ACTIONS.map((a) => (
-            <option key={a} value={a}>{actionLabel(a)}</option>
+            <option key={a} value={a}>
+              {actionLabel(a)}
+            </option>
           ))}
         </select>
       </Field>
       {businesses ? (
         <Field label="Business" htmlFor="business">
-          <select id="business" name="business" defaultValue={search.business ?? ''} className={inputClass}>
+          <select
+            id="business"
+            name="business"
+            defaultValue={search.business ?? ''}
+            className={inputClass}
+          >
             <option value="">All businesses</option>
             {businesses.map((b) => (
-              <option key={b.id} value={b.id}>{b.name}</option>
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
             ))}
           </select>
         </Field>
       ) : null}
       <Field label="From" htmlFor="from">
-        <input id="from" name="from" type="date" defaultValue={search.from ?? ''} className={inputClass} />
+        <input
+          id="from"
+          name="from"
+          type="date"
+          defaultValue={search.from ?? ''}
+          className={inputClass}
+        />
       </Field>
       <Field label="To" htmlFor="to">
-        <input id="to" name="to" type="date" defaultValue={search.to ?? ''} className={inputClass} />
+        <input
+          id="to"
+          name="to"
+          type="date"
+          defaultValue={search.to ?? ''}
+          className={inputClass}
+        />
       </Field>
-      <button type="submit" className={buttonClass({ variant: 'primary' })}>Filter</button>
+      <button type="submit" className={buttonClass({ variant: 'primary' })}>
+        Filter
+      </button>
     </form>
   );
 }
 
 export function activityHref(base: string, search: ActivitySearch, page: number): string {
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries({ ...search, page: String(page) })) if (value) params.set(key, value);
+  for (const [key, value] of Object.entries({ ...search, page: String(page) }))
+    if (value) params.set(key, value);
   return `${base}?${params.toString()}`;
 }

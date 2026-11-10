@@ -2,12 +2,18 @@
 const TIME_ZONE = 'America/New_York';
 
 export function formatMoney(cents: number | null | undefined): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((cents ?? 0) / 100);
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
+    (cents ?? 0) / 100,
+  );
 }
 
 /** Whole dollars with thousands separators, for big dashboard numbers. */
 export function formatMoneyShort(cents: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
 }
 
 export function formatNumber(value: number): string {
@@ -22,13 +28,27 @@ function toDate(value: Date | string | null | undefined): Date | null {
 
 export function formatDate(value: Date | string | null | undefined): string {
   const date = toDate(value);
-  return date ? new Intl.DateTimeFormat('en-US', { timeZone: TIME_ZONE, year: 'numeric', month: 'short', day: 'numeric' }).format(date) : '—';
+  return date
+    ? new Intl.DateTimeFormat('en-US', {
+        timeZone: TIME_ZONE,
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      }).format(date)
+    : '—';
 }
 
 export function formatDateTime(value: Date | string | null | undefined): string {
   const date = toDate(value);
   return date
-    ? new Intl.DateTimeFormat('en-US', { timeZone: TIME_ZONE, month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(date)
+    ? new Intl.DateTimeFormat('en-US', {
+        timeZone: TIME_ZONE,
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      }).format(date)
     : '—';
 }
 
@@ -48,7 +68,10 @@ export function formatRelative(value: Date | string | null | undefined, now = ne
 }
 
 /** Formats a record value for tables, following the column's declared format. */
-export function formatValue(value: unknown, format: 'text' | 'money' | 'date' | 'datetime' | 'boolean' = 'text'): string {
+export function formatValue(
+  value: unknown,
+  format: 'text' | 'money' | 'date' | 'datetime' | 'boolean' = 'text',
+): string {
   if (value === null || value === undefined || value === '') return '—';
   if (format === 'money') return formatMoney(Number(value));
   if (format === 'date') return formatDate(value as Date | string);
@@ -61,6 +84,9 @@ export function formatValue(value: unknown, format: 'text' | 'money' | 'date' | 
 
 /** "camelCaseKey" → "Camel case key", for showing raw field names to people. */
 export function humanize(key: string): string {
-  const spaced = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[._]/g, ' ').toLowerCase();
+  const spaced = key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[._]/g, ' ')
+    .toLowerCase();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }

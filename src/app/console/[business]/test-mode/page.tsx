@@ -24,7 +24,10 @@ export default async function TestModePage({ params }: { params: Promise<{ busin
         title="Test mode"
         description={`A safe copy of ${ctx.business.name} filled with fake data. Try anything here: nothing touches the real business, no real payment is taken and no email is sent.`}
         actions={
-          <Link href={`/console/${ctx.business.slug}/sandbox/${sandboxHome}`} className={buttonClass({ variant: 'primary' })}>
+          <Link
+            href={`/console/${ctx.business.slug}/sandbox/${sandboxHome}`}
+            className={buttonClass({ variant: 'primary' })}
+          >
             <FlaskConical className="size-4" aria-hidden="true" /> Open test mode
           </Link>
         }
@@ -33,16 +36,34 @@ export default async function TestModePage({ params }: { params: Promise<{ busin
       <div className="grid gap-5 lg:grid-cols-3">
         <Card title="How it works" className="lg:col-span-2">
           <ul className="list-disc space-y-1.5 pl-5 text-sm text-zinc-700">
-            <li>Use the <strong>Live / Test mode</strong> switch at the top of the page to move between real data and the sandbox.</li>
-            <li>In test mode a striped yellow banner and a yellow frame stay on screen the whole time, so you always know where you are.</li>
-            <li>The address bar shows it too: test-mode pages have <span className="font-mono text-xs">/sandbox/</span> in the address.</li>
+            <li>
+              Use the <strong>Live / Test mode</strong> switch at the top of the page to move
+              between real data and the sandbox.
+            </li>
+            <li>
+              In test mode a striped yellow banner and a yellow frame stay on screen the whole time,
+              so you always know where you are.
+            </li>
+            <li>
+              The address bar shows it too: test-mode pages have{' '}
+              <span className="font-mono text-xs">/sandbox/</span> in the address.
+            </li>
             <li>Sandbox data is invented. Real customer data is never copied into it.</li>
-            <li>Resetting throws away everything in the sandbox and fills it with fresh fake data. Live data is not affected.</li>
+            <li>
+              Resetting throws away everything in the sandbox and fills it with fresh fake data.
+              Live data is not affected.
+            </li>
           </ul>
         </Card>
         <Card title="Reset">
           <p className="text-sm text-zinc-600">
-            {summary.lastResetAt ? <>Last reset {formatDateTime(summary.lastResetAt)} by {summary.lastResetBy}.</> : 'Never reset since it was first set up.'}
+            {summary.lastResetAt ? (
+              <>
+                Last reset {formatDateTime(summary.lastResetAt)} by {summary.lastResetBy}.
+              </>
+            ) : (
+              'Never reset since it was first set up.'
+            )}
           </p>
           {canReset ? (
             <div className="mt-3">
@@ -58,17 +79,27 @@ export default async function TestModePage({ params }: { params: Promise<{ busin
               </ConfirmButton>
             </div>
           ) : (
-            <p className="mt-2 text-xs text-zinc-500">A business admin or the tech team can reset it.</p>
+            <p className="mt-2 text-xs text-zinc-500">
+              A business admin or the tech team can reset it.
+            </p>
           )}
         </Card>
       </div>
 
       <Card title="What is in the sandbox now" flush>
         <Table>
-          <thead><tr><Th className="w-full">Records</Th><Th className="text-right">Rows</Th></tr></thead>
+          <thead>
+            <tr>
+              <Th className="w-full">Records</Th>
+              <Th className="text-right">Rows</Th>
+            </tr>
+          </thead>
           <tbody>
             {summary.counts.map((c) => (
-              <tr key={c.entityKey}><Td>{c.label}</Td><Td className="text-right tabular-nums">{formatNumber(c.rows)}</Td></tr>
+              <tr key={c.entityKey}>
+                <Td>{c.label}</Td>
+                <Td className="text-right tabular-nums">{formatNumber(c.rows)}</Td>
+              </tr>
             ))}
           </tbody>
         </Table>

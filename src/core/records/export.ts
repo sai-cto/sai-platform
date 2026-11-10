@@ -10,7 +10,12 @@ export const EXPORT_LIMIT = 5000;
 /** Stops a spreadsheet from treating a cell that starts with = + - @ as a formula. */
 export function safeCell(value: unknown): string {
   if (value === null || value === undefined) return '';
-  const text = value instanceof Date ? value.toISOString() : typeof value === 'object' ? JSON.stringify(value) : String(value);
+  const text =
+    value instanceof Date
+      ? value.toISOString()
+      : typeof value === 'object'
+        ? JSON.stringify(value)
+        : String(value);
   return /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
 }
 
@@ -25,9 +30,17 @@ export async function exportRecords(
       action: 'export',
       entityType: entity.key,
       summary: `Exported ${rows.length} ${entity.labelPlural.toLowerCase()} to CSV`,
-      after: { rows: rows.length, search: options.search ?? null, archived: options.archived ?? 'exclude' },
+      after: {
+        rows: rows.length,
+        search: options.search ?? null,
+        archived: options.archived ?? 'exclude',
+      },
     });
-    const columns: ListColumn[] = [{ key: 'id', label: 'Id' }, ...entity.listColumns, { key: 'archivedAt', label: 'Archived', format: 'datetime' }];
+    const columns: ListColumn[] = [
+      { key: 'id', label: 'Id' },
+      ...entity.listColumns,
+      { key: 'archivedAt', label: 'Archived', format: 'datetime' },
+    ];
     return { columns, rows: rows as Record<string, unknown>[] };
   });
 }

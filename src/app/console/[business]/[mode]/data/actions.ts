@@ -16,14 +16,24 @@ async function resolve(slug: string, mode: string, entityKey: string) {
 }
 
 /** "Delete" in the Data tab: archives the record. It can be restored. */
-export async function archiveRecordAction(slug: string, mode: string, entityKey: string, id: string): Promise<ActionResult> {
+export async function archiveRecordAction(
+  slug: string,
+  mode: string,
+  entityKey: string,
+  id: string,
+): Promise<ActionResult> {
   return act(async () => {
     const { ctx, entity } = await resolve(slug, mode, entityKey);
     await withScope(ctx, 'business.data.read', (s) => archiveRecord(s, entity, id));
   });
 }
 
-export async function restoreRecordAction(slug: string, mode: string, entityKey: string, id: string): Promise<ActionResult> {
+export async function restoreRecordAction(
+  slug: string,
+  mode: string,
+  entityKey: string,
+  id: string,
+): Promise<ActionResult> {
   return act(async () => {
     const { ctx, entity } = await resolve(slug, mode, entityKey);
     await withScope(ctx, 'business.data.read', (s) => restoreRecord(s, entity, id));
@@ -31,7 +41,12 @@ export async function restoreRecordAction(slug: string, mode: string, entityKey:
 }
 
 /** Permanent delete. The core refuses unless the caller is super_admin and retention has passed. */
-export async function purgeRecordAction(slug: string, mode: string, entityKey: string, id: string): Promise<ActionResult> {
+export async function purgeRecordAction(
+  slug: string,
+  mode: string,
+  entityKey: string,
+  id: string,
+): Promise<ActionResult> {
   return act(async () => {
     const { ctx, entity } = await resolve(slug, mode, entityKey);
     await withScope(ctx, 'business.data.purge', (s) => purgeRecord(s, entity, id));

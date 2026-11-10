@@ -340,7 +340,12 @@ test('works on a phone: the menu opens as a drawer and nothing scrolls sideways'
   await expect(drawer.getByRole('link', { name: 'Big Red Shipping & Storage' })).toBeVisible();
   await drawer.getByRole('link', { name: 'Home' }).click();
   await expect(page).toHaveURL(/\/console$/);
-  for (const path of ['/console', '/console/brss/live/overview', '/console/brss/live/data/core.customer', '/console/brss/people', '/console/brss/test-mode']) {
+  // Make sure there is recent activity, so the Overview shows its widest content (a table).
+  await page.goto('/console/brss/sandbox/data/core.customer');
+  await page.getByRole('button', { name: 'Archive' }).first().click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Archive' }).click();
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  for (const path of ['/console', '/console/brss/live/overview', '/console/brss/sandbox/overview', '/console/brss/sandbox/activity', '/console/brss/live/data/core.customer', '/console/brss/people', '/console/brss/settings', '/console/brss/test-mode']) {
     await page.goto(path);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, path).toBeLessThanOrEqual(1);

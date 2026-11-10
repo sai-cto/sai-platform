@@ -42,7 +42,10 @@ export function ActionForm({
           {pending ? 'Working…' : submitLabel}
         </Button>
         {state?.message ? (
-          <p role={state.ok ? 'status' : 'alert'} className={cn('text-sm', state.ok ? 'text-emerald-700' : 'text-red-700')}>
+          <p
+            role={state.ok ? 'status' : 'alert'}
+            className={cn('text-sm', state.ok ? 'text-emerald-700' : 'text-red-700')}
+          >
             {state.message}
           </p>
         ) : null}

@@ -40,11 +40,20 @@ export function importableEntities(moduleKey: string | null): EntityDef[] {
 
 export function parseCsv(bytes: Uint8Array): ParsedCsv {
   const text = new TextDecoder('utf-8').decode(bytes).replace(/^﻿/, '');
-  const result = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: 'greedy', transformHeader: (h) => h.trim() });
+  const result = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: 'greedy',
+    transformHeader: (h) => h.trim(),
+  });
   const headers = (result.meta.fields ?? []).filter((h) => h !== '');
-  if (headers.length === 0) throw new ValidationError('The file has no header row. The first line must name the columns.');
-  if (result.data.length === 0) throw new ValidationError('The file has a header row but no data rows.');
-  if (result.data.length > MAX_IMPORT_ROWS) throw new ValidationError(`The file has ${result.data.length} rows. Import at most ${MAX_IMPORT_ROWS} at a time.`);
+  if (headers.length === 0)
+    throw new ValidationError('The file has no header row. The first line must name the columns.');
+  if (result.data.length === 0)
+    throw new ValidationError('The file has a header row but no data rows.');
+  if (result.data.length > MAX_IMPORT_ROWS)
+    throw new ValidationError(
+      `The file has ${result.data.length} rows. Import at most ${MAX_IMPORT_ROWS} at a time.`,
+    );
   return { headers, rows: result.data };
 }
 
@@ -54,15 +63,28 @@ const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '
 export function suggestMapping(entity: EntityDef, headers: string[]): Record<string, string> {
   const mapping: Record<string, string> = {};
   for (const field of entity.import?.fields ?? []) {
-    const match = headers.find((h) => normalize(h) === normalize(field.key) || normalize(h) === normalize(field.label));
+    const match = headers.find(
+      (h) => normalize(h) === normalize(field.key) || normalize(h) === normalize(field.label),
+    );
     if (match) mapping[field.key] = match;
   }
   return mapping;
 }
 
-function fingerprintOf(bytes: Uint8Array, entityKey: string, mapping: Record<string, string>): string {
-  const ordered = Object.fromEntries(Object.entries(mapping).sort(([a], [b]) => a.localeCompare(b)));
-  return crypto.createHash('sha256').update(bytes).update(entityKey).update(JSON.stringify(ordered)).digest('hex');
+function fingerprintOf(
+  bytes: Uint8Array,
+  entityKey: string,
+  mapping: Record<string, string>,
+): string {
+  const ordered = Object.fromEntries(
+    Object.entries(mapping).sort(([a], [b]) => a.localeCompare(b)),
+  );
+  return crypto
+    .createHash('sha256')
+    .update(bytes)
+    .update(entityKey)
+    .update(JSON.stringify(ordered))
+    .digest('hex');
 }
 
 function requireImportable(ctx: BusinessContext, entityKey: string): EntityDef {
@@ -72,19 +94,26 @@ function requireImportable(ctx: BusinessContext, entityKey: string): EntityDef {
 }
 
 function requireSandbox(ctx: BusinessContext): void {
-  if (ctx.environment !== 'sandbox') throw new ValidationError('A file is always imported into the sandbox first.');
+  if (ctx.environment !== 'sandbox')
+    throw new ValidationError('A file is always imported into the sandbox first.');
 }
 
 /** Applies the mapping to every row and validates it. Nothing is written. */
-function mapRows(entity: EntityDef, csv: ParsedCsv, mapping: Record<string, string>): { values: Record<string, unknown>[]; errors: RowError[] } {
+function mapRows(
+  entity: EntityDef,
+  csv: ParsedCsv,
+  mapping: Record<string, string>,
+): { values: Record<string, unknown>[]; errors: RowError[] } {
   const fields = entity.import?.fields ?? [];
   const missing = fields.filter((f) => f.required && !mapping[f.key]);
-  if (missing.length > 0) throw new ValidationError(`Choose a column for: ${missing.map((f) => f.label).join(', ')}.`);
+  if (missing.length > 0)
+    throw new ValidationError(`Choose a column for: ${missing.map((f) => f.label).join(', ')}.`);
   const values: Record<string, unknown>[] = [];
   const errors: RowError[] = [];
   csv.rows.forEach((raw, index) => {
     const mapped: Record<string, string> = {};
-    for (const field of fields) mapped[field.key] = mapping[field.key] ? (raw[mapping[field.key]] ?? '').trim() : '';
+    for (const field of fields)
+      mapped[field.key] = mapping[field.key] ? (raw[mapping[field.key]] ?? '').trim() : '';
     try {
       values.push(entity.import!.toValues(mapped));
     } catch (error) {
@@ -96,12 +125,20 @@ function mapRows(entity: EntityDef, csv: ParsedCsv, mapping: Record<string, stri
 }
 
 /** Step 1: upload. Stores the file and creates the job with a suggested mapping. */
-export async function createImportJob(ctx: BusinessContext, input: { entityKey: string; filename: string; bytes: Uint8Array }): Promise<ImportJob> {
+export async function createImportJob(
+  ctx: BusinessContext,
+  input: { entityKey: string; filename: string; bytes: Uint8Array },
+): Promise<ImportJob> {
   requireSandbox(ctx);
   const entity = requireImportable(ctx, input.entityKey);
   const csv = parseCsv(input.bytes);
   return withScope(ctx, 'imports.write', async (s) => {
-    const file = await saveFile(s, { filename: input.filename, contentType: 'text/csv', bytes: input.bytes, subjectType: 'core.import_job' });
+    const file = await saveFile(s, {
+      filename: input.filename,
+      contentType: 'text/csv',
+      bytes: input.bytes,
+      subjectType: 'core.import_job',
+    });
     return createRecord(s, importJobEntity, {
       entityKey: entity.key,
       filename: file.filename,
@@ -121,7 +158,10 @@ export type ImportJobView = {
   preview: Record<string, unknown>[];
 };
 
-async function loadJob(s: Scope, id: string): Promise<{ job: ImportJob; entity: EntityDef; csv: ParsedCsv; bytes: Uint8Array }> {
+async function loadJob(
+  s: Scope,
+  id: string,
+): Promise<{ job: ImportJob; entity: EntityDef; csv: ParsedCsv; bytes: Uint8Array }> {
   const job = await getRecord(s, importJobEntity, id);
   const entity = requireImportable(s.ctx, job.entityKey);
   if (!job.fileId) throw new NotFoundError();
@@ -134,7 +174,11 @@ export async function getImportJob(ctx: BusinessContext, id: string): Promise<Im
     const { job, entity, csv } = await loadJob(s, id);
     let preview: Record<string, unknown>[] = [];
     try {
-      preview = mapRows(entity, { headers: csv.headers, rows: csv.rows.slice(0, 10) }, job.mapping).values;
+      preview = mapRows(
+        entity,
+        { headers: csv.headers, rows: csv.rows.slice(0, 10) },
+        job.mapping,
+      ).values;
     } catch {
       // Mapping incomplete: no preview yet.
     }
@@ -143,12 +187,22 @@ export async function getImportJob(ctx: BusinessContext, id: string): Promise<Im
 }
 
 /** Steps 2 and 3: save the mapping and dry-run it. Nothing is imported. */
-export async function dryRunImport(ctx: BusinessContext, id: string, mapping: Record<string, string>): Promise<ImportJob> {
+export async function dryRunImport(
+  ctx: BusinessContext,
+  id: string,
+  mapping: Record<string, string>,
+): Promise<ImportJob> {
   requireSandbox(ctx);
   return withScope(ctx, 'imports.write', async (s) => {
     const { job, entity, csv, bytes } = await loadJob(s, id);
-    if (job.status === 'imported') throw new ValidationError('This file has already been imported.');
-    const clean = Object.fromEntries(Object.entries(mapping).filter(([key, header]) => entity.import!.fields.some((f) => f.key === key) && csv.headers.includes(header)));
+    if (job.status === 'imported')
+      throw new ValidationError('This file has already been imported.');
+    const clean = Object.fromEntries(
+      Object.entries(mapping).filter(
+        ([key, header]) =>
+          entity.import!.fields.some((f) => f.key === key) && csv.headers.includes(header),
+      ),
+    );
     const { errors } = mapRows(entity, csv, clean);
     return updateRecord(s, importJobEntity, id, {
       mapping: clean,
@@ -161,7 +215,11 @@ export async function dryRunImport(ctx: BusinessContext, id: string, mapping: Re
   });
 }
 
-async function writeRows(s: Scope, entity: EntityDef, values: Record<string, unknown>[]): Promise<void> {
+async function writeRows(
+  s: Scope,
+  entity: EntityDef,
+  values: Record<string, unknown>[],
+): Promise<void> {
   for (const row of values) await createRecord(s, entity, row as never);
 }
 
@@ -170,13 +228,21 @@ export async function runSandboxImport(ctx: BusinessContext, id: string): Promis
   requireSandbox(ctx);
   return withScope(ctx, 'imports.write', async (s) => {
     const { job, entity, csv, bytes } = await loadJob(s, id);
-    if (job.status === 'imported') throw new ValidationError('This file has already been imported into the sandbox.');
-    if (job.status !== 'dry_run_ok') throw new ValidationError('Run the check first and fix every error before importing.');
-    if (job.fingerprint !== fingerprintOf(bytes, entity.key, job.mapping)) throw new ValidationError('The mapping changed since the check. Run the check again.');
+    if (job.status === 'imported')
+      throw new ValidationError('This file has already been imported into the sandbox.');
+    if (job.status !== 'dry_run_ok')
+      throw new ValidationError('Run the check first and fix every error before importing.');
+    if (job.fingerprint !== fingerprintOf(bytes, entity.key, job.mapping))
+      throw new ValidationError('The mapping changed since the check. Run the check again.');
     const { values, errors } = mapRows(entity, csv, job.mapping);
-    if (errors.length > 0) throw new ValidationError('The file no longer passes the check. Run the check again.');
+    if (errors.length > 0)
+      throw new ValidationError('The file no longer passes the check. Run the check again.');
     await writeRows(s, entity, values);
-    const done = await updateRecord(s, importJobEntity, id, { status: 'imported', importedCount: values.length, completedOn: new Date().toISOString().slice(0, 10) });
+    const done = await updateRecord(s, importJobEntity, id, {
+      status: 'imported',
+      importedCount: values.length,
+      completedOn: new Date().toISOString().slice(0, 10),
+    });
     await logActivity(txOf(s), ctx, {
       action: 'import',
       entityType: entity.key,
@@ -192,14 +258,24 @@ export async function runSandboxImport(ctx: BusinessContext, id: string): Promis
  * Step 5: import the SAME file and mapping into live. Only possible after it imported
  * cleanly into the sandbox, and only once.
  */
-export async function runLiveImport(platform: PlatformContext, liveCtx: BusinessContext, sandboxJobId: string): Promise<ImportJob> {
+export async function runLiveImport(
+  platform: PlatformContext,
+  liveCtx: BusinessContext,
+  sandboxJobId: string,
+): Promise<ImportJob> {
   authorize(platform, 'platform.imports.run_live');
-  if (liveCtx.environment !== 'live') throw new ValidationError('The live import must run in live mode.');
+  if (liveCtx.environment !== 'live')
+    throw new ValidationError('The live import must run in live mode.');
   const sandboxCtx: BusinessContext = { ...liveCtx, environment: 'sandbox' };
   const source = await withScope(sandboxCtx, 'imports.read', (s) => loadJob(s, sandboxJobId));
-  if (source.job.status !== 'imported') throw new ValidationError('Import this file into the sandbox and check it there first.');
-  if (source.job.fingerprint !== fingerprintOf(source.bytes, source.entity.key, source.job.mapping)) {
-    throw new ValidationError('The file or mapping changed since the sandbox import. Start a new import.');
+  if (source.job.status !== 'imported')
+    throw new ValidationError('Import this file into the sandbox and check it there first.');
+  if (
+    source.job.fingerprint !== fingerprintOf(source.bytes, source.entity.key, source.job.mapping)
+  ) {
+    throw new ValidationError(
+      'The file or mapping changed since the sandbox import. Start a new import.',
+    );
   }
   const { values, errors } = mapRows(source.entity, source.csv, source.job.mapping);
   if (errors.length > 0) throw new ValidationError('The file no longer passes the check.');
@@ -208,9 +284,16 @@ export async function runLiveImport(platform: PlatformContext, liveCtx: Business
     const [already] = await s.db
       .select({ id: importJobs.id })
       .from(importJobs)
-      .where(and(s.where(importJobs, 'include'), eq(importJobs.fingerprint, source.job.fingerprint), eq(importJobs.status, 'imported')))
+      .where(
+        and(
+          s.where(importJobs, 'include'),
+          eq(importJobs.fingerprint, source.job.fingerprint),
+          eq(importJobs.status, 'imported'),
+        ),
+      )
       .limit(1);
-    if (already) throw new ValidationError('This exact file and mapping has already been imported into live.');
+    if (already)
+      throw new ValidationError('This exact file and mapping has already been imported into live.');
     await writeRows(s, source.entity, values);
     const job = await createRecord(s, importJobEntity, {
       entityKey: source.entity.key,
@@ -244,6 +327,10 @@ export async function listImportJobs(ctx: PlatformContext): Promise<ImportJobLis
       .innerJoin(businesses, eq(businesses.id, importJobs.businessId))
       .orderBy(desc(importJobs.createdAt))
       .limit(200);
-    return rows.map((r) => ({ ...r.job, businessSlug: r.businessSlug, businessCode: r.businessCode }));
+    return rows.map((r) => ({
+      ...r.job,
+      businessSlug: r.businessSlug,
+      businessCode: r.businessCode,
+    }));
   });
 }

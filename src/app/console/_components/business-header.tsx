@@ -28,7 +28,10 @@ export function BusinessHeader({
   const mode: 'live' | 'sandbox' = second === 'sandbox' ? 'sandbox' : 'live';
   const activeKey = second === 'live' || second === 'sandbox' ? third : second;
   const activeTab = tabs.find((t) => t.key === activeKey);
-  const href = (tab: HeaderTab, m: 'live' | 'sandbox') => (tab.usesMode ? `/console/${business.slug}/${m}/${tab.key}` : `/console/${business.slug}/${tab.key}`);
+  const href = (tab: HeaderTab, m: 'live' | 'sandbox') =>
+    tab.usesMode
+      ? `/console/${business.slug}/${m}/${tab.key}`
+      : `/console/${business.slug}/${tab.key}`;
   // Switching mode keeps you on the same tab when that tab has a live and a sandbox version.
   const switchTarget = (m: 'live' | 'sandbox') => {
     const tab = activeTab?.usesMode ? activeTab : (tabs.find((t) => t.usesMode) ?? tabs[0]);
@@ -42,24 +45,38 @@ export function BusinessHeader({
         <div className="flex flex-wrap items-center gap-3">
           <Monogram code={business.code} color={business.accentColor} size="lg" />
           <div className="min-w-0 flex-1 basis-48">
-            <div className="truncate text-base font-semibold tracking-tight text-zinc-900">{business.name}</div>
+            <div className="truncate text-base font-semibold tracking-tight text-zinc-900">
+              {business.name}
+            </div>
             <div className="truncate text-xs text-zinc-500">
-              <span className="hidden sm:inline">{business.description} · </span>You are: {roleLabel}
+              <span className="hidden sm:inline">{business.description} · </span>You are:{' '}
+              {roleLabel}
             </div>
           </div>
           {canUseSandbox ? (
-            <div role="group" aria-label="Data mode" className="flex rounded-md border border-zinc-300 bg-zinc-50 p-0.5 text-xs font-medium">
+            <div
+              role="group"
+              aria-label="Data mode"
+              className="flex rounded-md border border-zinc-300 bg-zinc-50 p-0.5 text-xs font-medium"
+            >
               <Link
                 href={switchTarget('live')}
                 aria-current={mode === 'live' ? 'true' : undefined}
-                className={cn('rounded px-2.5 py-1 text-zinc-600 hover:text-zinc-900', mode === 'live' && 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200')}
+                className={cn(
+                  'rounded px-2.5 py-1 text-zinc-600 hover:text-zinc-900',
+                  mode === 'live' && 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200',
+                )}
               >
                 Live
               </Link>
               <Link
                 href={switchTarget('sandbox')}
                 aria-current={mode === 'sandbox' ? 'true' : undefined}
-                className={cn('flex items-center gap-1 rounded px-2.5 py-1 text-zinc-600 hover:text-zinc-900', mode === 'sandbox' && 'bg-amber-300 text-amber-950 shadow-sm ring-1 ring-amber-400')}
+                className={cn(
+                  'flex items-center gap-1 rounded px-2.5 py-1 text-zinc-600 hover:text-zinc-900',
+                  mode === 'sandbox' &&
+                    'bg-amber-300 text-amber-950 shadow-sm ring-1 ring-amber-400',
+                )}
               >
                 <FlaskConical className="size-3" aria-hidden="true" />
                 Test mode
@@ -68,7 +85,10 @@ export function BusinessHeader({
           ) : null}
         </div>
 
-        <nav aria-label={`${business.name} sections`} className="-mb-px mt-3 flex gap-1 overflow-x-auto">
+        <nav
+          aria-label={`${business.name} sections`}
+          className="-mb-px mt-3 flex gap-1 overflow-x-auto"
+        >
           {tabs.map((tab) => {
             const active = tab.key === activeKey;
             return (
