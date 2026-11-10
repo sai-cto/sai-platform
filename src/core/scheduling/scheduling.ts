@@ -7,10 +7,11 @@
 import { and, asc, eq, gt, gte, isNull, lt, ne, or, type SQL } from 'drizzle-orm';
 import { appointments, unavailability } from '../db/schema';
 import type { Scope } from '../db/scope';
-import { ValidationError } from '../errors';
+import { NotFoundError, ValidationError } from '../errors';
+import { isUuid } from '../ids';
 import { authorize } from '../rbac/permissions';
 import { appointmentEntity } from '../records/core-entities';
-import { createRecord, getRecord, updateRecord } from '../records/records';
+import { createRecord, updateRecord } from '../records/records';
 import type { NewValues, Row } from '../records/types';
 
 type TimeRange = { startsAt: Date; endsAt: Date };
@@ -140,7 +141,16 @@ export async function rescheduleAppointment(
 ): Promise<Row<typeof appointments>> {
   authorize(s.ctx, 'scheduling.write');
   assertRange(range);
-  const existing = await getRecord(s, appointmentEntity, id);
+  // Loaded directly (not through getRecord) so that changing an appointment needs
+  // scheduling.write only, like booking one.
+  const [existing] = isUuid(id)
+    ? await s.db
+        .select()
+        .from(appointments)
+        .where(and(s.where(appointments), eq(appointments.id, id)))
+        .limit(1)
+    : [];
+  if (!existing) throw new NotFoundError();
   const resourceId = range.resourceId !== undefined ? range.resourceId : existing.resourceId;
   await assertNotBlocked(
     s,

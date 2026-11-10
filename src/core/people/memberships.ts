@@ -183,6 +183,10 @@ export async function changeMemberRole(
   authorize(ctx, 'business.people.manage');
   if (!BUSINESS_ROLES.includes(role)) throw new ValidationError('Unknown role.');
   await getDb().transaction(async (tx) => {
+    // Lock order is always: the person first, then the business. Find out who it is,
+    // take both locks, then read again and decide on the fresh facts.
+    const target = await loadMembership(tx, ctx, membershipId);
+    await lockUserAccess(tx, target.user.id);
     await lockBusinessPeople(tx, ctx.business.id);
     const { membership, user } = await loadMembership(tx, ctx, membershipId);
     if (membership.role === role) return;

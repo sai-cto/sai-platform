@@ -57,9 +57,9 @@ describe('record functions: one log entry per change, for every core entity', ()
       );
       const id = String(row.id);
 
-      // Change the first text column the fixture set, so "before" and "after" differ.
+      // Change the first changeable text column the fixture set, so "before" and "after" differ.
       const [field, oldValue] = Object.entries(values).find(
-        ([, v]) => typeof v === 'string' && !/^[0-9a-f-]{36}$/.test(v),
+        ([key, v]) => typeof v === 'string' && !/^[0-9a-f-]{36}$/.test(v) && !(entity.immutableFields ?? []).includes(key),
       )!;
       await withScope(ctx, 'business.overview.read', (s) =>
         updateRecord(s, entity, id, { [field]: `${oldValue} (edited)` } as never),

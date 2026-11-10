@@ -487,3 +487,107 @@ describe('second review: smaller rules', () => {
     await expect(setFlag(superAdmin, { key: flag, businessId: '00000000-0000-4000-8000-00000000000a', enabled: true })).rejects.toBeInstanceOf(ValidationError);
   });
 });
+
+describe('third review', () => {
+  it('a file whose name contains ".." can be saved, read and permanently deleted', async () => {
+    const superAdmin = await ctxFor(USERS.superAdmin, 'tut');
+    const onDisk = (storageKey: string) => fs.existsSync(path.resolve(process.env.FILE_STORAGE_DIR as string, storageKey));
+    const file = await withScope(superAdmin, 'files.write', (s) => saveFile(s, { filename: 'summer..2026.txt', contentType: 'text/plain', bytes: new TextEncoder().encode('dots') }));
+    expect(ownsStorageKey(superAdmin.business.id, 'live', file.storageKey)).toBe(true);
+    const read = await withScope(superAdmin, 'files.read', (s) => readFile(s, file.id));
+    expect(new TextDecoder().decode(read.bytes)).toBe('dots');
+    await withScope(superAdmin, 'files.write', (s) => archiveRecord(s, fileEntity, file.id));
+    await ageArchive('files', file.id, 40);
+    await withScope(superAdmin, 'files.write', (s) => purgeRecord(s, fileEntity, file.id));
+    expect(onDisk(file.storageKey)).toBe(false);
+    for (const bad of ['', '.', '..', 'a/b', '..\\x']) expect(ownsStorageKey(superAdmin.business.id, 'live', `${superAdmin.business.id}/live/${bad}`), bad).toBe(false);
+  });
+
+  it('a storage key cannot be changed after creation, and two rows cannot claim the same bytes', async () => {
+    const ctx = await ctxFor(USERS.superAdmin, 'tut');
+    const file = await withScope(ctx, 'files.write', (s) => saveFile(s, { filename: 'fixed.txt', contentType: 'text/plain', bytes: new Uint8Array([1]) }));
+    await expect(withScope(ctx, 'files.write', (s) => updateRecord(s, fileEntity, file.id, { storageKey: 'x/y' }))).rejects.toThrow(/cannot be changed/);
+    await expect(withScope(ctx, 'files.write', (s) => createRecord(s, fileEntity, { storageKey: file.storageKey, filename: 'copy.txt', contentType: 'text/plain', sizeBytes: 1 }))).rejects.toThrow();
+  });
+
+  it('if only the file row fails to save and the caller carries on, the bytes are still removed', async () => {
+    const ctx = await ctxFor(USERS.brssAdmin, 'brss');
+    const put = vi.spyOn(fileStorage, 'put');
+    const remove = vi.spyOn(fileStorage, 'delete');
+    try {
+      await withScope(ctx, 'files.write', async (s) => {
+        // A subject id the database would refuse is now refused before anything is written…
+        await expect(saveFile(s, { filename: 'a.txt', contentType: 'text/plain', bytes: new Uint8Array([1]), subjectId: 'order-123' })).rejects.toBeInstanceOf(ValidationError);
+        expect(put).not.toHaveBeenCalled();
+        // …and if the insert itself fails (a content type the column cannot hold), the bytes go too.
+        await expect(saveFile(s, { filename: 'b.txt', contentType: 'text/plain\u0000', bytes: new Uint8Array([1]) })).rejects.toThrow();
+      });
+      expect(put).toHaveBeenCalledTimes(1);
+      expect(remove).toHaveBeenCalledWith(put.mock.calls[0][0]);
+    } finally {
+      put.mockRestore();
+      remove.mockRestore();
+    }
+  });
+
+  it('every payment input is checked before the card is charged', async () => {
+    const ctx = await ctxFor(USERS.brssAdmin, 'brss');
+    const charge = vi.spyOn(mockProvider, 'charge');
+    try {
+      const attempt = (extra: Record<string, unknown>) => withScope(ctx, 'payments.write', (s) => takePayment(s, { amountCents: 100, description: 'x', idempotencyKey: key(), ...extra }));
+      await expect(attempt({ subjectId: 'order-123' })).rejects.toBeInstanceOf(ValidationError);
+      await expect(attempt({ customerId: 'not-an-id' })).rejects.toBeInstanceOf(ValidationError);
+      await expect(attempt({ amountCents: 3_000_000_000 })).rejects.toBeInstanceOf(ValidationError);
+      await expect(attempt({ amountCents: 100_000_001 })).rejects.toBeInstanceOf(ValidationError);
+      await expect(attempt({ description: 'x'.repeat(1001) })).rejects.toBeInstanceOf(ValidationError);
+      expect(charge).not.toHaveBeenCalled();
+    } finally {
+      charge.mockRestore();
+    }
+  });
+
+  it('permanently deleting a refund does not make the money refundable again', async () => {
+    const superAdmin = await ctxFor(USERS.superAdmin, 'tut');
+    const ids = await withScope(superAdmin, 'payments.write', async (s) => {
+      const payment = await takePayment(s, { amountCents: 1000, description: 'purge refund', idempotencyKey: key() });
+      const refund = await refundPayment(s, { paymentId: payment.id, amountCents: 1000, reason: 'full' });
+      await archiveRecord(s, refundEntity, refund.id);
+      return { payment: payment.id, refund: refund.id };
+    });
+    await ageArchive('refunds', ids.refund, 40);
+    await withScope(superAdmin, 'payments.write', (s) => purgeRecord(s, refundEntity, ids.refund));
+    await withScope(superAdmin, 'payments.write', async (s) => {
+      expect(await refundedCents(s, ids.payment)).toBe(1000);
+      await expect(refundPayment(s, { paymentId: ids.payment, amountCents: 1, reason: 'again' })).rejects.toBeInstanceOf(ValidationError);
+    });
+  });
+
+  it('staff granted only the write permission can refund and reschedule', async () => {
+    const admin = await ctxFor(USERS.brssAdmin, 'brss');
+    const membershipId = await addMember(admin, { name: 'Writer Only', email: `writer.${unique()}@sai.example`, role: 'business_staff' });
+    await setMemberPermissions(admin, membershipId, ['payments.write', 'scheduling.write']);
+    const member = (await listMembers(admin)).find((m) => m.membershipId === membershipId)!;
+    const ctx = await buildBusinessContext(member.userId, 'brss', 'live');
+    await withScope(ctx, 'payments.write', async (s) => {
+      const payment = await takePayment(s, { amountCents: 500, description: 'writer', idempotencyKey: key() });
+      expect((await refundPayment(s, { paymentId: payment.id, amountCents: 200, reason: 'r' })).status).toBe('succeeded');
+      const appointment = await bookAppointment(s, { kind: 'visit', startsAt: at(460, 14), endsAt: at(460, 16) });
+      expect((await rescheduleAppointment(s, appointment.id, { startsAt: at(461, 14), endsAt: at(461, 16) })).id).toBe(appointment.id);
+    });
+    await removeMember(admin, membershipId);
+  });
+
+  it('a sandbox reset removes the old rows’ files but leaves other bytes in the folder alone', async () => {
+    const ctx = await ctxFor(USERS.superAdmin, 'cbb');
+    const sandbox = await ctxFor(USERS.superAdmin, 'cbb', 'sandbox');
+    const old = await withScope(sandbox, 'files.write', (s) => saveFile(s, { filename: 'old.txt', contentType: 'text/plain', bytes: new Uint8Array([1]) }));
+    // Bytes that no existing row points at, standing in for a file the fresh seed just wrote.
+    const fresh = `${ctx.business.id}/sandbox/fresh-seed-file.txt`;
+    await fileStorage.put(fresh, new Uint8Array([2]));
+    await resetSandbox(ctx);
+    const onDisk = (storageKey: string) => fs.existsSync(path.resolve(process.env.FILE_STORAGE_DIR as string, storageKey));
+    expect(onDisk(old.storageKey)).toBe(false);
+    expect(onDisk(fresh)).toBe(true);
+    await fileStorage.delete(fresh);
+  });
+});

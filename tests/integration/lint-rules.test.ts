@@ -31,9 +31,15 @@ const FORBIDDEN_OUTSIDE_CORE = [
   `const m = await import('@/core/db/schema/platform');`,
   `const m = await import('../../core/db/client');`,
   `const m = require('@/core/tenancy/system');`,
+  `const m = await import('postgres');`,
+  `const name = 'client'; const m = await import(\`@/core/db/\${name}\`);`,
+  `import { getDb } from '@/core/tenancy/../db/client';`,
+  `import { sessions } from '@/core/db/schema/./platform';`,
+  `import { users } from '@/core/db/schema/';`,
 ];
 
-describe.each(['src/modules/zz_probe/x.ts', 'src/app/zz_probe/x.ts'])('in %s', (file) => {
+// The last one is a folder that does not exist yet: anything new under src/ is covered by default.
+describe.each(['src/modules/zz_probe/x.ts', 'src/app/zz_probe/x.ts', 'src/lib/zz_probe/x.ts'])('in %s', (file) => {
   it.each(FORBIDDEN_OUTSIDE_CORE)('rejects: %s', async (code) => {
     expect(await problems(file, `${code}\nexport {};\n`)).not.toEqual([]);
   });

@@ -8,14 +8,15 @@
  * If the transaction fails after step 1, retrying with the same key returns the same
  * charge, so nobody is charged twice and nothing is ever "paid" without a payment row.
  */
-import { and, eq, sql, sum } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { payments, refunds } from '../db/schema';
 import { txOf, type Scope } from '../db/scope';
-import { ValidationError } from '../errors';
+import { NotFoundError, ValidationError } from '../errors';
+import { isUuid } from '../ids';
 import { authorize } from '../rbac/permissions';
 import { customers } from '../db/schema';
 import { paymentEntity, refundEntity } from '../records/core-entities';
-import { createRecord, getRecord } from '../records/records';
+import { createRecord, updateRecord } from '../records/records';
 import type { Row } from '../records/types';
 import { mockProvider } from './mock-provider';
 import type { PaymentProvider } from './provider';
@@ -32,6 +33,9 @@ export function providerFor(environment: 'live' | 'sandbox'): PaymentProvider {
   }
   return mockProvider;
 }
+
+/** The most one payment may be: $1,000,000. Far above anything real; well inside what the database can store. */
+export const MAX_PAYMENT_CENTS = 100_000_000;
 
 export type TakePaymentInput = {
   amountCents: number;
@@ -65,6 +69,15 @@ export async function takePayment(
   if (!Number.isInteger(input.amountCents) || input.amountCents <= 0)
     throw new ValidationError('The amount must be more than zero.');
   if (!input.idempotencyKey) throw new ValidationError('A payment needs an idempotency key.');
+  // Everything the database could refuse is checked here, BEFORE the card is charged.
+  if (input.amountCents > MAX_PAYMENT_CENTS)
+    throw new ValidationError('That amount is too large for a single payment.');
+  if (input.customerId != null && !isUuid(input.customerId))
+    throw new ValidationError('A linked record does not exist in this business.');
+  if (input.subjectId !== undefined && !isUuid(input.subjectId))
+    throw new ValidationError('A linked record does not exist in this business.');
+  if (input.idempotencyKey.length > 200 || input.description.length > 1000)
+    throw new ValidationError('The payment description or key is too long.');
 
   // Same key = same payment. The lock makes a second, simultaneous request wait here until
   // the first has finished; it then finds the first one's row and returns it. The unique
@@ -141,22 +154,19 @@ export async function takePayment(
 }
 
 /**
- * How much of a payment has already been refunded. Archived refunds count too: archiving a
- * refund hides the row, it does not un-send the money.
+ * How much of a payment has already been refunded. Read from the running total kept on the
+ * payment itself, so archiving — or permanently deleting — a refund row can never make the
+ * money refundable again.
  */
 export async function refundedCents(s: Scope, paymentId: string): Promise<number> {
   authorize(s.ctx, 'payments.read');
+  if (!isUuid(paymentId)) return 0;
   const [row] = await s.db
-    .select({ total: sum(refunds.amountCents) })
-    .from(refunds)
-    .where(
-      and(
-        s.where(refunds, 'include'),
-        eq(refunds.paymentId, paymentId),
-        eq(refunds.status, 'succeeded'),
-      ),
-    );
-  return Number(row?.total ?? 0);
+    .select({ total: payments.refundedCents })
+    .from(payments)
+    .where(and(s.where(payments, 'include'), eq(payments.id, paymentId)))
+    .limit(1);
+  return row?.total ?? 0;
 }
 
 export async function refundPayment(
@@ -167,49 +177,55 @@ export async function refundPayment(
   authorize(s.ctx, 'payments.write');
   if (!Number.isInteger(input.amountCents) || input.amountCents <= 0)
     throw new ValidationError('The refund must be more than zero.');
-  const payment = await getRecord(s, paymentEntity, input.paymentId);
+  if (!isUuid(input.paymentId)) throw new NotFoundError();
+
+  // Load AND lock the payment in one step, so two refunds at the same moment cannot both
+  // see "nothing refunded yet" and together give back more than was paid.
+  const [payment] = await txOf(s)
+    .select()
+    .from(payments)
+    .where(and(s.where(payments), eq(payments.id, input.paymentId)))
+    .for('update');
+  if (!payment) throw new NotFoundError();
   if (payment.status !== 'succeeded' || payment.kind !== 'charge')
     throw new ValidationError('Only a completed charge can be refunded.');
-
-  // Lock the payment row so two refunds at the same moment cannot both see "nothing
-  // refunded yet" and together give back more than was paid.
-  await txOf(s)
-    .select({ id: payments.id })
-    .from(payments)
-    .where(and(s.where(payments), eq(payments.id, payment.id)))
-    .for('update');
-  const already = await refundedCents(s, payment.id);
+  const already = payment.refundedCents;
   if (already + input.amountCents > payment.amountCents) {
     throw new ValidationError(
       `Only ${((payment.amountCents - already) / 100).toFixed(2)} is left to refund on this payment.`,
     );
   }
-  if (payment.provider === 'manual') {
-    return createRecord(s, refundEntity, {
-      paymentId: payment.id,
+
+  let providerRef: string | null = null;
+  let failure: string | null = null;
+  if (payment.provider !== 'manual') {
+    // Refund through the provider that took the payment. Never "refund" a Stripe payment
+    // through the mock: that would record money as returned when none was.
+    const provider = payment.provider === 'mock' ? mockProvider : providerFor(s.ctx.environment);
+    if (provider.name !== payment.provider) {
+      throw new ValidationError(
+        `This payment was taken with ${payment.provider}, which is not the active payment provider. Ask the tech team.`,
+      );
+    }
+    const result = await provider.refund({
+      providerRef: payment.providerRef ?? '',
       amountCents: input.amountCents,
-      reason: input.reason,
-      status: 'succeeded',
+      idempotencyKey: `${payment.id}:refund:${already}:${input.amountCents}`,
+    });
+    if (result.ok) providerRef = result.providerRef;
+    else failure = result.failureReason;
+  }
+
+  if (failure === null) {
+    await updateRecord(s, paymentEntity, payment.id, {
+      refundedCents: already + input.amountCents,
     });
   }
-  // Refund through the provider that took the payment. Never "refund" a Stripe payment
-  // through the mock: that would record money as returned when none was.
-  const provider = payment.provider === 'mock' ? mockProvider : providerFor(s.ctx.environment);
-  if (provider.name !== payment.provider) {
-    throw new ValidationError(
-      `This payment was taken with ${payment.provider}, which is not the active payment provider. Ask the tech team.`,
-    );
-  }
-  const result = await provider.refund({
-    providerRef: payment.providerRef ?? '',
-    amountCents: input.amountCents,
-    idempotencyKey: `${payment.id}:refund:${already}:${input.amountCents}`,
-  });
   return createRecord(s, refundEntity, {
     paymentId: payment.id,
     amountCents: input.amountCents,
-    reason: result.ok ? input.reason : `${input.reason} — FAILED: ${result.failureReason}`,
-    status: result.ok ? 'succeeded' : 'failed',
-    providerRef: result.ok ? result.providerRef : null,
+    reason: failure === null ? input.reason : `${input.reason} — FAILED: ${failure}`,
+    status: failure === null ? 'succeeded' : 'failed',
+    providerRef,
   });
 }

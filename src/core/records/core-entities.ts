@@ -194,6 +194,7 @@ export const fileEntity: EntityDef<typeof files> = {
   readPermission: 'files.read',
   writePermission: 'files.write',
   titleOf: (row) => text(row.filename),
+  immutableFields: ['storageKey'],
   // A permanently deleted file must not leave its bytes on disk. Only ever delete bytes
   // inside the row's own business/environment folder, whatever the row's key says.
   afterPurge: async (row) => {

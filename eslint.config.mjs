@@ -30,11 +30,9 @@ const PLATFORM_TABLES = {
 };
 const NO_ROUTES = { regex: '(^@/|/)app/', message: 'Modules must not import from src/app.' };
 
-const OUTSIDE_CORE = [DB_CLIENT, SYSTEM_ACTOR, RAW_TX, PLATFORM_TABLES];
-
 // The rules above only see static imports. Outside the core, nothing may load the database
 // layer or the system actor dynamically either (import('…') or require('…')).
-const GUARDED = '/core\\/(db|tenancy\\/system)/';
+const GUARDED = '/core\\/(db|tenancy\\/system)|^postgres$|^drizzle-orm\\/postgres-js/';
 const NO_DYNAMIC_LOADS = [
   {
     selector: `ImportExpression[source.value=${GUARDED}]`,
@@ -44,7 +42,19 @@ const NO_DYNAMIC_LOADS = [
     selector: `CallExpression[callee.name="require"][arguments.0.value=${GUARDED}]`,
     message: 'Do not require() the database layer. Use the core services.',
   },
+  // A dynamic import whose target is worked out at run time cannot be checked at all.
+  {
+    selector: 'ImportExpression[source.type!="Literal"]',
+    message: 'Dynamic imports must use a plain string, so the architecture rules can check them.',
+  },
 ];
+// Path tricks that would make an import look different from what it is ("a/../b", "a/./b", "a/").
+const NO_PATH_TRICKS = {
+  regex: '^@/.*(/\\.\\.?/|/$)',
+  message: 'Write the import path plainly (no "/./", "/../" or trailing "/").',
+};
+
+const OUTSIDE_CORE = [DB_CLIENT, SYSTEM_ACTOR, RAW_TX, PLATFORM_TABLES, NO_PATH_TRICKS];
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -60,7 +70,10 @@ const eslintConfig = defineConfig([
   ]),
   {
     // Routes and UI: no direct database access, no system actor, no raw transaction.
-    files: ['src/app/**', 'src/ui/**'],
+    // Everything under src/ that is not the core, the seed data or a module (routes, UI and
+    // any folder added later) is covered by default.
+    files: ['src/**'],
+    ignores: ['src/core/**', 'src/seed/**', 'src/modules/**'],
     rules: {
       'no-restricted-imports': ['error', { patterns: OUTSIDE_CORE }],
       'no-restricted-syntax': ['error', ...NO_DYNAMIC_LOADS],

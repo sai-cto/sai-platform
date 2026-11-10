@@ -184,6 +184,13 @@ export async function setUserActive(
     }
     if (!isActive) {
       // A business must always keep one usable admin: refuse if this account is the only one.
+      // Lock every business this person belongs to (fixed order, so two such calls can never
+      // wait on each other), THEN read which of them they are an admin of.
+      const memberOf = await tx
+        .select({ businessId: memberships.businessId })
+        .from(memberships)
+        .where(eq(memberships.userId, userId));
+      for (const id of memberOf.map((m) => m.businessId).sort()) await lockBusinessPeople(tx, id);
       const adminOf = await tx
         .select({ businessId: memberships.businessId, name: businesses.name })
         .from(memberships)
@@ -195,9 +202,7 @@ export async function setUserActive(
             eq(memberships.isActive, true),
           ),
         );
-      // Fixed order (sorted) so two such calls can never wait on each other.
-      for (const b of [...adminOf].sort((x, y) => x.businessId.localeCompare(y.businessId))) {
-        await lockBusinessPeople(tx, b.businessId);
+      for (const b of adminOf) {
         if ((await lockAndCountAdmins(tx, b.businessId)) <= 1) {
           throw new ValidationError(
             `${user.name} is the only admin of ${b.name}. Give that business another admin first.`,

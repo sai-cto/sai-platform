@@ -55,5 +55,11 @@ export function ownsStorageKey(
   key: string,
 ): boolean {
   const prefix = `${storagePrefix(businessId, environment)}/`;
-  return key.startsWith(prefix) && !key.slice(prefix.length).includes('/') && !key.includes('..');
+  if (!key.startsWith(prefix)) return false;
+  // What follows the folder must be ONE plain file name: not empty, no further folders,
+  // and not the special names "." or "..". (Dots inside a name, like "a..b.txt", are fine.)
+  const name = key.slice(prefix.length);
+  return (
+    name !== '' && name !== '.' && name !== '..' && !name.includes('/') && !name.includes('\\')
+  );
 }
