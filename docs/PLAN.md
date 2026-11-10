@@ -120,7 +120,7 @@ Core tenant tables:
 | Table | Purpose | Key columns |
 |---|---|---|
 | `customers` | A business's customers. A person who uses two businesses is two separate rows. | `first_name`, `last_name`, `email`, `phone`, `kind` (`person`, `organization`), `notes`, `external_ref` (the id in the system it was imported from) |
-| `payments` | One row per charge attempt. | `customer_id`, `amount_cents`, `currency`, `status` (`pending`, `succeeded`, `failed`, `canceled`), `method` (`card`, `cash`, `check`, `other`), `provider` (`stripe`, `mock`, `manual`), `provider_ref`, `card_brand`, `card_last4`, `subject_type`, `subject_id`, `description`, `effective_date` |
+| `payments` | One row per charge or card authorization. | `customer_id`, `kind` (`charge`, `authorization`), `amount_cents`, `currency`, `status` (`pending`, `succeeded`, `failed`, `canceled`), `idempotency_key`, `method` (`card`, `cash`, `check`, `other`), `provider` (`stripe`, `mock`, `manual`), `provider_ref`, `card_brand`, `card_last4`, `subject_type`, `subject_id`, `description`, `effective_date` |
 | `refunds` | One row per refund against a payment. | `payment_id`, `amount_cents`, `reason`, `provider_ref`, `status` |
 | `resources` | Things that can be scheduled: a truck, a crew, a room. | `kind`, `name`, `is_active` |
 | `appointments` | A scheduled visit or slot. | `customer_id`, `kind`, `starts_at`, `ends_at`, `status` (`unconfirmed`, `confirmed`, `in_progress`, `completed`, `canceled`), `resource_id`, `subject_type`, `subject_id`, `notes` |
@@ -323,16 +323,139 @@ Keyboard: Ctrl/Cmd-K command palette; `g` then a letter to jump between a busine
 
 ## 6. BRSS object → new model mapping
 
-_To be completed from the Salesforce analysis — see below._
+Source: `../brss-salesforce` at commit `233cf40`, read only. Three written analyses were produced (data model; order, article and payment rules; scheduling, pricing and zones) with 393 rules and 97 open questions, every one cited to a file and line. I re-checked the findings quoted in this section against the source myself. The full rule list with citations becomes the BRSS module's rules document in Phase 4.
+
+### 6.1 Four things in the code that differ from the brief
+
+The brief says to stop and ask when the code contradicts it. These do:
+
+| # | The brief says | The code shows | Evidence |
+|---|---|---|---|
+| 1 | `BRSS_OrdersDashboard` and `BRSS_OrderDetails` are staff pages. | Both are **customer** pages. The dashboard loads only the logged-in customer's orders and is switched off for the manager profile; the detail page loads an order only if the logged-in user is its customer. | `classes/BRSS_OrdersDashboardController.cls:32-44`, `profiles/BRSS Manager Profile.profile-meta.xml:2487-2490`, `classes/BRSS_OrderDetailsController.cls:72-73` |
+| 2 | Staff have an orders dashboard with status, campus/region and date filters. | There is **no custom staff screen** in the repo. Staff work in standard Salesforce record pages and list views (for example "Today → Future" appointments, "Storage Orders"). Page layouts were never retrieved into the repo, so what staff actually see is not recorded anywhere I can read. The only custom staff-side screens are the crew's phone pages. | `objects/Order/listViews/`, `objects/Appointment__c/listViews/`, `objects/Order/webLinks/ProcessOrder.webLink-meta.xml` |
+| 3 | `Warehouse__c` is a warehouse. | It is one row **per order line** holding a location text, kept in step with the line by two flows. Warehouses themselves exist only as picklist values, and the lists disagree: Mecklenburg and Lansing on the article; plus Overflow and SAI Basement on the order. | `objects/Warehouse__c/`, `flows/Order_Product_Sync_Warehouse_Location.flow-meta.xml`, `objects/Article__c/fields/Warehouse__c.field-meta.xml` |
+| 4 | There is an article status progression to port. | There are eight statuses and **no enforced order**; any status can follow any other. No Apex sets a status. Three automations do (see 6.3). | `objects/Article__c/fields/Status__c.field-meta.xml:13-52` |
+
+Also: `Quote__c` and `Move__c` belong to HHMC, not BRSS; `Employment__c` is a public careers page shared by both; `BRSS_Pricing` and `BRSS_PreArrival` are static marketing pages with no pricing logic or data capture. None of these are carried into the BRSS module.
+
+Consequence for Phase 4: the staff portal cannot be a port of existing staff screens, because there are none. It will be a new design built on the real data model, the real rules and the list views staff use today. Question B1 asks how you want to specify it.
+
+### 6.2 Object mapping
+
+Tables prefixed `brss_` live in the BRSS module. The others are core tables.
+
+| Salesforce | New model | What changes |
+|---|---|---|
+| `User` (customers are community users) + `Account` | core `customers` + `brss_customer_profiles` (NetID, class year, college, affiliation, marketing opt-out) | A customer is a customer record, not a login. The parent Account and the "default account" workaround disappear. |
+| `Order` | `brss_orders`: order number, customer, status, campus category, discount, tip, ship-home address and zone, storage term months, storage effective date, delivery-scheduled flag, pre-arrival flag, notes | Tax and totals are computed in one function instead of formula fields. The standard `Type` field is dropped; the multi-select `Type__c` is the real one. |
+| `Order.Type__c` (multi-select: Packing, Ship to Cornell, Ship to Home, Storage, Supplies) | `brss_order_services` (one row per service on the order) | Queryable for filters and reporting. |
+| `OrderItem` | `brss_order_items`: order, product, optional article, description, quantity, unit price, status (`new`, `paid`) | |
+| `Product2`, `PricebookEntry`, `Pricebook2` | `brss_products`: name, code, kind, unit price, non-boxed flag, pre-arrival flag, active, and a `role` (see next row) | One price list. The org only ever uses the standard price book. |
+| `BRSS_HierarchySettings__c` product-id fields (ship to home, ship to Cornell, flat rate ×2, insurance, other non-boxed, packing ×2, pre-arrival) | `brss_products.role` | Record ids pasted into text settings become a column on the product. |
+| `BRSS_HierarchySettings__c` other fields (tax %, authorization amount, max non-admin discount %, blocked days before an appointment, pre-arrival regions) | BRSS module settings (validated, edited in the console, logged) | The Stripe secret key moves to `.env.local` and is never stored in the database. |
+| `BRSS_StorageTermProduct__c` | `brss_storage_term_products`: term months, overweight flag, product | Real foreign key to the product. |
+| `Article__c` | `brss_articles`: article number, customer, type, description, weight, dimensions, status, product, additional insurance, other storage price, warehouse, section, row, pallet | Billable weight computed by one function (see question B7). |
+| `OrderArticle__c` | `brss_order_articles`: order, article, Cornell-shipping-account flag, received-from zip | Many-to-many kept. The two text "relay" fields that flows used to push statuses are dropped; a service function does it directly. |
+| `Appointment__c` | core `appointments` + `brss_appointments`: order, type (Pickup, Delivery, Packing, Supplies), region, building, address, room, elevator, phone, item estimates, packing hours, truck, crew | The five two-hour slots become `starts_at`/`ends_at`. "Truck En Route" maps to core status `in_progress`. The copied customer name, email and NetID fields are read from the customer instead. |
+| `ApptNonavailability__c` | core `unavailability` + `brss_unavailability_buildings` (empty = everywhere) | Enforced on the server. Today it is only enforced by JavaScript in the customer's browser. |
+| `Truck__c` (name, shared login user, five crew contacts) | core `resources` (kind `truck`) + `brss_truck_crew` | Shared truck logins go away: the locked decision is individual accounts. |
+| `Warehouse__c` (per-line location) | Not carried over as it is. New `brss_warehouses` table (a real list of warehouses) and the location on the article. | Needs your answer to question B2. |
+| `Payment__c` (Charge, Authorize, 0-Amount; card snapshot; manual refund fields) | core `payments` + `refunds` | Refunds become real records through the payment provider instead of a hand-ticked checkbox. Card numbers never touch our server. |
+| `ZipZone__c` | `brss_zip_zones`: zip-prefix low, zip-prefix high, zone | Rule kept: the first three digits of the zip pick the zone. |
+| `ZoneWeight__c` | `brss_zone_rates`: zone, weight (lb), ship-to-home price, ship-to-Cornell price | |
+| `Region__c` and `Building__c` picklists (6 regions, 72 buildings) | `brss_regions`, `brss_buildings` (each building has a region and a campus category) | Managers can edit the list without a developer. Campus category becomes data instead of a hard-coded flow (question B9). |
+| 14 active flows, 2 triggers, 1 workflow field update | Functions in `src/modules/brss/services/`, each with a test and a source citation | |
+| ~12 active email rules | Core notifications, sent by the service function at the moment the event happens | Rules like "date = tomorrow" only fire today if someone happens to save the record that day; real reminders need a scheduler, which is out of scope for now. |
+| `Quote__c`, `Move__c`, `Employment__c`, `fb_Fulfillment__c` | Not carried over | HHMC objects, a careers page, and an unused leftover. |
+
+### 6.3 Rules confirmed in the source that will be ported
+
+| Rule | Source |
+|---|---|
+| Order total = subtotal + tax + tip − discount; tax = (subtotal − discount) × tax rate. | `classes/BRSS_AmountInfo.cls:88-99` |
+| A non-admin's discount is capped at a configured percentage; an admin's at 100%. | `classes/BRSS_OrderProcessingCtrl.cls:351-354` |
+| Billable weight = the larger of actual weight and length × width × height ÷ divisor, rounded up; an article over 150 lb billable is rejected. | `objects/Article__c/fields/BillableWeight__c.field-meta.xml:6`, `objects/Article__c/validationRules/MaxBillableWeight.validationRule-meta.xml:6-7` |
+| Storage price for a standard box = the term product's price × billable weight, using a separate overweight product at 70 lb or more; non-boxed and flat-rate items = unit price × months. If no product exists for the exact term, the nearest shorter term is used. | `classes/BRSS_OrderItemUtils.cls:78-121,447-458`, `classes/BRSS_SettingsUtils.cls:102-105,169-189` |
+| Shipping price = the rate row for the zone and the exact billable weight; the zone comes from the first three zip digits. | `classes/BRSS_ZipZoneDAO.cls:10-26`, `classes/BRSS_ZoneWeightDAO.cls:16-57` |
+| Storage effective date is set once, the first time a charge is recorded on an order that includes storage. | `flows/BRSS_StorageEffectiveDatePayment.flow-meta.xml:54-58,85-89,199-233` |
+| Storage expiration = effective date + term months. | `objects/Order/fields/Storage_Expiration_Date__c.field-meta.xml:5` |
+| Setting a warehouse, section, row or pallet on an article sets its status to Stored. | `workflows/Article__c.workflow-meta.xml:14-39` |
+| Closing an order sets all of its articles to Delivered. | `flows/BRSS_Update_Order_Article_Status.flow-meta.xml:54-57`, `flows/BRSS_UpdateArticleStatusDelivered.flow-meta.xml:54-57,156-158` |
+| Setting the order's "master article status" sets that status on all of its articles. | `flows/BRSS_MasterArticleStatus.flow-meta.xml`, `flows/BRSS_MasterArticleStatusStep2.flow-meta.xml` |
+| A customer can cancel only an open order whose earliest appointment is after today; cancelling also cancels its appointments. | `classes/BRSS_OrderDetailsController.cls:87-90,178-206` |
+| Changing an appointment's truck copies the truck's crew onto the appointment. | `flows/BRSS_TruckFieldRepUpdate.flow-meta.xml:187-310` |
+| An unavailability record covering all five time slots is treated as all day. | `classes/BRSS_ApptNonavailabilityUtils.cls:36-59` |
+
+### 6.4 Behaviour I will **not** copy unless you tell me to
+
+These look like defects or unsafe practice in the current system. Each is an open question in section 8 where a business decision is needed.
+
+| Current behaviour | Source | Plan |
+|---|---|---|
+| "Storage Delivery By" is one year late whenever start month + term is a multiple of 12 (April + 8, June + 6, August + 4 all give December of the *following* year). This date drives the delivery deadline and reminder. | `objects/Order/fields/StorageDeliveryBy__c.field-meta.xml:6-9` | Use plain calendar-month addition (question B6). |
+| The crew's phone shows billable weight using ÷166; the price is calculated using ÷139. A box can be billed at a higher weight than the crew saw. | `classes/BRSS_ArticleDAO.cls:14` vs `objects/Article__c/fields/BillableWeight__c.field-meta.xml:6` | One divisor everywhere (question B7). |
+| Records are saved first and the card is charged in a second request. If the second request never arrives, lines stay marked Paid with no payment. The undo on failure is best-effort and ignores errors. | `classes/BRSS_BasicOrderEditorController.cls:333-414`, `classes/BRSS_TransactionManager.cls:90-164` | Charge and save in one transaction with an idempotency key. |
+| Card number and CVC pass through the server; the Stripe key is a plain-text setting. | `classes/BRSS_PaymentManager.cls:126-143`, `classes/BRSS_StripeRequest.cls:25-29` | Provider-hosted card entry only; key in the environment. |
+| A missing rate row, zone or term product means the line is silently not billed. | `classes/BRSS_SettingsUtils.cls:175-188`, `classes/BRSS_OrderItemUtils.cls:129-170` | Show staff a clear "no price found" error instead of charging nothing. |
+| Lead time and unavailability are checked only in the customer's browser; the server accepts any appointment. | `components/BRSS_Form_Appointment.component:117-148` | Check on the server. |
+| West Campus (and everything except North Campus) is classed Off-Campus. | `flows/Appointment_Trigger_After_Save.flow-meta.xml:160-165` | Ask (question B9). |
 
 ---
 
 ## 7. Risks
 
-_See below._
+| # | Risk | Effect | What I propose |
+|---|---|---|---|
+| 1 | **Unpushed work lives only in this cloud session.** I am running in a temporary cloud container, not on your machine. With the no-push rule, every commit exists only here, and the container is reclaimed after a period of inactivity. | A whole phase could be lost between checkpoints. | Your decision — question A1. |
+| 2 | **The repository is public.** BRSS's business rules, price structure and the file layout of the private Salesforce repo will be readable by anyone once pushed, because the brief asks for ported rules with source citations. | Disclosure of internal business logic; none of it is credentials or customer data. | Your decision — question A2. I will not copy the org id, internal email addresses or personal names that appear in the private repo. |
+| 3 | **BRSS staff screens are not in the reference repo** (section 6.1). | The Phase 4 staff portal is a new design, not a port. If it does not match how managers work, it gets rebuilt. | Question B1. A 30-minute walkthrough or screenshots from a BRSS manager before Phase 4 would remove most of this risk. |
+| 4 | **Real prices, products, zone tables, tax rate and storage terms are org data and not in the repo.** | Seed data will be invented. Numbers on screen will look plausible but will not be BRSS's real prices. | Acceptable for a proof module; say if you want real tables loaded through the import tool instead. |
+| 5 | **The Stripe adapter cannot be exercised against Stripe.** I may not create accounts and no test key exists. | It will be tested against recorded responses only. The mock provider is what actually runs. | Supply a `sk_test_` key in `.env.local` later if you want it verified end to end. |
+| 6 | **The Microsoft and Google adapters cannot be exercised** without a tenant. | They are "ready to enable" but unverified until someone configures one. | Documented as such in `HANDOFF.md`. |
+| 7 | **Scope.** Phase 2 (the whole console) is the largest phase by far. | Long phase, large review at Checkpoint 3. | I can split it into 2a (shell, sidebar, per-business tabs) and 2b (platform section, importer, executive view) with a checkpoint between, if you prefer smaller reviews. |
+| 8 | **Row-level security adds a concept** students must learn (section 3, layer 3). | Slightly steeper onboarding. | Recommended anyway; easy to decline now, harder to add later. |
+| 9 | **Framework churn.** Next.js and Drizzle both release often. | Upgrade work for future students. | Exact version pins, no experimental features, and an "upgrading" note in `HANDOFF.md`. |
+| 10 | **Accent colours.** Five of the nine brand colours are reds within a narrow range and two are near-black. | Businesses are hard to tell apart in the sidebar. | I will adjust them in Phase 2 against real screenshots and record the final values in `DECISIONS.md`, as the brief asks. The monogram text carries the identity; colour only supports it. |
+| 11 | **Reminder emails need a scheduler** ("the day before your pickup"). | Not possible with "no hosting, no job queue" yet. | Out of scope now; the notification interface is ready for it. Listed in `HANDOFF.md`. |
 
 ---
 
 ## 8. Questions only the CTO can answer
 
-_See below._
+Each question has a default. "Go with the defaults" is a complete answer.
+
+### A. Needed before Phase 1 starts
+
+| # | Question | Default if you do not answer |
+|---|---|---|
+| A1 | **Pushing.** This session runs in a temporary cloud container, so unpushed commits can be lost. May I push phase branches at each checkpoint (never `main` without approval)? And which branch names: your phase names (`phase-1-core`), or the name this cloud session was configured with (`claude/sai-platform-foundation-xvvr2z`)? | No push. I keep working locally and repeat the warning at each checkpoint. |
+| A2 | **Public repo.** Are you content for BRSS's ported business rules, with citations into the private Salesforce repo, to be public? If not, the simplest fix is to make `sai-platform` private before the first push. | Rules are documented in the repo as the brief asks. |
+| A3 | **Dependencies** in section 1 (Radix/shadcn, `cmdk`, `recharts`, `arctic`, `stripe`): approve all, or name the ones to drop. | I wait; these need a yes. |
+| A4 | **Row-level security** as a third enforcement layer (section 3): keep or drop? | Keep. |
+| A5 | **Can one person hold a platform role and business roles at once?** For example, a President (executive, read-only) who also manages one business. | No. A user has either one platform role or business memberships. |
+| A6 | **Tech and live data.** "Builds and tests in every module" — may `tech` create and edit *live* business records (a real BRSS order), or only sandbox records plus settings? | Tech can read and write live and sandbox data in every business; cannot purge; cannot change platform settings. |
+| A7 | **Who manages people.** May `tech` create users and assign business roles? Who may grant `tech`, `executive` and `super_admin`? May a `business_admin` promote someone to `business_admin`, or only add `business_staff`? | Tech can create users and assign business roles. Only super_admin grants the three platform roles. A business_admin can add, change and remove both admins and staff of their own business, but cannot remove the last admin. |
+| A8 | **What executives can open.** Dashboards only, or also each business's record-level data (customer names, addresses) and activity log, read-only? May they export? | Executives see the executive dashboard and every business's Overview, Data and Activity log, read-only, with no export. |
+| A9 | **Business_admin and settings.** May a business_admin change their module's settings and portal toggles, or only tech and super_admin? May they export data (it contains customer details)? | Business_admins can view settings but only tech and super_admin change them. Business_admins can export their own business's data; every export is logged. |
+| A10 | **Permanent delete and the log.** The log is append-only and stores "before" values. When a record is permanently deleted, should the log keep its full contents forever, or only who deleted what and when? | Keep only a tombstone (type, id, label, who, when) for the purge event. Earlier log entries about that record keep their before/after values. |
+| A11 | **Sandbox.** Confirm sandbox data is always generated fake data, never a copy of live data. Who may reset a business's sandbox? | Fake data only. Tech, super_admin and that business's admin may reset. |
+| A12 | **Imports.** After a file has been imported into the sandbox and checked, who may run the same import into live? | Tech and super_admin only, and only after a successful sandbox run of the same file and mapping. |
+
+### B. BRSS questions — needed before Phase 4, best answered with a BRSS manager
+
+| # | Question | Default if you do not answer |
+|---|---|---|
+| B1 | **Staff screens.** No custom staff screen exists to model (section 6.1). Can a BRSS manager describe or screenshot what they use day to day (order page, list views, reports)? | I design the staff portal from the data model, the rules and the existing list views, and you review it at the final checkpoint. |
+| B2 | **Warehouses and locations.** What are the real warehouses (Mecklenburg, Lansing, Overflow, SAI Basement)? Location is stored three ways today: on the article (warehouse/section/row/pallet), on the order line (free text), and on the order ("Order Location"). Which one do staff actually use? | A warehouses table seeded with those four names; location recorded on the article as warehouse, section, row, pallet. |
+| B3 | **Article status order.** Is the intended path: on truck to warehouse → in warehouse → stored → ready for delivery → on truck to delivery → delivered, with ready for shipment → shipped as the alternative ending? Should the new system enforce it, or allow any change as today? | That path is suggested by the interface; staff with permission can override to any status, and every change is logged. |
+| B4 | **Manual status changes.** Nothing in the code ever sets an order to Activated or Closed, or an appointment to Confirmed, Truck En Route or Completed. Staff must do it by hand. When, and who? What does "Activated" mean? | All are manual actions in the staff portal, with the automatic consequences kept (closing an order marks its articles Delivered). |
+| B5 | **Storage effective date.** Two active automations set it: the first charge on a storage order, and a completed pickup appointment (which says "not being used" but is switched on). Which is the rule? | First charge, as the payment flow says. The pickup rule is not ported. |
+| B6 | **"Storage Delivery By" is a year late** for some start-month and term combinations (section 6.4). Confirm this is a bug and should not be reproduced. | Treated as a bug; plain month addition is used. |
+| B7 | **Billable weight divisor:** 139 (what pricing uses) or 166 (what the crew sees)? | 139 everywhere, since that is what customers are charged on today. |
+| B8 | **Capacity.** There is no limit on appointments per slot, day or truck. Is that right, with managers blocking time by hand? | No capacity limit; unavailability records only. |
+| B9 | **Campus category.** As coded, only North Campus counts as On-Campus; West Campus is Off-Campus. Intended? When is "Counter" used? | Each building carries its own campus category as editable data, seeded as coded today. "Counter" can be set by hand. |
+| B10 | **Intake.** Article intake and charging are done today on the crew's phone pages, which the brief treats as the later field portal. For Phase 4, should intake be a staff-portal screen that also works on a phone? | Yes: intake lives in the staff portal and is usable at 375px. No separate field portal. |
+| B11 | **Truck crews.** Trucks have a shared login and up to five crew "contacts" today. In the new system, are crew members individual users with a BRSS role? | Yes, crew are users with BRSS `business_staff` membership. |
+| B12 | **Fees that exist only as website text** (peak fee, late and missed appointment fees, $20 supplies minimum, packing hourly rate) are not in the code. Should the new system calculate any of them? | No. Staff add them as manual order lines, as today. |
+
+Further BRSS questions of detail (about 80, each with a citation) are recorded in the analysis files and will be listed in the BRSS module's "open questions" in Phase 4 rather than asked here.
