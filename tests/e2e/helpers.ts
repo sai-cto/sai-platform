@@ -53,3 +53,9 @@ export async function someCustomerId(slug: string): Promise<string> {
       (await sql`select c.id from customers c join businesses b on b.id = c.business_id where b.slug = ${slug} and c.environment = 'live' and c.archived_at is null limit 1`)[0].id as string,
   );
 }
+
+/** How many businesses are seeded. Tests count rows against this, so a new business needs no test change. */
+export async function businessCount(): Promise<number> {
+  const [row] = await asOwner((sql) => sql<{ n: number }[]>`select count(*)::int as n from businesses`);
+  return row.n;
+}

@@ -105,9 +105,9 @@ const eslintConfig = defineConfig([
               message: 'The core may only import @/modules/registry, never a module.',
             },
             {
-              regex: '(^@/|/)app/|^next($|/)',
+              regex: '(^@/|/)(app|server)/|^next($|/)',
               message:
-                'The core must not depend on Next.js or on routes; it is also used by scripts and tests.',
+                'The core must not depend on Next.js, on routes or on the request glue in src/server; it is also used by scripts and tests.',
             },
           ],
         },

@@ -19,7 +19,7 @@ import { USERS, ctxFor, logFor, platformCtxFor } from './helpers';
 
 const root = path.resolve(__dirname, '../..');
 
-describe('the nine modules', () => {
+describe('the registered modules', () => {
   it('every seeded business has a registered module with the same key, and the registry is valid', () => {
     expect(getModules().map((m) => m.key)).toEqual(SEED_BUSINESSES.map((b) => b.slug));
     expect(validateRegistry()).toEqual([]);
@@ -53,10 +53,10 @@ describe('the nine modules', () => {
     }
   });
 
-  it('the registry report shows all nine as registered', async () => {
+  it('the registry report shows every business as registered', async () => {
     const report = await moduleRegistryReport(await platformCtxFor(USERS.tech));
     expect(report.problems).toEqual([]);
-    expect(report.registered).toBe(9);
+    expect(report.registered).toBe(SEED_BUSINESSES.length);
     expect(report.installed.every((row) => row.manifest && row.portals.staff.built && row.portals.staff.on)).toBe(true);
     expect(report.installed.every((row) => !row.portals.customer.built && !row.portals.field.built)).toBe(true);
   });
@@ -106,11 +106,16 @@ describe('the module template (src/modules/_template)', () => {
 
 describe('businesses are data, never code', () => {
   // Outside src/modules (one folder per business) and src/seed (the data itself), no file may
-  // name a business: not its slug, its short code or its name. This is what makes "add a tenth
-  // business" need no change to the core or the console.
+  // name a business: not its slug or short code as a text value, not its code as a word, not
+  // its full name. This is what makes "add a tenth business" need no change to the core or
+  // the console. (It is a text search: it cannot catch every possible way to spell a name.)
   const names = SEED_BUSINESSES.map((b) => b.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   const quotedKeys = SEED_BUSINESSES.flatMap((b) => [b.slug, b.code]).join('|');
-  const pattern = new RegExp(`['"\`/](${quotedKeys})['"\`/]|${names.join('|')}`);
+  // Short codes of three or more capitals are also caught as whole words ("for BRSS").
+  const codes = SEED_BUSINESSES.map((b) => b.code).filter((code) => code.length >= 3).join('|');
+  const pattern = new RegExp(
+    `['"\`/](${quotedKeys})['"\`/]|\\b(${codes})\\b|${names.join('|')}`,
+  );
 
   function sourceFiles(dir: string): string[] {
     return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -120,7 +125,7 @@ describe('businesses are data, never code', () => {
     });
   }
 
-  it.each(['src/core', 'src/app', 'src/ui'])('no business is named in %s', (dir) => {
+  it.each(['src/core', 'src/app', 'src/server', 'src/ui'])('no business is named in %s', (dir) => {
     const offenders: string[] = [];
     for (const file of sourceFiles(path.join(root, dir))) {
       fs.readFileSync(file, 'utf8')

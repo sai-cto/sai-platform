@@ -1,10 +1,10 @@
 # Hired Hands Moving Company (`hhmc`)
 
-Student moving company. Replaces Movegistics.
+Student moving company.
 
 **Status:** scaffold — registered on the platform, not built yet.
 
-Module #1 in the build order. Features are being designed by another team member and manager requirements are still being gathered, so nothing is specified here yet. Do not build features in this module until the requirements are agreed.
+Module #1 in the build order. Its requirements are still pending, so nothing is specified here yet. Do not build features in this module until the requirements are agreed.
 
 ## Planned scope
 

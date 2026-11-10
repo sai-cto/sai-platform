@@ -1,10 +1,10 @@
 /** Phase 3: every business has a registered module with a clean "not built yet" staff portal. */
 import { expect, test } from '@playwright/test';
-import { SEED, asOwner, loginAs } from './helpers';
+import { SEED, asOwner, businessCount, loginAs } from './helpers';
 
 test('every business shows its module in the App tab', async ({ page }) => {
   const businesses = await asOwner((sql) => sql<{ slug: string; name: string }[]>`select slug, name from businesses order by sort_order`);
-  expect(businesses).toHaveLength(9);
+  expect(businesses.length).toBeGreaterThan(0);
   await loginAs(page, SEED.superAdmin);
   for (const b of businesses) {
     await page.goto(`/console/${b.slug}/live/app`);
@@ -30,15 +30,16 @@ test('Hired Hands and Real Estate show "pending requirements" and nothing else',
   await expect(page.getByRole('listitem').filter({ hasText: 'Pending requirements' })).toBeVisible();
 });
 
-test('the module registry and system health show nine registered modules', async ({ page }) => {
+test('the module registry and system health show every business as registered', async ({ page }) => {
+  const count = await businessCount();
   await loginAs(page, SEED.tech);
   await page.goto('/console/platform/modules');
-  await expect(page.getByText('9 modules registered')).toBeVisible();
+  await expect(page.getByText(`${count} modules registered`)).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
   await expect(page.getByRole('row').filter({ hasText: 'Not registered' })).toHaveCount(0);
   await page.goto('/console/platform/health');
   await expect(page.getByText('Everything checked is working.')).toBeVisible();
-  await expect(page.getByText('9 of 9')).toBeVisible();
+  await expect(page.getByText(`${count} of ${count}`)).toBeVisible();
 });
 
 test('switching a staff portal off hides the app; switching it on brings it back', async ({ page }) => {

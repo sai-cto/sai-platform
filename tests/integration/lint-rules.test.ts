@@ -62,7 +62,7 @@ describe('modules and the core keep their distance', () => {
     expect(await problems('src/modules/zz_probe/x.ts', `import { x } from '@/app/console/_lib/nav';\nexport { x };\n`)).not.toEqual([]);
   });
 
-  it.each([`import { x } from '@/modules/brss/manifest';`, `import { x } from '../modules/brss/manifest';`, `import { x } from '../modules/brss';`, `import { cookies } from 'next/headers';`, `import { x } from '@/app/console/_lib/nav';`])(
+  it.each([`import { x } from '@/modules/brss/manifest';`, `import { x } from '../modules/brss/manifest';`, `import { x } from '../modules/brss';`, `import { cookies } from 'next/headers';`, `import { x } from '@/app/console/_lib/nav';`, `import { x } from '@/server/session';`, `import { x } from '../../server/actions';`])(
     'the core rejects: %s',
     async (code) => {
       expect(await problems('src/core/zz_probe.ts', `${code}\nexport {};\n`)).not.toEqual([]);

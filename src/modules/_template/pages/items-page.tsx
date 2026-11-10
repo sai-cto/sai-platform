@@ -3,6 +3,7 @@
  * parameters and `basePath` (the prefix for links inside this portal). It calls the
  * module's services and renders with the shared components in @/ui.
  */
+import { loadModuleSettings } from '@/core/modules/config';
 import type { PortalPageProps } from '@/core/modules/contract';
 import { ActionForm } from '@/ui/action-form';
 import { formatMoney } from '@/ui/format';
@@ -11,12 +12,17 @@ import { createItemAction } from '../actions';
 import { P } from '../permissions';
 import { listItems } from '../services/items';
 
-export async function ItemsPage({ ctx, searchParams }: PortalPageProps) {
-  const { rows } = await listItems(ctx, { search: searchParams.q });
+export async function ItemsPage({ ctx }: PortalPageProps) {
+  const { rows } = await listItems(ctx);
+  // Settings are defined in the manifest and changed by the tech team in the Settings tab.
+  const settings = await loadModuleSettings<{ taxPercent: number }>(ctx);
   const canWrite = ctx.permissions.has(P.itemsWrite);
   return (
     <>
-      <PageHeader title="Items" description="Everything this business sells." />
+      <PageHeader
+        title="Items"
+        description={`Everything this business sells. Prices are before ${settings.taxPercent}% tax.`}
+      />
       <Card flush>
         {rows.length === 0 ? (
           <EmptyState title="No items yet" />

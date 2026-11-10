@@ -131,7 +131,7 @@ export type ModuleManifest = {
     field?: PortalDef;
   };
   widgets: WidgetDef[];
-  /** The module's main unit of work, counted on the executive dashboard ("Orders" for BRSS). */
+  /** The module's main unit of work, counted on the executive dashboard (for example "Orders"). */
   workItem?: {
     label: string;
     /** Entity key whose rows are counted, by created date. */

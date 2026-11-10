@@ -1,7 +1,7 @@
 /**
  * TEMPLATE — fake data. Used to fill the sandbox (test mode) and the local demo database.
  * Use seedRecords() and the fake-data helpers; never real names, emails or phone numbers.
- * Give every table at least one row, so the automatic tests have something to work on.
+ * Give every table at least TWO rows: the automatic tests archive one and compare it with another.
  */
 import type { Scope } from '@/core/db/scope';
 import { customerEntity } from '@/core/records/core-entities';
