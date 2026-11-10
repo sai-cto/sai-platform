@@ -8,8 +8,8 @@ import {
 } from '@/core/people/memberships';
 import type { BusinessRole } from '@/core/rbac/roles';
 import type { ActionResult } from '@/ui/action-form';
-import { act, text } from '../../../_lib/actions';
-import { requireBusinessContext } from '../../../_lib/session';
+import { act, text } from '@/server/actions';
+import { requireBusinessContext } from '@/server/session';
 
 export async function addMemberAction(
   slug: string,

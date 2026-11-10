@@ -5,7 +5,7 @@ import { authorize } from '@/core/rbac/permissions';
 import { listAccessibleBusinesses } from '@/core/tenancy/context';
 import { ActionForm } from '@/ui/action-form';
 import { Card, Field, PageHeader, inputClass } from '@/ui/layout';
-import { guarded, requirePlatformContext } from '../../../../_lib/session';
+import { guarded, requirePlatformContext } from '@/server/session';
 import { startImportAction } from '../actions';
 
 export const metadata: Metadata = { title: 'New import' };

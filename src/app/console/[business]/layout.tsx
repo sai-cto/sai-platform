@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { ROLE_LABELS } from '@/core/rbac/roles';
-import { requireBusinessContext } from '../../_lib/session';
+import { requireBusinessContext } from '@/server/session';
 import { BusinessHeader } from '../_components/business-header';
 import { businessTabs } from '../_lib/nav';
 

@@ -17,7 +17,7 @@ import { Badge } from '@/ui/badge';
 import { TrendChart } from '@/ui/charts';
 import { formatMoneyShort, formatNumber } from '@/ui/format';
 import { Card, Stat } from '@/ui/layout';
-import { parseMode, requireBusinessContext } from '../../../../_lib/session';
+import { parseMode, requireBusinessContext } from '@/server/session';
 import { ActivityTable } from '../../../_components/activity-table';
 
 export const metadata: Metadata = { title: 'Overview' };

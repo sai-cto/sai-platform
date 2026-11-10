@@ -39,6 +39,7 @@ src/modules/<key>/
   entities.ts       One EntityDef per table
   services/         Business logic: plain functions taking (ctx, input)
   pages/            Screens (React server components) for the portals
+  actions.ts        Server actions: what the screens' forms and buttons call
   seed.ts           Fake data
   README.md         What the module does, the rules it implements, open questions
 ```
@@ -65,7 +66,8 @@ review.
    query that includes `s.where(table)`); writes use `createRecord`, `updateRecord`,
    `archiveRecord`, `restoreRecord`. Never write another way.
 9. **Write pages** in `pages/` and list them in `portals.staff.routes`. Each route names the
-   permission needed to open it.
+   permission needed to open it. Forms and buttons call **server actions** in `actions.ts`
+   (see below).
 10. **Write `seed.ts`** with fake data for every table.
 11. **Fill in** `widgets`, `workItem`, `settings` as needed.
 12. **Regenerate the permissions doc:** `npm run docs:permissions`.
@@ -83,6 +85,29 @@ Scaffolded modules (`status: 'scaffold'`) call `scaffoldModule()` and show a "no
 page. To build one, do steps 3–15 above inside its existing folder, replacing the
 `scaffoldModule(...)` call with `defineModule({ ... })`. Keep the export name, so
 `registry.ts` does not change.
+
+## Server actions in a module
+
+A page shows data; a server action changes it. Put a module's actions in
+`src/modules/<key>/actions.ts`, starting with `'use server'`. Every action follows one shape:
+
+```ts
+export async function createItemAction(slug: string, mode: string, _previous: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  return act(async () => {
+    const ctx = await requireBusinessContext(slug, parseMode(mode));   // who is asking, for which business, live or test
+    await createItem(ctx, { name: text(formData, 'name') });           // the service checks permission and writes the log
+    return 'Added.';
+  });
+}
+```
+
+- `requireBusinessContext` and `parseMode` come from `@/server/session`; `act` and `text` from
+  `@/server/actions`.
+- The page binds the business and mode: `createItemAction.bind(null, ctx.business.slug, ctx.environment)`
+  and passes the result to `<ActionForm>` or `<ConfirmButton>` (from `@/ui`).
+- **Everything an action receives is untrusted**, including the slug and ids: anyone signed in
+  can call it with any values. Never skip `requireBusinessContext`, and let the service decide
+  what is allowed.
 
 ## Rules a module must follow
 

@@ -4,7 +4,7 @@ import { withScope } from '@/core/db/scope';
 import { entitiesFor } from '@/core/modules/registry';
 import { formatNumber } from '@/ui/format';
 import { Card, EmptyState, PageHeader, Table, Td, Th } from '@/ui/layout';
-import { guarded, parseMode, requireBusinessContext } from '../../../../_lib/session';
+import { guarded, parseMode, requireBusinessContext } from '@/server/session';
 
 export const metadata: Metadata = { title: 'Data' };
 

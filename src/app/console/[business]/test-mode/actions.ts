@@ -2,8 +2,8 @@
 
 import { resetSandbox } from '@/core/sandbox/sandbox';
 import type { ActionResult } from '@/ui/action-form';
-import { act } from '../../../_lib/actions';
-import { requireBusinessContext } from '../../../_lib/session';
+import { act } from '@/server/actions';
+import { requireBusinessContext } from '@/server/session';
 
 export async function resetSandboxAction(slug: string): Promise<ActionResult> {
   return act(async () => {

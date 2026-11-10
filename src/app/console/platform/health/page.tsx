@@ -2,7 +2,7 @@ import { CircleAlert, CircleCheck } from 'lucide-react';
 import type { Metadata } from 'next';
 import { runHealthChecks } from '@/core/health/health';
 import { Card, PageHeader } from '@/ui/layout';
-import { guarded, requirePlatformContext } from '../../../_lib/session';
+import { guarded, requirePlatformContext } from '@/server/session';
 
 export const metadata: Metadata = { title: 'System health' };
 

@@ -8,7 +8,7 @@ import { getRecord } from '@/core/records/records';
 import { Badge } from '@/ui/badge';
 import { formatDateTime, formatValue, humanize } from '@/ui/format';
 import { Card, PageHeader } from '@/ui/layout';
-import { guarded, parseMode, requireBusinessContext } from '../../../../../../_lib/session';
+import { guarded, parseMode, requireBusinessContext } from '@/server/session';
 import { ActivityTable } from '../../../../../_components/activity-table';
 
 export const metadata: Metadata = { title: 'Record' };

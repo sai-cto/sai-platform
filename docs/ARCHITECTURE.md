@@ -10,6 +10,8 @@ One Next.js application, one PostgreSQL database, one `package.json`.
 ```
 src/
   app/        Routes only. Each file reads the request, calls the core or a module, renders.
+  server/     Glue between a web request and the core: the signed-in user's context, the
+              wrapper every server action uses, the portal host. Routes AND modules use it.
   core/       The shared core. Modules import from it; it never imports a module.
   modules/    One folder per business + registry.ts (the list of modules).
   seed/       The 9 businesses and the fake test users, as data.
@@ -148,7 +150,7 @@ A module is a folder under `src/modules/<key>/` exporting one manifest
 There are three portal types — staff, customer, field — sharing one login and one data layer.
 The staff portal is embedded in the console. Customer and field portals have hosting routes
 (`/portal/[business]`, `/field/[business]`) that answer "not found" until a module defines that
-portal **and** its toggle is on. All three are rendered by one component (`src/app/_lib/portal-host.tsx`).
+portal **and** its toggle is on. All three are rendered by one component (`src/server/portal-host.tsx`).
 
 ## The console (`src/app/console`)
 
@@ -169,12 +171,12 @@ portal **and** its toggle is on. All three are rendered by one component (`src/a
 How a page is built:
 
 1. It gets its context: `requireBusinessContext(slug, mode)` or `requirePlatformContext()`
-   (`src/app/_lib/session.ts`). A business or mode the person cannot use becomes a 404.
+   (`src/server/session.ts`). A business or mode the person cannot use becomes a 404.
 2. It calls the core. `guarded()` turns the core's "not found" / "forbidden" into a 404 as well.
 3. It renders with the shared components in `src/ui/`.
 
 How a change is made: a server action in an `actions.ts` file next to the page. Every action is
-wrapped in `act()` (`src/app/_lib/actions.ts`), which returns `{ ok, message }` for the form and
+wrapped in `act()` (`src/server/actions.ts`), which returns `{ ok, message }` for the form and
 refreshes the console. Forms use `<ActionForm>`; buttons that need an "are you sure?" use
 `<ConfirmButton>`. An action receives ids and form values from the browser and must treat them
 as untrusted: it builds its own context and lets the core check everything.

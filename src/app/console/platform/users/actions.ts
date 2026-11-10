@@ -5,8 +5,8 @@ import { createUser, listUsers, setPlatformRole, setUserActive } from '@/core/pe
 import { NotFoundError, ValidationError } from '@/core/errors';
 import { PLATFORM_ROLES, type PlatformRole } from '@/core/rbac/roles';
 import type { ActionResult } from '@/ui/action-form';
-import { act, text } from '../../../_lib/actions';
-import { requireBusinessContext, requirePlatformContext } from '../../../_lib/session';
+import { act, text } from '@/server/actions';
+import { requireBusinessContext, requirePlatformContext } from '@/server/session';
 
 export async function createUserAction(
   _previous: ActionResult | null,

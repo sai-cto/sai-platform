@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { listBusinessActivity } from '@/core/audit/read';
 import { Card, PageHeader } from '@/ui/layout';
 import { Pagination } from '@/ui/pagination';
-import { guarded, parseMode, requireBusinessContext } from '../../../../_lib/session';
+import { guarded, parseMode, requireBusinessContext } from '@/server/session';
 import {
   ActivityFilters,
   activityHref,

@@ -5,7 +5,7 @@ import { ActionForm } from '@/ui/action-form';
 import { Badge } from '@/ui/badge';
 import { ConfirmButton } from '@/ui/confirm-button';
 import { Card, Field, PageHeader, inputClass } from '@/ui/layout';
-import { guarded, requireBusinessContext } from '../../../_lib/session';
+import { guarded, requireBusinessContext } from '@/server/session';
 import { saveSettingsAction, setPortalAction } from './actions';
 
 export const metadata: Metadata = { title: 'Settings' };

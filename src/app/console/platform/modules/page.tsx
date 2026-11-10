@@ -4,7 +4,7 @@ import { moduleRegistryReport } from '@/core/modules/report';
 import { Badge } from '@/ui/badge';
 import { Card, PageHeader, Table, Td, Th } from '@/ui/layout';
 import { Monogram } from '@/ui/monogram';
-import { guarded, requirePlatformContext } from '../../../_lib/session';
+import { guarded, requirePlatformContext } from '@/server/session';
 
 export const metadata: Metadata = { title: 'Module registry' };
 

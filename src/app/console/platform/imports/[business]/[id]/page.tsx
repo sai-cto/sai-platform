@@ -11,7 +11,7 @@ import {
   guarded,
   requireBusinessContext,
   requirePlatformContext,
-} from '../../../../../_lib/session';
+} from '@/server/session';
 import { checkImportAction, importToLiveAction, importToSandboxAction } from '../../actions';
 import { IMPORT_STATUS } from '../../page';
 

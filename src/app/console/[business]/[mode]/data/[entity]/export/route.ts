@@ -4,7 +4,7 @@ import { ForbiddenError, NotFoundError } from '@/core/errors';
 import { findEntity } from '@/core/modules/registry';
 import { exportRecords, safeCell } from '@/core/records/export';
 import { buildBusinessContext } from '@/core/tenancy/context';
-import { currentUserId } from '../../../../../../_lib/session';
+import { currentUserId } from '@/server/session';
 
 /** CSV download of an entity's records. Needs business.data.export; every export is logged. */
 export async function GET(

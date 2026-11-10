@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { requireBusinessContext } from '../../_lib/session';
+import { requireBusinessContext } from '@/server/session';
 import { businessTabs, tabHref } from '../_lib/nav';
 
 /** /console/<business> → the first tab this person can open, in live mode. */

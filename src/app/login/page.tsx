@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { OAUTH_PROVIDERS, isDevLoginEnabled, listDevLoginUsers } from '@/core/auth/login';
 import { ROLE_LABELS } from '@/core/rbac/roles';
-import { devLoginAction } from '../_lib/auth-actions';
-import { currentUserId } from '../_lib/session';
+import { devLoginAction } from '@/server/auth-actions';
+import { currentUserId } from '@/server/session';
 
 export const metadata: Metadata = { title: 'Sign in' };
 

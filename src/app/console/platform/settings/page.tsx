@@ -3,7 +3,7 @@ import { authorize } from '@/core/rbac/permissions';
 import { getRetentionDays } from '@/core/settings/platform';
 import { ActionForm } from '@/ui/action-form';
 import { Card, Field, PageHeader, inputClass } from '@/ui/layout';
-import { guarded, requirePlatformContext } from '../../../_lib/session';
+import { guarded, requirePlatformContext } from '@/server/session';
 import { saveRetentionAction } from './actions';
 
 export const metadata: Metadata = { title: 'Platform settings' };

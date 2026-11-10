@@ -4,12 +4,16 @@
  * module's services and renders with the shared components in @/ui.
  */
 import type { PortalPageProps } from '@/core/modules/contract';
+import { ActionForm } from '@/ui/action-form';
 import { formatMoney } from '@/ui/format';
-import { Card, EmptyState, PageHeader, Table, Td, Th } from '@/ui/layout';
+import { Card, EmptyState, Field, PageHeader, Table, Td, Th, inputClass } from '@/ui/layout';
+import { createItemAction } from '../actions';
+import { P } from '../permissions';
 import { listItems } from '../services/items';
 
 export async function ItemsPage({ ctx, searchParams }: PortalPageProps) {
   const { rows } = await listItems(ctx, { search: searchParams.q });
+  const canWrite = ctx.permissions.has(P.itemsWrite);
   return (
     <>
       <PageHeader title="Items" description="Everything this business sells." />
@@ -35,6 +39,31 @@ export async function ItemsPage({ ctx, searchParams }: PortalPageProps) {
           </Table>
         )}
       </Card>
+      {canWrite ? (
+        <Card title="Add an item" className="mt-5">
+          <ActionForm
+            action={createItemAction.bind(null, ctx.business.slug, ctx.environment)}
+            submitLabel="Add item"
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Name" htmlFor="name">
+                <input id="name" name="name" required className={inputClass} />
+              </Field>
+              <Field label="Price (dollars)" htmlFor="price">
+                <input
+                  id="price"
+                  name="price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  required
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+          </ActionForm>
+        </Card>
+      ) : null}
     </>
   );
 }

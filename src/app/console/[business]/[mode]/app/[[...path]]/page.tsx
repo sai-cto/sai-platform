@@ -3,8 +3,8 @@ import { notFound } from 'next/navigation';
 import { isPortalAvailable } from '@/core/modules/config';
 import { getModule } from '@/core/modules/registry';
 import { Card } from '@/ui/layout';
-import { PortalHost } from '../../../../../_lib/portal-host';
-import { parseMode, requireBusinessContext } from '../../../../../_lib/session';
+import { PortalHost } from '@/server/portal-host';
+import { parseMode, requireBusinessContext } from '@/server/session';
 
 export const metadata: Metadata = { title: 'App' };
 

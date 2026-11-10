@@ -5,7 +5,7 @@ import { Badge, type BadgeTone } from '@/ui/badge';
 import { buttonClass } from '@/ui/button';
 import { formatDateTime, formatNumber } from '@/ui/format';
 import { Card, EmptyState, PageHeader, Table, Td, Th } from '@/ui/layout';
-import { guarded, requirePlatformContext } from '../../../_lib/session';
+import { guarded, requirePlatformContext } from '@/server/session';
 
 export const metadata: Metadata = { title: 'Data imports' };
 

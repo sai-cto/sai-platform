@@ -8,7 +8,7 @@ import { buttonClass } from '@/ui/button';
 import { cn } from '@/ui/cn';
 import { formatRelative } from '@/ui/format';
 import { Card, Field, PageHeader, Table, Td, Th, inputClass } from '@/ui/layout';
-import { guarded, requirePlatformContext } from '../../../_lib/session';
+import { guarded, requirePlatformContext } from '@/server/session';
 import { createUserAction } from './actions';
 
 export const metadata: Metadata = { title: 'Users and roles' };
