@@ -297,5 +297,7 @@ describe('activity log date filters', () => {
     expect(range('2026-11-01', '2026-11-01')).toEqual(['2026-11-01T04:00:00.000Z', '2026-11-02T05:00:00.000Z']);
     // A date that does not exist is ignored, not moved to another day.
     expect(range('2026-02-30', '2026-02-30')).toEqual([undefined, undefined]);
+    // So is a mistyped year.
+    expect(range('0026-01-15', '9999-12-31')).toEqual([undefined, undefined]);
   });
 });

@@ -50,6 +50,9 @@ export function parseActivitySearch(
     // A date that does not exist (30 February) is ignored rather than quietly moved.
     if (Number.isNaN(calendar.getTime()) || calendar.toISOString().slice(0, 10) !== value)
       return undefined;
+    // A mistyped year (0026, 9999) is ignored too: it is outside what the log can hold.
+    const year = calendar.getUTCFullYear();
+    if (year < 2000 || year > 2100) return undefined;
     if (!endOfDay) return startOfDayIn(value, timeZone);
     // "To" includes the whole day: up to midnight at the start of the NEXT calendar day
     // (not "plus 24 hours", which is an hour out on the two days the clocks change).
