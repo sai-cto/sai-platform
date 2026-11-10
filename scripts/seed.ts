@@ -5,10 +5,11 @@ async function main() {
   loadEnv();
   const { seedAll } = await import('../src/seed/run');
   const { closeDb } = await import('../src/core/db/client');
+  const { SEED_BUSINESSES } = await import('../src/seed/businesses');
   await seedAll({ demoData: true });
   await closeDb();
   console.log(
-    '  Seeded 9 businesses, test users for every role, and fake demo data (live + sandbox).',
+    `  Seeded ${SEED_BUSINESSES.length} businesses, test users for every role, and fake demo data (live + sandbox).`,
   );
 }
 
