@@ -152,6 +152,18 @@ The staff portal is embedded in the console. Customer and field portals have hos
 (`/portal/[business]`, `/field/[business]`) that answer "not found" until a module defines that
 portal **and** its toggle is on. All three are rendered by one component (`src/server/portal-host.tsx`).
 
+The first real module is BRSS (`src/modules/brss/`): 14 tables, eight permissions, ten pages.
+Read its `README.md` and then `rules.ts` to see how a module is put together. The other eight
+are scaffolds: one `scaffoldModule()` call each.
+
+Two helpers exist for needs every real module meets sooner or later:
+
+- `takeLock(scope, name)` (`src/core/db/lock.ts`): "one at a time". Two requests that take the
+  same lock run one after the other. Used wherever two people pressing a button at the same
+  moment would both act on the old state (two payments for one order).
+- `nextRecordNumber(scope, entity, column, prefix)` (`src/core/records/numbering.ts`): running
+  numbers such as `O-000123`, counted separately per business and per live/test mode.
+
 ## The console (`src/app/console`)
 
 ```
@@ -177,8 +189,10 @@ How a page is built:
 
 How a change is made: a server action in an `actions.ts` file next to the page. Every action is
 wrapped in `act()` (`src/server/actions.ts`), which returns `{ ok, message }` for the form and
-refreshes the console. Forms use `<ActionForm>`; buttons that need an "are you sure?" use
-`<ConfirmButton>`. An action receives ids and form values from the browser and must treat them
+refreshes the console. Forms use `<ActionForm>` (it keeps what was typed if the server refuses
+the form, and clears it after a success); buttons that need an "are you sure?" use
+`<ConfirmButton>`. A module's actions get their context from `requireStaffPortalContext()`,
+which also checks that the staff portal is switched on. An action receives ids and form values from the browser and must treat them
 as untrusted: it builds its own context and lets the core check everything.
 
 Layouts are navigation, not security. The sidebar and tabs are built from the person's

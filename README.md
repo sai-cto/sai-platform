@@ -72,4 +72,5 @@ Dev login only exists when `AUTH_DEV_LOGIN=true` and the app is not running in p
 | [`docs/PERMISSIONS.md`](docs/PERMISSIONS.md) | You need to know who can do what |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | You wonder why something is the way it is |
 | [`docs/HANDOFF.md`](docs/HANDOFF.md) | You are taking over the project |
-| [`docs/brss-analysis/`](docs/brss-analysis/) | You are working on the BRSS module |
+| [`src/modules/brss/README.md`](src/modules/brss/README.md) | You are working on the BRSS module (the first real one) |
+| [`docs/brss-analysis/`](docs/brss-analysis/) | You want to know how the old BRSS Salesforce system behaves |

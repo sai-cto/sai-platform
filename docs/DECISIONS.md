@@ -24,6 +24,11 @@ safest reversible option. They are collected in the first table so they are easy
 | R-13 | Customer and field portals would use the console's login and roles (P2-9). | No such portal exists yet. | Decide with the identity provider |
 | R-8 | Next.js "Cache Components" is switched off; every page renders per request. | Every console page depends on who is signed in. Per-request rendering is the simplest model for students. Next.js says the feature becomes mandatory in the next major version: see HANDOFF. | `next.config.ts` |
 
+| R-15 | **BRSS: twelve business questions (B1–B12) and seven related choices (B13–B19)** were answered without a BRSS manager, each with the most conservative reasonable option. B11 differs from the default stated at Checkpoint 1. | The CTO asked for this. | Table "BRSS business questions" near the end of this file; each is a small change in `src/modules/brss/` |
+| R-16 | Switching a business's staff portal off stops its buttons and forms as well as hiding its screens (P3-8). | Found at the Phase 3 review gate. | `requireStaffPortalContext()` in `src/server/session.ts` |
+| R-17 | Every form in the console now keeps what was typed when the server refuses it (P4-6). | Found at the Phase 4 UI gate. | `src/ui/action-form.tsx` |
+| R-18 | Two small additions to the shared core for BRSS: `takeLock()` and `nextRecordNumber()` (P4-4). | A module cannot reach the database transaction itself, by design. | `src/core/db/lock.ts`, `src/core/records/numbering.ts` |
+
 ## Locked by the brief (not Claude's to change)
 
 - One platform, one module per business, one login.
@@ -161,8 +166,50 @@ or `tenant-isolation.test.ts`.
 | P3-9 | Tests that count businesses read the count from the seed list, not the number 9; the registry also checks that a module's table names start with its key; a test checks that every table outside the platform schema is a tenant table. | Found at the Phase 3 review gate by adding a made-up tenth module: the guide worked without core changes, but four tests failed on a hardcoded 9 or on the seed-row helper. |
 | P3-10 | The moving company's module description says only what the brief says ("Student moving company"). | The review found wording that could not be traced to the brief. |
 
-## BRSS business questions (B1–B12)
+## Phase 4 — BRSS proof module
+
+| # | Decision | Why |
+|---|---|---|
+| P4-1 | Every BRSS business rule is a plain function in `src/modules/brss/rules.ts`, named with the rule id from `docs/brss-analysis/`. Services load rows, call a rule, save. `RULES.md` in the module maps each rule to its Salesforce file and line. | One place to read, test and change a rule; the citation requirement of the brief is met by a table that is generated from the analysis files. |
+| P4-2 | BRSS has eight permissions of its own and reuses the shared ones for customers, payments, scheduling and notifications. Anything that changes an order needs `brss.orders.write`; warehouse work needs only `brss.articles.write`. | Two jobs at BRSS (processing orders, handling boxes) map to two permissions; a second set of BRSS-only copies of the shared permissions would have had to be granted in pairs. |
+| P4-3 | Automatic charges (storage, shipping, insurance) are stored on the order as soon as an article is taken in, and re-priced whenever something changes, until a payment covers them. A paid charge is never touched again. | Staff see what is owed before payment; history never changes under them. |
+| P4-4 | Two small additions to the shared core, used by BRSS and available to every module: `takeLock()` (`src/core/db/lock.ts`: "one at a time" for a named thing) and `nextRecordNumber()` (`src/core/records/numbering.ts`: running numbers like O-000123). | A module cannot reach the database transaction itself (by design), and both needs are general: two people paying one order at once; two records getting the same number. |
+| P4-5 | `seedRecords()` accepts an optional `createdAt`, so fake data can be back-dated. | Dashboards and date filters need demo data spread over time. |
+| P4-6 | `<ActionForm>` now keeps what the person typed when the server refuses the form, and clears it only after a success. | Found at the Phase 4 UI gate: React empties a form after every action, so a refused form lost everything typed into it. This affects every form in the console (for the better). |
+| P4-7 | The portal's section tabs highlight the home section on pages that belong to no other section (an order's page lights up "Orders"). | Found at the Phase 4 UI gate. |
+| P4-8 | An unavailability is stored as one or more plain time ranges in the core's `unavailability` table (all day = one range; some time windows = one range per day per run of neighbouring windows), plus optional building rows in a BRSS table. BRSS does its own building-aware check and tells the core's booking function not to repeat it. | Keeps the shared scheduling table free of BRSS ideas (buildings, fixed windows) while still using it. |
+| P4-9 | Truck crews are names, not user accounts. | See B11 below. |
+| P4-10 | All BRSS seed prices, zones and rates are invented. Region and building names are the public ones from the old system's picklists. | The real price data lives inside the Salesforce org, which this project never reads. |
+
+## BRSS business questions (B1–B12) — NEEDS JAI REVIEW
 
 The CTO asked Claude to choose the most conservative reasonable answer to each and flag it.
-They are recorded with the BRSS module in Phase 4; until then see section 8B of the Phase 0
-plan in git history (`git show 5e76467:docs/PLAN.md`).
+Every row below is **NEEDS JAI REVIEW**, ideally together with a BRSS manager. The same table,
+with the smaller choices that follow from it, is in `src/modules/brss/README.md`.
+
+| # | Question | What was built (most conservative reasonable answer) |
+|---|---|---|
+| B1 | No custom staff screen exists in Salesforce to model. | A new design from the data model, the rules and the list views staff use today. |
+| B2 | Location is stored three ways in the old system. Which is real? | On the article: warehouse, section, row, pallet. Warehouses seeded: Mecklenburg, Lansing, Overflow, SAI Basement. |
+| B3 | Should the article status order be enforced? | No. The screen suggests the next status; any change is allowed and logged, as today. |
+| B4 | Who sets Activated, Closed, Confirmed, Truck en route, Completed, and when? | All are manual actions by staff. Closing an order marks its articles Delivered (kept from the old system). |
+| B5 | What starts the storage clock: the first payment or the completed pickup? | The first payment. The pickup rule is not ported. |
+| B6 | "Storage Delivery By" a year late: a bug? | Treated as a bug; plain month addition. |
+| B7 | Billable weight divisor: 139 or 166? | 139 everywhere (what customers are charged on today); a module setting. |
+| B8 | Is there really no capacity limit per time window or truck? | No limit; managers block time with unavailability. |
+| B9 | Is West Campus meant to be Off-Campus? When is "Counter" used? | Each building has its own category as editable data (seeded as the old system behaves: only North Campus is On-Campus); "Counter" is a tick box on the order. |
+| B10 | Intake happens on the crew's phones today. Where should it live? | In the staff portal's order page, usable at 375px. No separate field portal. |
+| B11 | Are truck crew members individual users? | **Different from the default stated at Checkpoint 1** (which was "yes, users"): crews are recorded by name, as in Salesforce, where they are contacts and not logins. It is the smaller commitment and is easy to extend: a link to a user account can be added when crews sign in. |
+| B12 | Should the system calculate the fees that exist only as website text? | No. They are products on the price list that staff add to an order by hand. |
+
+Further BRSS choices that also need review (each explained in the module README):
+
+| # | Choice | NEEDS JAI REVIEW because |
+|---|---|---|
+| B13 | A discount above the cap is refused with a message, not silently reduced as in Salesforce. | Changes what staff see at payment time. |
+| B14 | Payment is refused while any charge "could not be priced", unless the person ticks a box to go ahead without it. | The old system charged nothing for such lines without saying so. |
+| B15 | A refund is recorded on the payment only; the order's charges stay marked paid. | What a refund should undo is undefined in the old system. |
+| B16 | Cancelling an order leaves appointments that were already completed as they were. | The old system set every appointment to Cancelled. |
+| B17 | A region with buildings needs a building; a region without needs a street address; the room number is optional. | The old form's rules here were broken (they tested a region name that does not exist). |
+| B18 | Zip ranges may not overlap. | The old system allowed overlaps and picked one arbitrarily. |
+| B19 | Not built: storage extension, the "Supplies Delivery" automatic line, pre-arrival handling, the Ithaca College date window, reminder emails. | Each is either a customer-website flow, depends on unanswered questions, or needs a scheduler. Listed in the module README under "Not ported". |
