@@ -27,7 +27,7 @@ test.describe('each role sees exactly its own navigation', () => {
     expect(await tabLabels(page)).toEqual(['Overview', 'Data', 'Activity log']);
     await expect(page.getByRole('group', { name: 'Data mode' })).toHaveCount(0);
     await page.goto('/console/brss/live/data/core.customer');
-    await expect(page.getByRole('link', { name: 'Avery' }).or(page.getByRole('table'))).toBeVisible();
+    await expect(page.getByRole('table')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Archive' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Export CSV' })).toHaveCount(0);
   });
@@ -187,10 +187,12 @@ test('a business admin manages their own staff', async ({ page }) => {
   await page.getByRole('alertdialog').getByRole('button', { name: 'Remove access' }).click();
   await expect(page.getByText('Removed (1)')).toBeVisible();
 
-  // The last admin cannot remove themselves.
-  await page.getByRole('listitem').filter({ hasText: 'tut.admin@sai.example' }).getByRole('button', { name: 'Remove' }).click();
+  // A business's only admin cannot remove themselves (Tutoring has two admins; the Mailroom has one).
+  await loginAs(page, 'brm.admin@sai.example');
+  await page.goto('/console/brm/people');
+  await page.getByRole('listitem').filter({ hasText: 'brm.admin@sai.example' }).getByRole('button', { name: 'Remove' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Remove access' }).click();
-  await expect(page.getByRole('alertdialog').getByRole('alert')).toContainText(/another admin|last admin/);
+  await expect(page.getByRole('alertdialog').getByRole('alert')).toContainText('last admin');
 });
 
 test('Platform section: users, roles, flags and settings follow the role rules', async ({ page }) => {

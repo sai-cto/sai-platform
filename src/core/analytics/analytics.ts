@@ -224,6 +224,8 @@ export function fillSeries(
     keys.add(bucketKey(cursor, bucket, timeZone));
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
+  // The range usually ends "now", part-way through a day: include that last bucket too.
+  keys.add(bucketKey(new Date(range.to.getTime() - 1), bucket, timeZone));
   return [...keys].sort().map((key) => ({ bucket: key, value: byBucket.get(key) ?? 0 }));
 }
 

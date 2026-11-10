@@ -409,7 +409,7 @@ describe('analytics', () => {
   it('fillSeries and bucketKey produce one point per bucket', () => {
     const range = { from: new Date('2026-03-01T12:00:00Z'), to: new Date('2026-03-08T12:00:00Z') };
     const filled = fillSeries([{ bucket: '2026-03-03', value: 5 }], range, 'day');
-    expect(filled).toHaveLength(7);
+    expect(filled).toHaveLength(8); // 1 March … 8 March: the range ends part-way through the 8th
     expect(filled.find((p) => p.bucket === '2026-03-03')?.value).toBe(5);
     expect(bucketKey(new Date('2026-03-04T12:00:00Z'), 'week')).toBe('2026-03-02');
     expect(bucketKey(new Date('2026-03-04T12:00:00Z'), 'month')).toBe('2026-03-01');
