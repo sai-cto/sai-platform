@@ -8,7 +8,7 @@ import { buttonClass } from '@/ui/button';
 import { cn } from '@/ui/cn';
 import { formatRelative } from '@/ui/format';
 import { Card, Field, PageHeader, Table, Td, Th, inputClass } from '@/ui/layout';
-import { guarded, requirePlatformContext } from '../../../_lib/session';
+import { guarded, one, requirePlatformContext } from '../../../_lib/session';
 import { createUserAction } from './actions';
 
 export const metadata: Metadata = { title: 'Users and roles' };
@@ -16,12 +16,12 @@ export const metadata: Metadata = { title: 'Users and roles' };
 export default async function UsersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const ctx = await requirePlatformContext();
-  const { q } = await searchParams;
+  const q = one((await searchParams).q);
   const all = await guarded(() => listUsers(ctx));
-  const term = q?.trim().toLowerCase() ?? '';
+  const term = q.trim().toLowerCase();
   const users = term ? all.filter((u) => `${u.name} ${u.email}`.toLowerCase().includes(term)) : all;
   const canManage = ctx.permissions.has('platform.users.manage');
 
@@ -39,7 +39,7 @@ export default async function UsersPage({
           <input
             id="q"
             name="q"
-            defaultValue={q ?? ''}
+            defaultValue={q}
             placeholder="Search by name or email"
             className={cn(inputClass, 'sm:w-72')}
           />

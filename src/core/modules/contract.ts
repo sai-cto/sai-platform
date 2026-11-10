@@ -5,7 +5,7 @@
  *
  * How to write one: docs/MODULE_GUIDE.md.
  */
-import type { ComponentType, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { z } from 'zod';
 import type { Scope } from '../db/scope';
 import type { TenantTable } from '../records/types';
@@ -82,7 +82,8 @@ export type RouteDef = {
   title: string;
   /** The permission needed to open this page. */
   permission: string;
-  component: ComponentType<PortalPageProps>;
+  /** A server component: a function (usually async) that takes PortalPageProps and returns the page. */
+  component: (props: PortalPageProps) => ReactNode | Promise<ReactNode>;
 };
 
 export type PortalDef = { nav: NavItem[]; routes: RouteDef[] };

@@ -6,7 +6,7 @@ import { cn } from '@/ui/cn';
 import { formatMoneyShort, formatNumber } from '@/ui/format';
 import { Card, PageHeader, Stat, Table, Td, Th } from '@/ui/layout';
 import { Monogram } from '@/ui/monogram';
-import { guarded, requirePlatformContext } from '../../_lib/session';
+import { guarded, one, requirePlatformContext } from '../../_lib/session';
 
 export const metadata: Metadata = { title: 'Executive view' };
 
@@ -15,10 +15,10 @@ const RANGE_LABEL: Record<number, string> = { 30: '30 days', 90: '90 days', 365:
 export default async function ExecutivePage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const ctx = await requirePlatformContext();
-  const requested = Number((await searchParams).days);
+  const requested = Number(one((await searchParams).days));
   const days = (EXECUTIVE_RANGES as readonly number[]).includes(requested) ? requested : 30;
   const data = await guarded(() => executiveDashboard(ctx, days));
   const period = `last ${RANGE_LABEL[days]}`;
@@ -28,7 +28,7 @@ export default async function ExecutivePage({
     <div className="mx-auto max-w-6xl px-4 py-6 lg:px-6">
       <PageHeader
         title="Executive view"
-        description="All nine businesses side by side. Live data only; read-only."
+        description={`All ${data.rows.length} businesses side by side. Live data only; read-only.`}
         actions={
           <div
             role="group"
@@ -105,7 +105,7 @@ export default async function ExecutivePage({
               <Th className="w-full">Business</Th>
               <Th className="text-right">Revenue</Th>
               <Th className="text-right">Payments</Th>
-              <Th className="text-right">Orders</Th>
+              <Th className="text-right">Work items</Th>
               <Th className="text-right">Activity</Th>
               <Th>Trend</Th>
             </tr>

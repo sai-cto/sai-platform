@@ -12,15 +12,48 @@ export type ActivitySearch = {
 };
 
 /** Turns the filter form's query-string values into filters for the core. */
-export function parseActivitySearch(search: ActivitySearch) {
+/** Midnight at the start of a calendar day in a time zone, as a moment in time. */
+export function startOfDayIn(day: string, timeZone: string): Date | undefined {
+  const utcMidnight = new Date(`${day}T00:00:00Z`);
+  if (Number.isNaN(utcMidnight.getTime())) return undefined;
+  // What the wall clock in that zone shows at UTC midnight tells us the zone's offset that day.
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).formatToParts(utcMidnight);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  const shown = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'));
+  return new Date(utcMidnight.getTime() - (shown - utcMidnight.getTime()));
+}
+
+export function parseActivitySearch(
+  raw: Record<string, string | string[] | undefined>,
+  timeZone = 'America/New_York',
+) {
+  const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
+  const search: ActivitySearch = {
+    q: first(raw.q),
+    action: first(raw.action),
+    from: first(raw.from),
+    to: first(raw.to),
+    business: first(raw.business),
+  };
+  // "From" and "To" are days in the business's time zone (Ithaca time by default).
   const day = (value: string | undefined, endOfDay: boolean) => {
     if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
-    const date = new Date(`${value}T00:00:00-05:00`);
-    if (endOfDay) date.setUTCDate(date.getUTCDate() + 1);
-    return Number.isNaN(date.getTime()) ? undefined : date;
+    const start = startOfDayIn(value, timeZone);
+    if (!start) return undefined;
+    return endOfDay ? new Date(start.getTime() + 24 * 60 * 60 * 1000) : start;
   };
-  const page = Math.max(1, Number.parseInt(search.page ?? '1', 10) || 1);
+  const parsedPage = Number.parseInt(first(raw.page) ?? '1', 10);
+  const page = Number.isInteger(parsedPage) && parsedPage >= 1 ? Math.min(parsedPage, 100_000) : 1;
   return {
+    search,
     page,
     filters: {
       search: search.q || undefined,

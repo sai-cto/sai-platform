@@ -11,8 +11,10 @@ import { matchRoute } from '@/core/modules/portal';
 import { moduleRegistryReport } from '@/core/modules/report';
 import { takePayment } from '@/core/payments/payments';
 import { customerEntity } from '@/core/records/core-entities';
-import { exportRecords, safeCell } from '@/core/records/export';
+import { exportCell, exportRecords, safeCell } from '@/core/records/export';
 import { sandboxSummary } from '@/core/sandbox/sandbox';
+import { addMember, listMembers, removeMember, setMemberPermissions } from '@/core/people/memberships';
+import { buildBusinessContext } from '@/core/tenancy/context';
 import { USERS, ctxFor, platformCtxFor } from './helpers';
 
 const csv = (text: string) => new TextEncoder().encode(text);
@@ -83,16 +85,52 @@ describe('imports: CSV → map → check → sandbox → live', () => {
     expect((await listImportJobs(platform)).filter((j) => j.filename === 'good.csv' && j.businessSlug === 'cp').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('an import is all-or-nothing', async () => {
+  it('an import is all-or-nothing: if any row fails while writing, no row is kept', async () => {
     const t = tag();
     const sandbox = await ctxFor(USERS.tech, 'cp', 'sandbox');
-    const job = await createImportJob(sandbox, { entityKey: 'core.customer', filename: 'x.csv', bytes: csv(`First,Last\n${t},A\n${t},B\n`) });
+    const job = await createImportJob(sandbox, { entityKey: 'core.customer', filename: 'x.csv', bytes: csv(`First,Last\n${t},A\n${t},B\n${t},C\n`) });
     await dryRunImport(sandbox, job.id, { firstName: 'First', lastName: 'Last' });
-    // Changing the mapping after the check invalidates it.
-    const before = (await listCustomers(sandbox, { search: t })).total;
-    expect(before).toBe(0);
-    await runSandboxImport(sandbox, job.id);
+    // Make the third row blow up when it is written (after two rows have already been inserted).
+    const original = customerEntity.import!.toValues;
+    let calls = 0;
+    customerEntity.import!.toValues = (row) => {
+      const values = original(row);
+      calls += 1;
+      // mapRows runs once for the check inside runSandboxImport; poison the third row's value.
+      return row.lastName === 'C' ? { ...values, notes: 'cannot be stored \u0000' } : values;
+    };
+    try {
+      await expect(runSandboxImport(sandbox, job.id)).rejects.toThrow();
+    } finally {
+      customerEntity.import!.toValues = original;
+    }
+    expect(calls).toBeGreaterThanOrEqual(3);
+    expect((await listCustomers(sandbox, { search: t })).total).toBe(0);
+    expect((await getImportJob(sandbox, job.id)).job.status).toBe('dry_run_ok');
+  });
+
+  it('three people clicking "import" at the same moment import the file once, in the sandbox and in live', async () => {
+    const t = tag();
+    const sandbox = await ctxFor(USERS.tech, 'cp', 'sandbox');
+    const live = await ctxFor(USERS.tech, 'cp', 'live');
+    const platform = await platformCtxFor(USERS.tech);
+    const job = await createImportJob(sandbox, { entityKey: 'core.customer', filename: 'race.csv', bytes: csv(`First,Last\n${t},One\n${t},Two\n`) });
+    await dryRunImport(sandbox, job.id, { firstName: 'First', lastName: 'Last' });
+
+    const sandboxRuns = await Promise.allSettled([1, 2, 3].map(() => runSandboxImport(sandbox, job.id)));
+    expect(sandboxRuns.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     expect((await listCustomers(sandbox, { search: t })).total).toBe(2);
+
+    const liveRuns = await Promise.allSettled([1, 2, 3].map(() => runLiveImport(platform, live, job.id)));
+    expect(liveRuns.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(liveRuns.filter((r) => r.status === 'rejected').every((r) => (r as PromiseRejectedResult).reason instanceof ValidationError)).toBe(true);
+    expect((await listCustomers(live, { search: t })).total).toBe(2);
+  });
+
+  it('files that cannot be read cleanly are refused with a plain message', () => {
+    expect(() => parseCsv(csv('First,Last\nA\u0000,B\n'))).toThrow(/cannot be read/);
+    expect(() => parseCsv(new Uint8Array([70, 105, 114, 115, 116, 10, 0xff, 0xfe, 10]))).toThrow(/cannot be read/);
+    expect(() => parseCsv(csv('First,Last\n"unclosed,B\n'))).toThrow(/well-formed/);
   });
 
   it('another business cannot see the job', async () => {
@@ -116,6 +154,10 @@ describe('CSV export', () => {
     await expect(exportRecords(await ctxFor(USERS.executive, 'brss'), customerEntity, {})).rejects.toBeInstanceOf(ForbiddenError);
     await expect(exportRecords(await ctxFor(USERS.brssStaff, 'brss'), customerEntity, {})).rejects.toBeInstanceOf(ForbiddenError);
     expect(safeCell('=SUM(A1)')).toBe("'=SUM(A1)");
+    expect(safeCell(-25)).toBe('-25'); // a negative number is not a formula
+    expect(safeCell('-2+3')).toBe("'-2+3");
+    expect(exportCell(12345, 'money')).toBe('123.45');
+    expect(exportCell(true, 'boolean')).toBe('Yes');
     expect(safeCell('+1 607')).toBe("'+1 607");
     expect(safeCell('plain')).toBe('plain');
     expect(safeCell(null)).toBe('');
@@ -174,5 +216,35 @@ describe('registry report, health and small helpers', () => {
     expect(matchRoute(portal, ['orders', '42'])).toMatchObject({ route: { title: 'Order' }, params: { id: '42' } });
     expect(matchRoute(portal, ['orders'])).toBeNull();
     expect(matchRoute(portal, ['nope', 'x', 'y'])).toBeNull();
+  });
+});
+
+describe('the activity log, for staff who were granted it', () => {
+  it('shows only entries about records they may read; admins and executives see everything', async () => {
+    const admin = await ctxFor(USERS.brssAdmin, 'brss');
+    const marker = `Vis${Date.now()}`;
+    // A customer entry, a payment entry and a people entry, all carrying the marker.
+    const membershipId = await addMember(admin, { name: `${marker} Staffer`, email: `${marker.toLowerCase()}@sai.example`, role: 'business_staff' });
+    const { createCustomer } = await import('@/core/customers/customers');
+    await createCustomer(admin, { firstName: marker, lastName: 'Customer' });
+    await withScope(admin, 'payments.write', (s) => takePayment(s, { amountCents: 4321, description: `${marker} payment`, idempotencyKey: `vis-${Date.now()}` }));
+
+    await setMemberPermissions(admin, membershipId, ['business.activity.read', 'customers.read']);
+    const member = (await listMembers(admin)).find((m) => m.membershipId === membershipId)!;
+    const staff = await buildBusinessContext(member.userId, 'brss', 'live');
+
+    const typesSeenBy = async (ctx: typeof staff) => new Set((await listBusinessActivity(ctx, { search: marker, limit: 100 })).rows.map((r) => r.entityType));
+    expect([...(await typesSeenBy(staff))]).toEqual(['core.customer']);
+    // Asking for payment entries by name does not get round it.
+    expect((await listBusinessActivity(staff, { entityType: 'core.payment' })).total).toBe(0);
+    expect((await listBusinessActivity(staff, { entityType: 'membership' })).total).toBe(0);
+
+    // Admins and executives see every kind of entry.
+    for (const ctx of [admin, await ctxFor(USERS.executive, 'brss')]) {
+      for (const type of ['core.customer', 'core.payment', 'membership']) {
+        expect((await listBusinessActivity(ctx, { entityType: type })).total, `${ctx.role}:${type}`).toBeGreaterThan(0);
+      }
+    }
+    await removeMember(admin, membershipId);
   });
 });

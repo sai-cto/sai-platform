@@ -94,8 +94,8 @@ export async function setPortalEnabled(
 ): Promise<void> {
   authorize(ctx, 'business.settings.write');
   const row = await loadRow(ctx.business.id);
+  if (!Object.hasOwn(PORTAL_COLUMN, portal)) throw new ValidationError('Unknown portal.');
   const column = PORTAL_COLUMN[portal];
-  if (!column) throw new ValidationError('Unknown portal.');
   if (enabled && !getModule(row.moduleKey)?.portals[portal]) {
     throw new ValidationError(
       `This module does not have a ${portal} portal yet, so it cannot be switched on.`,

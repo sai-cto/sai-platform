@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "import_jobs_live_once" ON "import_jobs" USING btree ("business_id","fingerprint") WHERE "import_jobs"."environment" = 'live' and "import_jobs"."status" = 'imported' and "import_jobs"."fingerprint" <> '';

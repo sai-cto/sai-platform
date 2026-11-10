@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { getImportJob } from '@/core/imports/imports';
+import { getImportJob, liveImportOf } from '@/core/imports/imports';
 import { ActionForm } from '@/ui/action-form';
 import { Badge } from '@/ui/badge';
 import { buttonClass } from '@/ui/button';
 import { ConfirmButton } from '@/ui/confirm-button';
-import { formatNumber, formatValue } from '@/ui/format';
+import { formatDateTime, formatNumber, formatValue } from '@/ui/format';
 import { Card, Field, PageHeader, Table, Td, Th, inputClass } from '@/ui/layout';
 import {
   guarded,
@@ -13,7 +13,7 @@ import {
   requirePlatformContext,
 } from '../../../../../_lib/session';
 import { checkImportAction, importToLiveAction, importToSandboxAction } from '../../actions';
-import { IMPORT_STATUS } from '../../page';
+import { IMPORT_STATUS } from '../../_lib/status';
 
 export const metadata: Metadata = { title: 'Import' };
 
@@ -29,6 +29,7 @@ export default async function ImportJobPage({
   const fields = entity.import?.fields ?? [];
   const [statusLabel, statusTone] = IMPORT_STATUS[job.status] ?? [job.status, 'neutral'];
   const imported = job.status === 'imported';
+  const live = imported ? await liveImportOf(ctx, job.fingerprint) : null;
   const canRun = platform.permissions.has('platform.imports.run');
   const canRunLive = platform.permissions.has('platform.imports.run_live');
   const slug = ctx.business.slug;
@@ -194,11 +195,17 @@ export default async function ImportJobPage({
         >
           <div className="flex flex-wrap items-center gap-3 text-sm text-zinc-600">
             <span>
-              {imported
-                ? 'Check the sandbox result first. This writes real records.'
-                : 'Available after step 4.'}
+              {live
+                ? `Done: ${formatNumber(live.importedCount)} ${entity.labelPlural.toLowerCase()} were imported into live on ${formatDateTime(live.createdAt)}. A file goes into live once.`
+                : imported
+                  ? 'Check the sandbox result first. This writes real records.'
+                  : 'Available after step 4.'}
             </span>
-            {canRunLive ? (
+            {live ? (
+              <Link href={`/console/${slug}/live/data/${entity.key}`} className={buttonClass()}>
+                Look at them in live
+              </Link>
+            ) : canRunLive ? (
               <ConfirmButton
                 action={importToLiveAction.bind(null, slug, job.id)}
                 size="md"

@@ -61,7 +61,7 @@ in any other business they hold nothing and the business does not appear to exis
 | Browse records in the Data tab | `business.data.read` | read | ✅ | ✅ | ✅ | ✅ | 🔑 |
 | Export records to CSV | `business.data.export` | read | ✅ | ✅ | — | ✅ | 🔑 |
 | Permanently delete archived records past retention | `business.data.purge` | write | ✅ | — | — | — | — |
-| See the business's activity log | `business.activity.read` | read | ✅ | ✅ | ✅ | ✅ | 🔑 |
+| See the business's activity log (staff: only entries about records they may read) | `business.activity.read` | read | ✅ | ✅ | ✅ | ✅ | 🔑 |
 | See module settings | `business.settings.read` | read | ✅ | ✅ | — | ✅ | — |
 | Change module settings and portal toggles | `business.settings.write` | write | ✅ | ✅ | — | — | — |
 | Use test mode (sandbox data) | `business.sandbox.use` | read | ✅ | ✅ | — | ✅ | 🔑 |

@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { ValidationError } from '@/core/errors';
+import { MAX_FILE_BYTES } from '@/core/files/files';
 import {
   createImportJob,
   dryRunImport,
@@ -25,6 +26,8 @@ export async function startImportAction(
     const file = formData.get('file');
     if (!slug || !entityKey) throw new ValidationError('Choose what to import.');
     if (!(file instanceof File) || file.size === 0) throw new ValidationError('Choose a CSV file.');
+    if (file.size > MAX_FILE_BYTES)
+      throw new ValidationError('That file is larger than 10 MB. Split it into smaller files.');
     const ctx = await requireBusinessContext(slug, 'sandbox');
     const job = await createImportJob(ctx, {
       entityKey,

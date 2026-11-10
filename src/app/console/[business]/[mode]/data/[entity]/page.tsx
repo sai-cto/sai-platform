@@ -12,29 +12,36 @@ import { ConfirmButton } from '@/ui/confirm-button';
 import { formatDate, formatValue } from '@/ui/format';
 import { Card, EmptyState, PageHeader, Table, Td, Th, inputClass } from '@/ui/layout';
 import { Pagination } from '@/ui/pagination';
-import { guarded, parseMode, requireBusinessContext } from '../../../../../_lib/session';
+import {
+  guarded,
+  one,
+  pageNumber,
+  parseMode,
+  requireBusinessContext,
+} from '../../../../../_lib/session';
 import { archiveRecordAction, purgeRecordAction, restoreRecordAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Data' };
 
 const PAGE_SIZE = 50;
-type Search = { q?: string; show?: string; page?: string };
+type Search = { q?: string; show?: string };
 
 export default async function EntityPage({
   params,
   searchParams,
 }: {
   params: Promise<{ business: string; mode: string; entity: string }>;
-  searchParams: Promise<Search>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { business, mode, entity: entityKey } = await params;
-  const search = await searchParams;
+  const raw = await searchParams;
+  const search: Search = { q: one(raw.q) || undefined, show: one(raw.show) || undefined };
   const ctx = await requireBusinessContext(business, parseMode(mode));
   const entity = findEntity(ctx.business.moduleKey, entityKey);
   if (!entity) notFound();
 
   const show = search.show === 'archived' ? 'only' : search.show === 'all' ? 'include' : 'exclude';
-  const page = Math.max(1, Number.parseInt(search.page ?? '1', 10) || 1);
+  const page = pageNumber(raw.page);
   const { rows, total } = await guarded(() =>
     withScope(ctx, 'business.data.read', (s) =>
       listRecords(s, entity, {
