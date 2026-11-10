@@ -62,7 +62,7 @@ Listed in `docs/DECISIONS.md`, first table (R-1 … R-8).
 
 ## How to resume (for a fresh session)
 
-1. Read this file, then `docs/ARCHITECTURE.md` and `docs/DECISIONS.md`.
+1. Read this file, then `docs/BRIEF.md`, `docs/ARCHITECTURE.md` and `docs/DECISIONS.md`.
 2. `git fetch origin && git checkout <current phase branch>` (see "Current phase and task").
 3. `npm install && npm run setup` (starts Postgres in Docker; in a cloud container start `dockerd` first).
 4. `npm run check` and `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium npm run test:e2e` must be green before changing anything.
