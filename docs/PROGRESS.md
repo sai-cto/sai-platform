@@ -58,7 +58,7 @@ Nothing.
 
 ## Decisions awaiting the CTO's review
 
-Listed in `docs/DECISIONS.md`, first table (R-1 … R-8).
+Listed in `docs/DECISIONS.md`, first table ("Awaiting the CTO's review").
 
 ## How to resume (for a fresh session)
 

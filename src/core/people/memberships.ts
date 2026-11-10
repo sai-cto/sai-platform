@@ -18,7 +18,7 @@ import { getModule } from '../modules/registry';
 import { authorize, grantableActions } from '../rbac/permissions';
 import { BUSINESS_ROLES, type BusinessRole } from '../rbac/roles';
 import type { BusinessContext } from '../tenancy/context';
-import { lockAndCountAdmins } from './admins';
+import { lockAndCountAdmins, lockBusinessPeople, lockUserAccess } from './admins';
 import { findOrCreateUser, newUserSchema } from './users';
 import { isUuid } from '../ids';
 
@@ -119,7 +119,12 @@ export async function addMember(ctx: BusinessContext, raw: unknown): Promise<str
   if (!parsed.success) throw new ValidationError(parsed.error.issues[0].message);
   const input = parsed.data;
   return getDb().transaction(async (tx) => {
-    const { user, created } = await findOrCreateUser(tx, input);
+    const found = await findOrCreateUser(tx, input);
+    // Lock, then re-read: a platform role granted at this very moment must not slip past.
+    await lockUserAccess(tx, found.user.id);
+    await lockBusinessPeople(tx, ctx.business.id);
+    const [user] = await tx.select().from(users).where(eq(users.id, found.user.id)).limit(1);
+    const created = found.created;
     if (user.platformRole)
       throw new ValidationError(
         'This person has a platform role and already has access to every business.',
@@ -178,11 +183,14 @@ export async function changeMemberRole(
   authorize(ctx, 'business.people.manage');
   if (!BUSINESS_ROLES.includes(role)) throw new ValidationError('Unknown role.');
   await getDb().transaction(async (tx) => {
+    await lockBusinessPeople(tx, ctx.business.id);
     const { membership, user } = await loadMembership(tx, ctx, membershipId);
     if (membership.role === role) return;
+    // Only a USABLE admin (active membership, active account) counts towards the minimum.
     if (
       membership.role === 'business_admin' &&
       membership.isActive &&
+      user.isActive &&
       (await lockAndCountAdmins(tx, ctx.business.id)) <= 1
     ) {
       throw new ValidationError(
@@ -211,10 +219,12 @@ export async function changeMemberRole(
 export async function removeMember(ctx: BusinessContext, membershipId: string): Promise<void> {
   authorize(ctx, 'business.people.manage');
   await getDb().transaction(async (tx) => {
+    await lockBusinessPeople(tx, ctx.business.id);
     const { membership, user } = await loadMembership(tx, ctx, membershipId);
     if (!membership.isActive) return;
     if (
       membership.role === 'business_admin' &&
+      user.isActive &&
       (await lockAndCountAdmins(tx, ctx.business.id)) <= 1
     ) {
       throw new ValidationError('This is the last admin of this business and cannot be removed.');
@@ -251,6 +261,7 @@ export async function setMemberPermissions(
       `These permissions cannot be granted to staff: ${invalid.join(', ')}`,
     );
   await getDb().transaction(async (tx) => {
+    await lockBusinessPeople(tx, ctx.business.id);
     const { membership, user } = await loadMembership(tx, ctx, membershipId);
     if (membership.role !== 'business_staff')
       throw new ValidationError('Admins already hold every permission of their business.');

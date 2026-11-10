@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { revenueSummary, lastDays } from '@/core/analytics/analytics';
+import { activityCount, createdCount, lastDays, revenueSeries, revenueSummary } from '@/core/analytics/analytics';
 import { loginWithDev, loginWithIdentity } from '@/core/auth/login';
 import { googleIdentityFromClaims, googleProvider } from '@/core/auth/providers/google';
 import { microsoftIdentityFromClaims, microsoftProvider } from '@/core/auth/providers/microsoft';
@@ -13,7 +13,9 @@ import { findSessionUserId } from '@/core/auth/session';
 import { withScope } from '@/core/db/scope';
 import { ForbiddenError, NotFoundError, ValidationError } from '@/core/errors';
 import { readFile, saveFile } from '@/core/files/files';
-import { fileStorage } from '@/core/files/storage';
+import { fileStorage, ownsStorageKey } from '@/core/files/storage';
+import { isFlagEnabled, setFlag } from '@/core/flags/flags';
+import { listBusinessActivity } from '@/core/audit/read';
 import { validateRegistry } from '@/core/modules/registry';
 import { consoleEmailChannel, sendNotification, setEmailChannel } from '@/core/notifications/notifications';
 import { mockProvider } from '@/core/payments/mock-provider';
@@ -21,10 +23,10 @@ import { refundPayment, refundedCents, takePayment } from '@/core/payments/payme
 import { addMember, listMembers, removeMember, setMemberPermissions } from '@/core/people/memberships';
 import { createUser, setPlatformRole, setUserActive } from '@/core/people/users';
 import { customerEntity, fileEntity, paymentEntity, refundEntity, resourceEntity, unavailabilityEntity } from '@/core/records/core-entities';
-import { archiveRecord, createRecord, getRecord, listRecords, purgeRecord } from '@/core/records/records';
+import { archiveRecord, createRecord, getRecord, listRecords, purgeRecord, restoreRecord, updateRecord } from '@/core/records/records';
 import { resetSandbox } from '@/core/sandbox/sandbox';
 import { seedRecords } from '@/core/sandbox/seeding';
-import { bookAppointment, findBlocks, listAppointments, rescheduleAppointment } from '@/core/scheduling/scheduling';
+import { bookAppointment, findBlocks, findConflicts, listAppointments, rescheduleAppointment } from '@/core/scheduling/scheduling';
 import { buildBusinessContext } from '@/core/tenancy/context';
 import { renderPermissionsDoc } from '../../scripts/lib/permissions-doc';
 import { USERS, ageArchive, arrange, ctxFor, logFor, platformCtxFor, userId } from './helpers';
@@ -95,6 +97,10 @@ describe('read helpers check their own permission', () => {
       await expect(listAppointments(s, { from: at(-30, 0), to: at(30, 0) })).rejects.toBeInstanceOf(ForbiddenError);
       await expect(findBlocks(s, range)).rejects.toBeInstanceOf(ForbiddenError);
       await expect(revenueSummary(s, lastDays(30))).rejects.toBeInstanceOf(ForbiddenError);
+      await expect(revenueSeries(s, lastDays(30), 'day')).rejects.toBeInstanceOf(ForbiddenError);
+      await expect(createdCount(s, customerEntity, lastDays(30))).rejects.toBeInstanceOf(ForbiddenError);
+      await expect(activityCount(s, lastDays(30))).rejects.toBeInstanceOf(ForbiddenError);
+      await expect(findConflicts(s, { ...range, resourceId: '00000000-0000-4000-8000-000000000000' })).rejects.toBeInstanceOf(ForbiddenError);
       await expect(refundedCents(s, '00000000-0000-4000-8000-000000000000')).rejects.toBeInstanceOf(ForbiddenError);
     });
   });
@@ -342,5 +348,142 @@ describe('the registry and the generated docs', () => {
     const cited = [...renderPermissionsDoc().matchAll(/`(tests\/[^`]+)`/g)].map((m) => m[1]);
     expect(cited.length).toBeGreaterThan(5);
     for (const file of new Set(cited)) expect(fs.existsSync(path.resolve(__dirname, '../..', file)), file).toBe(true);
+  });
+});
+
+describe('second review: effects outside the database follow the transaction', () => {
+  it('a card is NOT charged when the payment points at a customer of another business', async () => {
+    const theirs = await arrange('brss', 'live', async (s) => (await createRecord(s, customerEntity, { firstName: 'Their', lastName: 'Customer' })).id);
+    const mine = await ctxFor(USERS.hhmcAdmin, 'hhmc');
+    const charge = vi.spyOn(mockProvider, 'charge');
+    try {
+      await expect(withScope(mine, 'payments.write', (s) => takePayment(s, { amountCents: 4200, description: 'wrong customer', idempotencyKey: key(), customerId: theirs }))).rejects.toThrow(/linked record does not exist/);
+      expect(charge).not.toHaveBeenCalled();
+    } finally {
+      charge.mockRestore();
+    }
+  });
+
+  it('archiving a refund does not make the money refundable again', async () => {
+    const ctx = await ctxFor(USERS.brssAdmin, 'brss');
+    await withScope(ctx, 'payments.write', async (s) => {
+      const payment = await takePayment(s, { amountCents: 1000, description: 'refund once', idempotencyKey: key() });
+      const refund = await refundPayment(s, { paymentId: payment.id, amountCents: 1000, reason: 'full' });
+      await archiveRecord(s, refundEntity, refund.id);
+      expect(await refundedCents(s, payment.id)).toBe(1000);
+      await expect(refundPayment(s, { paymentId: payment.id, amountCents: 1000, reason: 'again' })).rejects.toBeInstanceOf(ValidationError);
+    });
+  });
+
+  it('if a purge is rolled back, the file keeps its bytes; they go only when the purge commits', async () => {
+    const superAdmin = await ctxFor(USERS.superAdmin, 'corn');
+    const bytes = new TextEncoder().encode('keep me until commit');
+    const onDisk = (storageKey: string) => fs.existsSync(path.resolve(process.env.FILE_STORAGE_DIR as string, storageKey));
+    const file = await withScope(superAdmin, 'files.write', (s) => saveFile(s, { filename: 'rollback.txt', contentType: 'text/plain', bytes }));
+    await withScope(superAdmin, 'files.write', (s) => archiveRecord(s, fileEntity, file.id));
+    await ageArchive('files', file.id, 40);
+    await expect(
+      withScope(superAdmin, 'files.write', async (s) => {
+        await purgeRecord(s, fileEntity, file.id);
+        throw new Error('something later in the same request failed');
+      }),
+    ).rejects.toThrow('something later');
+    expect(onDisk(file.storageKey)).toBe(true);
+    await withScope(superAdmin, 'files.write', (s) => restoreRecord(s, fileEntity, file.id));
+    const read = await withScope(superAdmin, 'files.read', (s) => readFile(s, file.id));
+    expect(new TextDecoder().decode(read.bytes)).toBe('keep me until commit');
+    expect((await logFor('core.file', file.id)).some((l) => l.action === 'purge')).toBe(false);
+  });
+
+  it('if saving a file is rolled back, its bytes are removed too', async () => {
+    const ctx = await ctxFor(USERS.brssAdmin, 'brss');
+    let storageKey = '';
+    await expect(
+      withScope(ctx, 'files.write', async (s) => {
+        storageKey = (await saveFile(s, { filename: 'orphan.txt', contentType: 'text/plain', bytes: new Uint8Array([1, 2, 3]) })).storageKey;
+        throw new Error('rolled back');
+      }),
+    ).rejects.toThrow('rolled back');
+    expect(storageKey).not.toBe('');
+    expect(fs.existsSync(path.resolve(process.env.FILE_STORAGE_DIR as string, storageKey))).toBe(false);
+  });
+
+  it('a file row cannot be used to read or delete another business’s bytes', async () => {
+    const brss = await ctxFor(USERS.brssAdmin, 'brss');
+    const theirs = await withScope(brss, 'files.write', (s) => saveFile(s, { filename: 'brss-only.txt', contentType: 'text/plain', bytes: new TextEncoder().encode('brss only') }));
+    const hhmc = await ctxFor(USERS.superAdmin, 'hhmc');
+    expect(ownsStorageKey(hhmc.business.id, 'live', theirs.storageKey)).toBe(false);
+    expect(ownsStorageKey(brss.business.id, 'sandbox', theirs.storageKey)).toBe(false);
+    expect(ownsStorageKey(brss.business.id, 'live', `${brss.business.id}/live/../../x`)).toBe(false);
+    // Forge rows in HHMC whose keys point at the BRSS file.
+    const forged = await withScope(hhmc, 'files.write', async (s) => [
+      await createRecord(s, fileEntity, { storageKey: theirs.storageKey, filename: 'forged.txt', contentType: 'text/plain', sizeBytes: 9 }),
+      await createRecord(s, fileEntity, { storageKey: `${hhmc.business.id}/live/../../${theirs.storageKey}`, filename: 'forged2.txt', contentType: 'text/plain', sizeBytes: 9 }),
+    ]);
+    for (const row of forged) {
+      await expect(withScope(hhmc, 'files.read', (s) => readFile(s, row.id))).rejects.toBeInstanceOf(NotFoundError);
+      await withScope(hhmc, 'files.write', (s) => archiveRecord(s, fileEntity, row.id));
+      await ageArchive('files', row.id, 40);
+      await withScope(hhmc, 'files.write', (s) => purgeRecord(s, fileEntity, row.id));
+    }
+    // The BRSS file is untouched.
+    const still = await withScope(brss, 'files.read', (s) => readFile(s, theirs.id));
+    expect(new TextDecoder().decode(still.bytes)).toBe('brss only');
+  });
+
+  it('after a refused link, the same transaction can carry on', async () => {
+    const ctx = await ctxFor(USERS.brssAdmin, 'brss');
+    const saved = await withScope(ctx, 'payments.write', async (s) => {
+      await expect(createRecord(s, paymentEntity, { amountCents: 1, status: 'succeeded', provider: 'manual', customerId: '00000000-0000-4000-8000-000000000009' })).rejects.toThrow(/linked record/);
+      const ok = await createRecord(s, customerEntity, { firstName: 'Still', lastName: 'Working' });
+      return updateRecord(s, customerEntity, ok.id, { notes: 'after the error' });
+    });
+    expect(saved.notes).toBe('after the error');
+  });
+});
+
+describe('second review: smaller rules', () => {
+  it('staff granted only "change appointments" can book without the read grant', async () => {
+    const admin = await ctxFor(USERS.brssAdmin, 'brss');
+    const membershipId = await addMember(admin, { name: 'Write Only', email: `write.only.${unique()}@sai.example`, role: 'business_staff' });
+    await setMemberPermissions(admin, membershipId, ['scheduling.write']);
+    const member = (await listMembers(admin)).find((m) => m.membershipId === membershipId)!;
+    const ctx = await buildBusinessContext(member.userId, 'brss', 'live');
+    const booked = await withScope(ctx, 'scheduling.write', (s) => bookAppointment(s, { kind: 'visit', startsAt: at(450, 14), endsAt: at(450, 16) }));
+    expect(booked.status).toBe('unconfirmed');
+    await expect(withScope(ctx, 'scheduling.write', (s) => listAppointments(s, { from: at(0, 0), to: at(500, 0) }))).rejects.toBeInstanceOf(ForbiddenError);
+    await removeMember(admin, membershipId);
+  });
+
+  it('a deactivated admin can be removed while another usable admin remains', async () => {
+    const tech = await ctxFor(USERS.tech, 'cfr');
+    const platform = await platformCtxFor(USERS.tech);
+    const membershipId = await addMember(tech, { name: 'Dormant Admin', email: `dormant.${unique()}@sai.example`, role: 'business_admin' });
+    const member = (await listMembers(tech)).find((m) => m.membershipId === membershipId)!;
+    await setUserActive(platform, member.userId, false);
+    await removeMember(tech, membershipId); // would be refused if dormant admins counted
+    const admins = (await listMembers(tech)).filter((m) => m.role === 'business_admin' && m.isActive);
+    expect(admins.map((m) => m.email)).toEqual(['cfr.admin@sai.example']);
+  });
+
+  it('role changes and removals record the grants that were taken away', async () => {
+    const admin = await ctxFor(USERS.brssAdmin, 'brss');
+    const membershipId = await addMember(admin, { name: 'Grant Log', email: `grant.log.${unique()}@sai.example`, role: 'business_staff' });
+    await setMemberPermissions(admin, membershipId, ['customers.read', 'customers.write']);
+    await removeMember(admin, membershipId);
+    const [removal] = await logFor('membership', membershipId);
+    expect(removal.before).toMatchObject({ grants: ['customers.read', 'customers.write'] });
+  });
+
+  it('a flag set for one business shows in that business’s own log; an unknown business is refused', async () => {
+    const superAdmin = await platformCtxFor(USERS.superAdmin);
+    const brss = await ctxFor(USERS.brssAdmin, 'brss');
+    const flag = `hard.flag.${Date.now()}`;
+    await setFlag(superAdmin, { key: flag, businessId: brss.business.id, enabled: true });
+    expect(await isFlagEnabled(flag, brss.business.id)).toBe(true);
+    const own = await listBusinessActivity(brss, { search: flag });
+    expect(own.rows).toHaveLength(1);
+    expect(own.rows[0]).toMatchObject({ action: 'settings_change', actorRole: 'super_admin' });
+    await expect(setFlag(superAdmin, { key: flag, businessId: '00000000-0000-4000-8000-00000000000a', enabled: true })).rejects.toBeInstanceOf(ValidationError);
   });
 });

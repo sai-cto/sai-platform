@@ -13,6 +13,7 @@ import { payments, refunds } from '../db/schema';
 import { txOf, type Scope } from '../db/scope';
 import { ValidationError } from '../errors';
 import { authorize } from '../rbac/permissions';
+import { customers } from '../db/schema';
 import { paymentEntity, refundEntity } from '../records/core-entities';
 import { createRecord, getRecord } from '../records/records';
 import type { Row } from '../records/types';
@@ -76,6 +77,17 @@ export async function takePayment(
     .limit(1);
   if (existing) return existing;
 
+  // Every link is checked BEFORE the card is charged. (The database would refuse a customer
+  // from another business or environment anyway, but by then the money would have moved.)
+  if (input.customerId) {
+    const [customer] = await s.db
+      .select({ id: customers.id })
+      .from(customers)
+      .where(and(s.where(customers, 'include'), eq(customers.id, input.customerId)))
+      .limit(1);
+    if (!customer) throw new ValidationError('A linked record does not exist in this business.');
+  }
+
   const method = input.method ?? 'card';
   const kind = input.kind ?? 'charge';
   const common = {
@@ -128,14 +140,21 @@ export async function takePayment(
   });
 }
 
-/** How much of a payment has already been refunded. */
+/**
+ * How much of a payment has already been refunded. Archived refunds count too: archiving a
+ * refund hides the row, it does not un-send the money.
+ */
 export async function refundedCents(s: Scope, paymentId: string): Promise<number> {
   authorize(s.ctx, 'payments.read');
   const [row] = await s.db
     .select({ total: sum(refunds.amountCents) })
     .from(refunds)
     .where(
-      and(s.where(refunds), eq(refunds.paymentId, paymentId), eq(refunds.status, 'succeeded')),
+      and(
+        s.where(refunds, 'include'),
+        eq(refunds.paymentId, paymentId),
+        eq(refunds.status, 'succeeded'),
+      ),
     );
   return Number(row?.total ?? 0);
 }

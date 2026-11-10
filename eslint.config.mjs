@@ -7,16 +7,16 @@ import nextTs from 'eslint-config-next/typescript';
 // form ("@/core/…") and the relative form ("../../core/…", which editors auto-import) match.
 
 const DB_CLIENT = {
-  regex: '(^@/|/)core/db/client$|^postgres$|^drizzle-orm/postgres-js',
+  regex: '(^@/|/)core/db/(\\./)?client(\\.[cm]?[jt]sx?)?$|^postgres$|^drizzle-orm/postgres-js',
   message:
     'Only src/core may open a database connection. Use withScope()/withPlatformScope() and the record functions in @/core/records.',
 };
 const SYSTEM_ACTOR = {
-  regex: '(^@/|/)core/tenancy/system$',
+  regex: '(^@/|/)core/tenancy/system(\\.[cm]?[jt]sx?)?$',
   message: 'The system actor is for seed scripts and tests only.',
 };
 const RAW_TX = {
-  regex: '(^@/|/)core/db/scope$',
+  regex: '(^@/|/)core/db/scope(\\.[cm]?[jt]sx?)?$',
   importNames: ['txOf'],
   message:
     'txOf() gives raw write access and skips the activity log. Use the record functions in @/core/records.',
@@ -24,13 +24,27 @@ const RAW_TX = {
 // Platform tables (users, memberships, sessions…) have no row-level security, so nothing
 // outside the core may query them directly. Core tenant tables come from @/core/db/schema/tenant.
 const PLATFORM_TABLES = {
-  regex: '(^@/|/)core/db/schema(/index|/platform)?$',
+  regex: '(^@/|/)core/db/schema(/index|/platform)?(\\.[cm]?[jt]sx?)?$',
   message:
     'Import core tables from @/core/db/schema/tenant. Platform tables (users, memberships, sessions…) are only reachable through core services.',
 };
 const NO_ROUTES = { regex: '(^@/|/)app/', message: 'Modules must not import from src/app.' };
 
 const OUTSIDE_CORE = [DB_CLIENT, SYSTEM_ACTOR, RAW_TX, PLATFORM_TABLES];
+
+// The rules above only see static imports. Outside the core, nothing may load the database
+// layer or the system actor dynamically either (import('…') or require('…')).
+const GUARDED = '/core\\/(db|tenancy\\/system)/';
+const NO_DYNAMIC_LOADS = [
+  {
+    selector: `ImportExpression[source.value=${GUARDED}]`,
+    message: 'Do not load the database layer dynamically. Use the core services.',
+  },
+  {
+    selector: `CallExpression[callee.name="require"][arguments.0.value=${GUARDED}]`,
+    message: 'Do not require() the database layer. Use the core services.',
+  },
+];
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -47,12 +61,18 @@ const eslintConfig = defineConfig([
   {
     // Routes and UI: no direct database access, no system actor, no raw transaction.
     files: ['src/app/**', 'src/ui/**'],
-    rules: { 'no-restricted-imports': ['error', { patterns: OUTSIDE_CORE }] },
+    rules: {
+      'no-restricted-imports': ['error', { patterns: OUTSIDE_CORE }],
+      'no-restricted-syntax': ['error', ...NO_DYNAMIC_LOADS],
+    },
   },
   {
     // Modules: the same, and they must not reach into routes either.
     files: ['src/modules/**'],
-    rules: { 'no-restricted-imports': ['error', { patterns: [...OUTSIDE_CORE, NO_ROUTES] }] },
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [...OUTSIDE_CORE, NO_ROUTES] }],
+      'no-restricted-syntax': ['error', ...NO_DYNAMIC_LOADS],
+    },
   },
   {
     // The core never imports a module — only the registry list — and never depends on Next.js.
@@ -65,7 +85,10 @@ const eslintConfig = defineConfig([
             // A module file is always inside a module's folder: "…/modules/<key>/<file>".
             // (src/core/modules/* has no sub-folders, so core's own imports do not match.)
             {
-              regex: '(^@/|/)modules/[^/]+/|^@/modules/(?!registry$)',
+              // The last part catches a folder import ("../modules/brss"). The names listed are the
+              // files of src/core/modules itself; add a new one there and it must be added here.
+              regex:
+                '(^@/|/)modules/[^/]+/|^@/modules/(?!registry$)|/modules/(?!contract$|registry$|config$|portal$|report$)[^/]+$',
               message: 'The core may only import @/modules/registry, never a module.',
             },
             {

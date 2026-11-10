@@ -72,6 +72,7 @@ export async function revenueSeries(
   range: DateRange,
   bucket: Bucket,
 ): Promise<SeriesPoint[]> {
+  authorize(s.ctx, 'payments.read');
   const b = bucketExpr(payments.paidAt, bucket, s.ctx.business.timeZone);
   const rows = await s.db
     .select({ bucket: b, value: sum(payments.amountCents) })

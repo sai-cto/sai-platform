@@ -5,13 +5,13 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import type { files } from '../db/schema';
-import type { Scope } from '../db/scope';
-import { ValidationError } from '../errors';
+import { onRollback, type Scope } from '../db/scope';
+import { NotFoundError, ValidationError } from '../errors';
 import { authorize } from '../rbac/permissions';
 import { fileEntity } from '../records/core-entities';
 import { createRecord, getRecord } from '../records/records';
 import type { Row } from '../records/types';
-import { fileStorage, storagePrefix } from './storage';
+import { fileStorage, ownsStorageKey, storagePrefix } from './storage';
 
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -38,19 +38,16 @@ export async function saveFile(
   // The business and environment are part of the path, so files are separated on disk too.
   const storageKey = `${storagePrefix(s.ctx.business.id, s.ctx.environment)}/${crypto.randomUUID()}-${safeName}`;
   await fileStorage.put(storageKey, input.bytes);
-  try {
-    return await createRecord(s, fileEntity, {
-      storageKey,
-      filename: safeName,
-      contentType: input.contentType || 'application/octet-stream',
-      sizeBytes: input.bytes.byteLength,
-      subjectType: input.subjectType ?? null,
-      subjectId: input.subjectId ?? null,
-    });
-  } catch (error) {
-    await fileStorage.delete(storageKey); // no row, so do not leave the bytes behind
-    throw error;
-  }
+  // If the transaction this is part of fails, the row is never saved: remove the bytes too.
+  onRollback(s, () => fileStorage.delete(storageKey));
+  return createRecord(s, fileEntity, {
+    storageKey,
+    filename: safeName,
+    contentType: input.contentType || 'application/octet-stream',
+    sizeBytes: input.bytes.byteLength,
+    subjectType: input.subjectType ?? null,
+    subjectId: input.subjectId ?? null,
+  });
 }
 
 /** Reads a file. The row is looked up inside the scope first, so another business's file is "not found". */
@@ -59,5 +56,8 @@ export async function readFile(
   id: string,
 ): Promise<{ file: Row<typeof files>; bytes: Uint8Array }> {
   const file = await getRecord(s, fileEntity, id);
+  // The row is ours, but its key must also point inside OUR folder (never trust the key alone).
+  if (!ownsStorageKey(s.ctx.business.id, s.ctx.environment, file.storageKey))
+    throw new NotFoundError();
   return { file, bytes: await fileStorage.get(file.storageKey) };
 }

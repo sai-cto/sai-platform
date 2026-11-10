@@ -43,3 +43,17 @@ export const fileStorage: FileStorage = localDiskStorage;
 export function storagePrefix(businessId: string, environment: 'live' | 'sandbox'): string {
   return `${businessId}/${environment}`;
 }
+
+/**
+ * Is this storage key inside the folder of this business and environment? Checked before
+ * bytes are read or deleted, so a file row can never be used to reach another business's
+ * (or the other environment's) bytes, whatever its storage key says.
+ */
+export function ownsStorageKey(
+  businessId: string,
+  environment: 'live' | 'sandbox',
+  key: string,
+): boolean {
+  const prefix = `${storagePrefix(businessId, environment)}/`;
+  return key.startsWith(prefix) && !key.slice(prefix.length).includes('/') && !key.includes('..');
+}

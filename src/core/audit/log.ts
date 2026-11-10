@@ -40,12 +40,27 @@ export function asLive<T extends AnyContext>(ctx: T): T {
 
 type ActorInfo = { actorUserId: string | null; actorName: string; actorRole: string };
 
-/** Log something done inside a context (a business, or the platform). */
-export async function logActivity(tx: Tx, ctx: AnyContext, entry: ActivityEntry): Promise<void> {
+/**
+ * Log something done inside a context (a business, or the platform).
+ * `aboutBusinessId` files a PLATFORM action under one business (for example a feature flag
+ * set for that business), so it also appears in that business's own log.
+ */
+export async function logActivity(
+  tx: Tx,
+  ctx: AnyContext,
+  entry: ActivityEntry,
+  aboutBusinessId?: string | null,
+): Promise<void> {
+  const where =
+    ctx.kind === 'business'
+      ? { businessId: ctx.business.id, environment: ctx.environment }
+      : aboutBusinessId
+        ? { businessId: aboutBusinessId, environment: 'live' as const }
+        : null;
   await insertLog(
     tx,
     { actorUserId: ctx.actor.id, actorName: ctx.actor.name, actorRole: ctx.role ?? 'none' },
-    ctx.kind === 'business' ? { businessId: ctx.business.id, environment: ctx.environment } : null,
+    where,
     entry,
   );
 }

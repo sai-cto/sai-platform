@@ -9,7 +9,7 @@ import { logActivity } from '../audit/log';
 import { revokeAllSessions } from '../auth/session';
 import { getDb, type Tx } from '../db/client';
 import { businesses, memberships, users } from '../db/schema';
-import { lockAndCountAdmins } from './admins';
+import { lockAndCountAdmins, lockBusinessPeople, lockUserAccess } from './admins';
 import { NotFoundError, ValidationError } from '../errors';
 import { authorize } from '../rbac/permissions';
 import { PLATFORM_ROLES, type PlatformRole } from '../rbac/roles';
@@ -124,6 +124,7 @@ export async function setPlatformRole(
   authorize(ctx, 'platform.roles.grant');
   if (role !== null && !PLATFORM_ROLES.includes(role)) throw new ValidationError('Unknown role.');
   await getDb().transaction(async (tx) => {
+    if (isUuid(userId)) await lockUserAccess(tx, userId);
     const user = await loadUser(tx, userId);
     if (user.platformRole === role) return;
     if (
@@ -167,6 +168,7 @@ export async function setUserActive(
 ): Promise<void> {
   authorize(ctx, 'platform.users.manage');
   await getDb().transaction(async (tx) => {
+    if (isUuid(userId)) await lockUserAccess(tx, userId);
     const user = await loadUser(tx, userId);
     if (user.isActive === isActive) return;
     // Only someone who may grant platform roles may switch a platform-role account on or off.
@@ -193,7 +195,9 @@ export async function setUserActive(
             eq(memberships.isActive, true),
           ),
         );
-      for (const b of adminOf) {
+      // Fixed order (sorted) so two such calls can never wait on each other.
+      for (const b of [...adminOf].sort((x, y) => x.businessId.localeCompare(y.businessId))) {
+        await lockBusinessPeople(tx, b.businessId);
         if ((await lockAndCountAdmins(tx, b.businessId)) <= 1) {
           throw new ValidationError(
             `${user.name} is the only admin of ${b.name}. Give that business another admin first.`,

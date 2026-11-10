@@ -13,7 +13,7 @@
 import { and, asc, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { logActivity } from '../audit/log';
-import { txOf, type ArchivedFilter, type Scope } from '../db/scope';
+import { afterCommit, txOf, type ArchivedFilter, type Scope } from '../db/scope';
 import { STANDARD_COLUMN_KEYS } from '../db/tenant-table';
 import { ForbiddenError, NotFoundError, ValidationError } from '../errors';
 import type { EntityDef } from '../modules/contract';
@@ -117,8 +117,8 @@ export async function createRecord<T extends TenantTable>(
   values: NewValues<T>,
 ): Promise<Row<T>> {
   authorize(s.ctx, entity.writePermission);
-  const [row] = await writing(() =>
-    txOf(s)
+  const [row] = await writing(s, (tx) =>
+    tx
       .insert(entity.table)
       .values({
         ...withoutStandard(values as AnyRow),
@@ -155,8 +155,8 @@ export async function updateRecord<T extends TenantTable>(
     ),
   );
   if (Object.keys(changes).length === 0) return before as Row<T>;
-  const [row] = await writing(() =>
-    txOf(s)
+  const [row] = await writing(s, (tx) =>
+    tx
       .update(entity.table)
       .set({ ...changes, updatedAt: new Date(), updatedBy: s.ctx.actor.id } as never)
       .where(and(s.where(entity.table), eq(entity.table.id, id)))
@@ -261,7 +261,8 @@ export async function purgeRecord<T extends TenantTable>(
     }
     throw error;
   }
-  if (entity.afterPurge) await entity.afterPurge(row);
+  // Outside clean-up (a file's bytes) waits until the delete has really committed.
+  if (entity.afterPurge) afterCommit(s, () => entity.afterPurge!(row));
   await logActivity(txOf(s), s.ctx, {
     action: 'purge',
     entityType: entity.key,
@@ -291,9 +292,11 @@ const isForeignKeyViolation = (error: unknown) => hasPgCode(error, '23503');
  * and environment (or does not exist at all — the two look identical on purpose), the
  * caller gets one plain message instead of a database error.
  */
-async function writing<T>(run: () => Promise<T>): Promise<T> {
+async function writing<T>(s: Scope, run: (tx: ReturnType<typeof txOf>) => Promise<T>): Promise<T> {
   try {
-    return await run();
+    // A savepoint: if the database refuses the write, the surrounding transaction stays
+    // usable, so a caller may catch the error and carry on (a row-by-row import, say).
+    return await txOf(s).transaction((inner) => run(inner as ReturnType<typeof txOf>));
   } catch (error) {
     if (isForeignKeyViolation(error))
       throw new ValidationError('A linked record does not exist in this business.');
