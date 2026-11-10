@@ -92,7 +92,6 @@ export const brssOrders = tenantTable(
     storageTermMonths: integer('storage_term_months'),
     /** Set once, when the first charge is taken on a storage order. */
     storageEffectiveDate: date('storage_effective_date'),
-    deliveryScheduled: boolean('delivery_scheduled').notNull().default(false),
     shipToName: text('ship_to_name'),
     shipToAddress1: text('ship_to_address1'),
     shipToAddress2: text('ship_to_address2'),
@@ -175,6 +174,8 @@ export const brssOrderArticles = tenantTable(
   ],
 );
 
+export type ChargeRule = 'storage' | 'ship_to_home' | 'ship_to_cornell_fee' | 'ship_to_cornell' | 'insurance';
+
 export const brssOrderItems = tenantTable(
   'brss_order_items',
   {
@@ -187,8 +188,11 @@ export const brssOrderItems = tenantTable(
     status: text('status').$type<'new' | 'paid'>().notNull().default('new'),
     /** The payment that covered this line, once paid by card, cash or cheque. */
     paymentId: uuid('payment_id'),
-    /** True for lines worked out by the pricing rules (they are replaced when prices are recalculated). */
-    isAutomatic: boolean('is_automatic').notNull().default(false),
+    /**
+     * Which pricing rule worked this line out (see priceArticle in rules.ts). Null for a line
+     * staff added by hand. Recalculating prices only ever touches unpaid lines that have a rule.
+     */
+    rule: text('rule').$type<ChargeRule>(),
   },
   (t) => [
     sameTenant('brss_order_items_order_fk', t, t.orderId, brssOrders),
@@ -201,7 +205,7 @@ export const brssOrderItems = tenantTable(
 // ---- scheduling (extends the core's appointments, resources and unavailability) -------------
 
 export type AppointmentType = 'pickup' | 'delivery' | 'packing' | 'supplies';
-export type CrewMember = { userId: string; name: string };
+export type CrewMember = { userId: string | null; name: string };
 
 /** BRSS's extra facts about a core appointment (same row count: one per appointment). */
 export const brssAppointments = tenantTable(
@@ -223,6 +227,8 @@ export const brssAppointments = tenantTable(
     estimatedBoxes: integer('estimated_boxes').notNull().default(0),
     estimatedOtherItems: integer('estimated_other_items').notNull().default(0),
     packingHours: integer('packing_hours').notNull().default(0),
+    /** Why this was booked at a blocked time or at short notice (only people with the override permission can). */
+    overrideReason: text('override_reason'),
     /** The truck's crew, copied here when the truck is assigned. */
     crew: jsonb('crew').$type<CrewMember[]>().notNull().default([]),
   },
@@ -240,8 +246,8 @@ export const brssTruckCrew = tenantTable(
   'brss_truck_crew',
   {
     truckId: uuid('truck_id').notNull(),
-    /** A BRSS member's user id. Not a database link: users are a platform table. */
-    userId: uuid('user_id').notNull(),
+    /** The crew member's user id, when they have a login. Not a database link: users are a platform table. */
+    userId: uuid('user_id'),
     name: text('name').notNull(),
   },
   (t) => [sameTenant('brss_truck_crew_truck_fk', t, t.truckId, resources)],

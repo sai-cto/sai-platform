@@ -9,10 +9,13 @@ import type { EntityDef } from '../modules/contract';
 import { authorize } from '../rbac/permissions';
 import type { NewValues, Row, TenantTable } from '../records/types';
 
+/** Fake rows may be back-dated, so charts and date filters have something to show. */
+export type SeedRow<T extends TenantTable> = NewValues<T> & { createdAt?: Date };
+
 export async function seedRecords<T extends TenantTable>(
   s: Scope,
   entity: EntityDef<T>,
-  rows: NewValues<T>[],
+  rows: SeedRow<T>[],
 ): Promise<Row<T>[]> {
   authorize(s.ctx, entity.writePermission);
   const isSystem = s.ctx.actor.id === null;
