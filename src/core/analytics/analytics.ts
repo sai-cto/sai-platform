@@ -6,6 +6,7 @@
  */
 import { and, count, eq, gte, isNull, lt, sql, sum, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+import { staffActivityFilter } from '../audit/visibility';
 import { activityLog, payments, refunds } from '../db/schema';
 import type { PlatformScope, Scope } from '../db/scope';
 import type { EntityDef } from '../modules/contract';
@@ -123,6 +124,8 @@ export async function activityCount(s: Scope, range: DateRange): Promise<number>
       eq(activityLog.businessId, s.ctx.business.id),
       eq(activityLog.environment, s.ctx.environment),
       inRange(activityLog.occurredAt, range),
+      // Staff are counted only what they could open in the log itself.
+      staffActivityFilter(s.ctx),
     ),
   );
 }
@@ -234,6 +237,8 @@ export function fillSeries(
     keys.add(bucketKey(cursor, bucket, timeZone));
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
+  // The range usually ends "now", part-way through a day: include that last bucket too.
+  keys.add(bucketKey(new Date(range.to.getTime() - 1), bucket, timeZone));
   return [...keys].sort().map((key) => ({ bucket: key, value: byBucket.get(key) ?? 0 }));
 }
 

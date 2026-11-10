@@ -9,8 +9,10 @@ import { dropEverything, migrateDatabase } from './lib/db';
 export async function resetTestDatabase(): Promise<void> {
   loadEnv();
   const ownerUrl = requireEnv('TEST_DATABASE_OWNER_URL');
-  if (!new URL(ownerUrl).pathname.endsWith('/sai_test'))
-    throw new Error('TEST_DATABASE_OWNER_URL must point at sai_test.');
+  // Only ever wipe a database whose name starts with sai_test.
+  if (!/^\/sai_test[a-z0-9_]*$/.test(new URL(ownerUrl).pathname)) {
+    throw new Error('TEST_DATABASE_OWNER_URL must point at a sai_test database.');
+  }
   await dropEverything(ownerUrl);
   await migrateDatabase(ownerUrl);
   process.env.DATABASE_URL = requireEnv('TEST_DATABASE_URL');

@@ -20,6 +20,8 @@ export async function systemContext(
       code: businesses.code,
       name: businesses.name,
       timeZone: businesses.timeZone,
+      accentColor: businesses.accentColor,
+      description: businesses.description,
       moduleKey: businessModules.moduleKey,
     })
     .from(businesses)

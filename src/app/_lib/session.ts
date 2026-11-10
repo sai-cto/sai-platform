@@ -68,3 +68,14 @@ export async function guarded<T>(fn: () => Promise<T>): Promise<T> {
     throw error;
   }
 }
+
+/** A query-string value as a single string. `?q=a&q=b` gives the first; a missing one gives ''. */
+export function one(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] : value) ?? '';
+}
+
+/** A page number from the query string: a whole number from 1 to 100,000. */
+export function pageNumber(value: string | string[] | undefined): number {
+  const n = Number.parseInt(one(value), 10);
+  return Number.isInteger(n) && n >= 1 ? Math.min(n, 100_000) : 1;
+}

@@ -1,0 +1,81 @@
+/**
+ * Renders a page of a module's portal. All three portal types (staff, customer, field) go
+ * through here, so they share one login, one context and one data layer.
+ */
+import Link from 'next/link';
+import type { ReactNode } from 'react';
+import { notFound } from 'next/navigation';
+import type { PortalDef, PortalPageProps } from '@/core/modules/contract';
+import { matchRoute } from '@/core/modules/portal';
+import type { BusinessContext } from '@/core/tenancy/context';
+import { cn } from '@/ui/cn';
+import { guarded } from './session';
+
+export async function PortalHost({
+  ctx,
+  portal,
+  segments,
+  searchParams,
+  basePath,
+}: {
+  ctx: BusinessContext;
+  portal: PortalDef;
+  segments: string[];
+  searchParams: Record<string, string | string[] | undefined>;
+  basePath: string;
+}) {
+  const match = matchRoute(portal, segments);
+  if (!match || !ctx.permissions.has(match.route.permission)) notFound();
+  const Page = match.route.component;
+  const flatSearch: PortalPageProps['searchParams'] = Object.fromEntries(
+    Object.entries(searchParams).map(([key, value]) => [
+      key,
+      Array.isArray(value) ? value[0] : value,
+    ]),
+  );
+  const current = segments.join('/');
+  const nav = portal.nav.filter((item) => {
+    const route = portal.routes.find((r) => r.path === item.path);
+    return !route || ctx.permissions.has(route.permission);
+  });
+
+  // Module pages are async server components, i.e. plain async functions. Calling the page
+  // here (instead of leaving it for React to render later) means a page that finds nothing,
+  // or is refused by the core, becomes a normal "not found" instead of a server error.
+  const props: PortalPageProps = { ctx, params: match.params, searchParams: flatSearch, basePath };
+  const content = await guarded(async () =>
+    (Page as (p: PortalPageProps) => ReactNode | Promise<ReactNode>)(props),
+  );
+
+  return (
+    <div>
+      {nav.length > 1 ? (
+        <nav
+          aria-label="App sections"
+          className="mb-4 flex gap-1 overflow-x-auto rounded-lg border border-zinc-200 bg-zinc-50 p-1"
+        >
+          {nav.map((item) => {
+            const active =
+              item.path === ''
+                ? current === ''
+                : current === item.path || current.startsWith(`${item.path}/`);
+            return (
+              <Link
+                key={item.path}
+                href={item.path ? `${basePath}/${item.path}` : basePath}
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'shrink-0 rounded-md px-3 py-1.5 text-[13px] whitespace-nowrap text-zinc-600 hover:text-zinc-900',
+                  active && 'bg-white font-medium text-zinc-900 shadow-sm ring-1 ring-zinc-200',
+                )}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+      ) : null}
+      {content}
+    </div>
+  );
+}

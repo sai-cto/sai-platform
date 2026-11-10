@@ -1,7 +1,9 @@
 /**
  * The nine Student Agencies businesses, as DATA. Nothing else in the codebase names a
  * business: the sidebar, registry and dashboards all read the businesses table.
- * Final accent colours and why they differ from the brand colours: docs/DECISIONS.md.
+ * Accent colours were adjusted from the brand colours so the nine are distinguishable in the
+ * sidebar (five of the originals were near-identical reds, two were black). The table of
+ * brand colour → final colour, and the reasoning, is in docs/DECISIONS.md (P2-1).
  */
 export type SeedBusiness = {
   slug: string;
@@ -27,7 +29,7 @@ export const SEED_BUSINESSES: SeedBusiness[] = [
     name: 'Student Agencies Real Estate',
     description:
       "Leasing and management of SAI's owned and affiliated properties: apartments, commercial spaces, eHub",
-    accentColor: '#5A5A5A',
+    accentColor: '#6B6B6B',
   },
   {
     slug: 'brss',
@@ -49,28 +51,28 @@ export const SEED_BUSINESSES: SeedBusiness[] = [
     code: 'CFR',
     name: 'Cornell Freshman Register',
     description: 'First-year guide produced by The Cornellian',
-    accentColor: '#C8102E',
+    accentColor: '#C2185B',
   },
   {
     slug: 'tut',
     code: 'TUT',
     name: 'Student Agencies Tutoring',
     description: 'Tutoring service',
-    accentColor: '#8B1E2D',
+    accentColor: '#6B1238',
   },
   {
     slug: 'cbb',
     code: 'CBB',
     name: 'Cornell Bigger Beds',
     description: 'Dorm bed extension service',
-    accentColor: '#9B1C1C',
+    accentColor: '#D9580D',
   },
   {
     slug: 'brm',
     code: 'BRM',
     name: 'Big Red Mailroom',
     description: 'Mailroom service',
-    accentColor: '#B3322A',
+    accentColor: '#7A5230',
   },
   {
     slug: 'cp',
@@ -78,6 +80,6 @@ export const SEED_BUSINESSES: SeedBusiness[] = [
     name: 'Campus Promotions',
     description:
       'Marketing campaigns for local and national businesses targeting Cornell and Ithaca College students',
-    accentColor: '#111111',
+    accentColor: '#3A3F6B',
   },
 ];

@@ -1,35 +1,43 @@
 # Progress
 
-_Last updated: Phase 1 complete and merged to `main`; Phase 2 (console) in progress._
+_Last updated: Phase 2 (console) passed its review gate and is merged to `main`._
 
 ## In plain English
 
-**What exists now:** the foundation of the platform, with no real screens yet. You can sign in
-as a fake test user of any role and see which businesses that role may open. Behind that, the
-"shared core" is built and tested: business separation, roles and permissions, the activity
-log, archive/restore/permanent-delete rules, customers, payments (fake provider), scheduling,
-notifications, file storage, analytics helpers and test mode.
+**What exists now:** the SAI Console. You sign in as a fake test user of any role and get a
+sidebar with the businesses that role may open. Each business has tabs: Overview (key numbers,
+revenue chart, recent activity), App (where the business's own staff portal will appear),
+People and access, Data (browse, search, export, archive, restore, permanent delete), Activity
+log, Settings and Test mode. The tech team and CTO also get a Platform section (all users and
+roles, module registry, feature flags, the global activity log, CSV imports, system health,
+platform settings), and executives get a read-only dashboard across all nine businesses.
+
+Behind it is the shared core from Phase 1: business separation, permissions, the activity log,
+archive/restore/permanent-delete rules, customers, payments (fake provider), scheduling,
+notifications, files and analytics.
 
 **How to see it:** follow the README (`npm install`, `npm run setup`, `npm run dev`), open
-<http://localhost:3000> and click a user on the login page.
+<http://localhost:3000> and click a user on the login page. Screenshots of every role, at
+desktop and phone width, are in `docs/screenshots/phase-2/`.
 
-**What is not there yet:** the console itself (sidebar, tabs, Platform section, executive
-dashboard) is Phase 2. The nine business modules are Phase 3. The BRSS staff portal is Phase 4.
+**What is not there yet:** the nine business modules are not registered (Phase 3), so every
+App tab says "No app yet". The BRSS staff portal is Phase 4.
 
 ## Current phase and task
 
 - **Phase 1 — shared core.** ✅ Done. Passed the independent review gate after four rounds (see below) and merged to `main`.
-- **Phase 2 — SAI Console**, on branch `phase-2-console`: in progress.
+- **Phase 2 — SAI Console.** ✅ Done. UI gate done (110 screenshots); passed the independent review gate after three rounds (see below) and merged to `main`.
+- Next: **Phase 3 — module scaffolds**, on branch `phase-3-scaffolds` (built; review gate next), then **Phase 4 — BRSS**, on `phase-4-brss` (in progress).
 
 ## Acceptance criteria (final)
 
 | | Criterion |
 |---|---|
 | ✅ | A fresh clone runs locally with one documented setup sequence and seeds all 9 businesses plus test users for every role |
-| ✅ | All permission and tenant-isolation tests pass; `docs/PERMISSIONS.md` matches what the tests check _(route-level isolation tests grow with the console in Phase 2)_ |
-| ❌ | Logging in as each seed role shows exactly the sidebar, data and actions that role allows _(business list ✅; sidebar, data and actions are Phase 2)_ |
-| ❌ | Archive → restore works; permanent delete only for super_admin and only past retention; every action appears in the activity log _(rules ✅ and tested; the screens are Phase 2)_ |
-| ❌ | Test mode clearly separates sandbox data from live data, with a persistent visual indicator _(data separation ✅; indicator is Phase 2)_ |
+| ✅ | All permission and tenant-isolation tests pass; `docs/PERMISSIONS.md` matches what the tests check |
+| ✅ | Logging in as each seed role shows exactly the sidebar, data and actions that role allows _(`tests/e2e/console.spec.ts`, `tests/e2e/isolation.spec.ts`, screenshots per role)_ |
+| ✅ | Archive → restore works; permanent delete only for super_admin and only past retention; every action appears in the activity log _(data layer and end-to-end through the screens)_ |
+| ✅ | Test mode clearly separates sandbox data from live data, with a persistent visual indicator _(striped banner + yellow frame on every sandbox page; `/sandbox/` in the address)_ |
 | ❌ | All 9 modules are registered; adding a 10th by following `MODULE_GUIDE.md` requires no core changes _(Phase 3)_ |
 | ❌ | The BRSS staff portal covers the listed workflows end to end on seed data, with ported rules documented and source-cited _(Phase 4)_ |
 | ✅ | Typecheck, lint, unit and end-to-end tests all pass; the secret scan is clean _(as of the last verification below)_ |
@@ -40,7 +48,7 @@ dashboard) is Phase 2. The nine business modules are Phase 3. The BRSS staff por
 |---|---|
 | 0 — Plan | ✅ merged to `main` (Checkpoint 1 approved 10 Nov 2026) |
 | 1 — Shared core | ✅ merged to `main` |
-| 2 — SAI Console | 🔨 in progress |
+| 2 — SAI Console | ✅ merged to `main` |
 | 3 — Module scaffolds | ⏳ |
 | 4 — BRSS proof module | ⏳ |
 
@@ -97,3 +105,46 @@ Review gate (independent reviewer subagent, no access to the author's reasoning)
 No round found a way for a user to reach another business's data. The findings were holes in
 the data layer that a future screen or module could have hit; each fix has a test that fails
 if the fix is removed. Decisions that came out of the gate: `DECISIONS.md`, G1-1 … G1-19.
+
+### Phase 2 — SAI Console (10 Nov 2026)
+
+```
+npm run check
+  tsc --noEmit            clean
+  eslint                  clean
+  vitest run              Test Files 9 passed (9) · Tests 317 passed (317)
+  secret scan             clean
+npm run test:e2e          35 passed (auth 11 · console 12 · isolation 12)
+```
+
+UI gate: signed in as each of the seven kinds of seed user and opened every screen at 1440px and
+375px; 110 screenshots in `docs/screenshots/phase-2/`, named `<role>-<nn>-<screen>-<width>.jpg`.
+Found and fixed while looking: the Next.js dev badge covering the user menu; five near-identical
+red monograms (colours adjusted, DECISIONS P2-1); a search form that stacked on desktop; the
+business name being cut off on a phone; the Overview scrolling sideways on a phone once there was
+recent activity; badges wrapping inside table cells; and a chart bug that dropped today's bar.
+
+Review gate (independent reviewer subagent, no access to the author's reasoning):
+
+| Round | Result | What happened next |
+|---|---|---|
+| 1 | 0 critical · 0 high · 3 medium · 15 minor | All medium fixed (a file could be imported into live twice by two simultaneous clicks; uploads over 1 MB failed; staff granted the activity log could read entries about payments and people). Minor items fixed too. |
+| 2 | 1 medium · 6 minor | Fixed: re-checking a file with a different column mapping at the same moment as its sandbox import could let a mapping that never ran in the sandbox be imported into live. Minor items fixed (activity count for staff, date filter on clock-change days, export limit notice, wording). |
+| 3 | **Nothing above minor.** Gate passed. | One more minor item fixed (a mistyped year in the date filter caused an error page). |
+
+No round found a way for a user to see another business's data. Left as known minor items:
+route pages in a module's portal must be plain server components (documented in
+`MODULE_GUIDE.md` with Phase 3); a file larger than 11 MB shows the framework's own error rather
+than our message; the new import-race test relies on timing (it can fail falsely on a very slow
+machine, never pass falsely).
+
+Final numbers for Phase 2:
+
+```
+npm run check
+  tsc --noEmit            clean
+  eslint                  clean
+  vitest run              Test Files 9 passed (9) · Tests 322 passed (322)
+  secret scan             clean (299 files)
+npm run test:e2e          37 passed
+```

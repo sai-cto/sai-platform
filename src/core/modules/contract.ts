@@ -5,7 +5,7 @@
  *
  * How to write one: docs/MODULE_GUIDE.md.
  */
-import type { ComponentType, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { z } from 'zod';
 import type { Scope } from '../db/scope';
 import type { TenantTable } from '../records/types';
@@ -82,7 +82,8 @@ export type RouteDef = {
   title: string;
   /** The permission needed to open this page. */
   permission: string;
-  component: ComponentType<PortalPageProps>;
+  /** A server component: a function (usually async) that takes PortalPageProps and returns the page. */
+  component: (props: PortalPageProps) => ReactNode | Promise<ReactNode>;
 };
 
 export type PortalDef = { nav: NavItem[]; routes: RouteDef[] };
@@ -97,6 +98,14 @@ export type WidgetDef = {
 };
 
 export type HealthCheck = { name: string; ok: boolean; detail: string };
+
+/** One input in the module's Settings form. */
+export type SettingField = {
+  key: string;
+  label: string;
+  type: 'number' | 'text' | 'boolean';
+  help?: string;
+};
 
 export type ModuleManifest = {
   /** Must equal the slug of the business this module serves, e.g. "brss". */
@@ -125,7 +134,12 @@ export type ModuleManifest = {
     entityKey: string;
   };
   /** Module configuration, edited in the console's Settings tab. */
-  settings?: { schema: z.ZodType<Record<string, unknown>>; defaults: Record<string, unknown> };
+  settings?: {
+    schema: z.ZodType<Record<string, unknown>>;
+    defaults: Record<string, unknown>;
+    /** How each setting is shown in the Settings form. */
+    fields: SettingField[];
+  };
   featureFlags?: { key: string; description: string }[];
   /** Fills a business with fake data. Used for the sandbox and for local demo data. */
   seedDemoData?: (s: Scope) => Promise<void>;

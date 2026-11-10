@@ -13,7 +13,7 @@ src/
   core/       The shared core. Modules import from it; it never imports a module.
   modules/    One folder per business + registry.ts (the list of modules).
   seed/       The 9 businesses and the fake test users, as data.
-  ui/         Shared interface components (added with the console in Phase 2).
+  ui/         Shared interface components (buttons, tables, forms, charts, monograms).
 db/migrations/   Generated SQL migrations (plus one hand-written one, 0001).
 scripts/         setup, seed, migrate, secret scan, permissions doc generator.
 tests/           integration/ (Vitest + real Postgres) and e2e/ (Playwright).
@@ -33,6 +33,7 @@ Inside `src/core/`:
 | `customers/` `payments/` `scheduling/` `notifications/` `files/` `analytics/` | The shared services |
 | `sandbox/` | Test mode: reset and fake data |
 | `modules/` | The module contract and registry access |
+| `imports/` | The CSV import framework (sandbox first, then live) |
 | `flags/` `settings/` `health/` | Feature flags, platform settings, health checks |
 
 ## Tenancy: three layers
@@ -145,9 +146,48 @@ A module is a folder under `src/modules/<key>/` exporting one manifest
 `docs/MODULE_GUIDE.md`.
 
 There are three portal types — staff, customer, field — sharing one login and one data layer.
-The staff portal is embedded in the console. Customer and field portals get hosting routes
-(added with the console in Phase 2) that answer "not found" until a module defines that portal
-**and** its toggle is on.
+The staff portal is embedded in the console. Customer and field portals have hosting routes
+(`/portal/[business]`, `/field/[business]`) that answer "not found" until a module defines that
+portal **and** its toggle is on. All three are rendered by one component (`src/app/_lib/portal-host.tsx`).
+
+## The console (`src/app/console`)
+
+```
+/login                                   Dev login; Microsoft / Google buttons appear only when configured
+/console                                 Home
+/console/executive                       Cross-business dashboard (read-only)
+/console/platform/…                      users · modules · flags · activity · imports · health · settings
+/console/[business]                      → first tab the person may open
+/console/[business]/[mode]/overview      [mode] is "live" or "sandbox"
+/console/[business]/[mode]/app/…         The module's staff portal, embedded
+/console/[business]/[mode]/data/…        Browse, search, export, archive, restore, permanent delete
+/console/[business]/[mode]/activity
+/console/[business]/people | settings | test-mode
+/portal/[business]/…  /field/[business]/…   Customer and field portal hosts ("not found" until enabled)
+```
+
+How a page is built:
+
+1. It gets its context: `requireBusinessContext(slug, mode)` or `requirePlatformContext()`
+   (`src/app/_lib/session.ts`). A business or mode the person cannot use becomes a 404.
+2. It calls the core. `guarded()` turns the core's "not found" / "forbidden" into a 404 as well.
+3. It renders with the shared components in `src/ui/`.
+
+How a change is made: a server action in an `actions.ts` file next to the page. Every action is
+wrapped in `act()` (`src/app/_lib/actions.ts`), which returns `{ ok, message }` for the form and
+refreshes the console. Forms use `<ActionForm>`; buttons that need an "are you sure?" use
+`<ConfirmButton>`. An action receives ids and form values from the browser and must treat them
+as untrusted: it builds its own context and lets the core check everything.
+
+Layouts are navigation, not security. The sidebar and tabs are built from the person's
+permissions (`src/app/console/_lib/nav.ts`), but every page and action checks again.
+
+Test mode is in the URL. `[mode]/layout.tsx` draws the striped banner and yellow frame around
+every sandbox page; it cannot be dismissed.
+
+Adding a console page: create the folder under `src/app/console/…`, get the context, call the
+core, add a link in `nav.ts` with the permission that guards it, and add the URL to
+`tests/e2e/isolation.spec.ts`.
 
 ## Core services and their adapters
 

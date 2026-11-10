@@ -19,6 +19,9 @@ safest reversible option. They are collected in the first table so they are easy
 | R-11 | Microsoft sign-in accepts any account in SAI's directory, guests included (details: G1-16 below). | See G1-16. | See G1-16 |
 | R-9 | Row-level security covers tenant tables only; platform tables rely on the core's checks and a lint rule (details: G1-10 below). | See G1-10. | See G1-10 |
 | R-10 | Sessions have no idle timeout and expired session rows are not cleaned up (details: G1-11 below). | Needs a scheduled job, which needs hosting. | See G1-11 |
+| R-12 | Accent colours of six businesses were changed from the brand colours so they can be told apart (table under P2-1). | The brief asked for this; the exact colours are a judgement call. | `src/seed/businesses.ts`, then `npm run db:seed` |
+| R-14 | During an import, real data sits in the business's sandbox until it is reset (P2-14). | A11 and A12 pull in different directions. | Decide whether imports need a separate staging area |
+| R-13 | Customer and field portals would use the console's login and roles (P2-9). | No such portal exists yet. | Decide with the identity provider |
 | R-8 | Next.js "Cache Components" is switched off; every page renders per request. | Every console page depends on who is signed in. Per-request rendering is the simplest model for students. Next.js says the feature becomes mandatory in the next major version: see HANDOFF. | `next.config.ts` |
 
 ## Locked by the brief (not Claude's to change)
@@ -108,6 +111,40 @@ or `tenant-isolation.test.ts`.
 | G1-18 | Third review. Writing needs only the write permission: booking and moving an appointment need `scheduling.write`; taking and refunding a payment need `payments.write`. The read permission is for viewing lists. | The two are separate grants; a business admin can give "can take payments" without "can browse all payments". |
 | G1-19 | Third review. A stored file's key can never be changed, two rows can never share one, and a single payment is capped at $1,000,000. Everything the database could refuse about a payment is checked before the card is charged. | Closes the remaining ways to point a file row at other bytes, and the last inputs that were only rejected after charging. |
 | G1-16 | **NEEDS JAI REVIEW.** Microsoft sign-in trusts any account of SAI's own directory, including guests invited into it; it does not additionally check the email's domain. | Guest accounts are controlled by whoever administers the directory. Add a domain check when the directory is chosen, if guests are used. |
+
+## Phase 2 — SAI Console
+
+| # | Decision | Why |
+|---|---|---|
+| P2-1 | **Accent colours were adjusted** (table below). **NEEDS JAI REVIEW.** | Five brand colours were near-identical reds and two were black, so the sidebar monograms could not be told apart. Each final colour stays in its brand's family where possible. Neighbouring businesses in the sidebar were checked for separation, including under simulated colour-blindness. The monogram always shows the short code as text, so colour is never the only cue. |
+| P2-2 | One light theme. System fonts. | A dark theme doubles the visual testing for no requirement. System fonts need no download. |
+| P2-3 | Charts use one blue for data, never a business's brand colour; businesses are compared with labelled bars and small trend lines, not a nine-colour legend; every chart sits beside a table with the same numbers. | Brand colours are for identity. Nine series colours cannot be told apart reliably. |
+| P2-4 | The Overview only shows a number if the person may read the records behind it (staff without payment access see no revenue). | "Limited to what their business admin grants" applies to summaries too. |
+| P2-5 | The executive dashboard's "Orders" column shows "—" for a business whose module has not defined its unit of work. | A zero would read as "no orders" rather than "not tracked yet". |
+| P2-6 | Imports: at most 2,000 rows per file; all rows or none; every imported row is created and logged like any other record; a file goes into live once. | Keeps an import reviewable and makes a repeat impossible. |
+| P2-7 | Module settings are edited through a form generated from the fields the module declares; the module's schema validates them. | No settings screen has to be hand-built per module. |
+| P2-8 | The command palette and "g then letter" shortcuts read the current business's tabs from the page itself. | They can then never offer a tab the person is not allowed to open. |
+| P2-9 | Customer and field portal hosts use the console's login and roles for now. **NEEDS JAI REVIEW** when the first customer portal is planned. | How customers sign in depends on the undecided identity provider. No module defines such a portal yet, so the routes answer "not found". |
+| P2-10 | Screenshots in `docs/screenshots/` are JPEGs. | A hundred full-page PNGs would add roughly 15 MB to the repository. |
+
+| P2-11 | Review gate. A staff member granted the activity log sees only entries about kinds of records they may read. Entries about people, permissions and settings are for admins. Admins, the tech team and executives see the whole log. | Otherwise the log was a side door to payments and people data the same person could not open directly. |
+| P2-12 | Review gate. "A file goes into live once" is guaranteed by the database (a unique index) and simultaneous clicks wait for each other; the same for the sandbox step. | Three simultaneous clicks imported the file three times. |
+| P2-13 | Review gate. Uploads through a form may be up to 10 MB (the framework's default cap was 1 MB). Unreadable or malformed CSV files are refused with a plain message. | The form promised 10 MB. |
+| P2-14 | **NEEDS JAI REVIEW.** An imported file is real data, and it goes into the sandbox first (A12), where anyone with test-mode access to that business and permission to read those records can see it, until the sandbox is reset. A11 says the sandbox holds only fake data. | Both decisions were approved; together they mean the sandbox briefly holds real data during an import. Options: accept it (reset the sandbox after checking an import), or give imports their own staging area. |
+
+### Accent colours (P2-1)
+
+| Business | Brand colour (brief) | Final accent | Change |
+|---|---|---|---|
+| Hired Hands Moving Company | `#1F4E9C` blue | `#1F4E9C` | none |
+| Student Agencies Real Estate | `#5A5A5A` slate gray | `#6B6B6B` | slightly lighter, to separate it from the two near-blacks |
+| Big Red Shipping & Storage | `#E2231A` red | `#E2231A` | none (it keeps the pure red) |
+| The Cornellian | `#1A1A1A` near-black | `#1A1A1A` | none |
+| Cornell Freshman Register | `#C8102E` red | `#C2185B` | shifted toward raspberry |
+| Student Agencies Tutoring | `#8B1E2D` maroon | `#6B1238` | deeper wine |
+| Cornell Bigger Beds | `#9B1C1C` dark red | `#D9580D` | shifted to burnt orange |
+| Big Red Mailroom | `#B3322A` brick red | `#7A5230` | shifted to brick brown |
+| Campus Promotions | `#111111` black | `#3A3F6B` | dark indigo, to separate it from The Cornellian |
 
 ## BRSS business questions (B1–B12)
 
