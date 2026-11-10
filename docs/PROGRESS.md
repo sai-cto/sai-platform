@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: Phase 2 (console) built and verified; independent review gate in progress._
+_Last updated: Phase 2 (console) passed its review gate and is merged to `main`._
 
 ## In plain English
 
@@ -26,9 +26,9 @@ App tab says "No app yet". The BRSS staff portal is Phase 4.
 ## Current phase and task
 
 - **Phase 1 — shared core.** ✅ Done. Passed the independent review gate after four rounds (see below) and merged to `main`.
-- **Phase 2 — SAI Console**, on branch `phase-2-console`: built; UI gate done (110 screenshots); independent review gate running.
-- **Phase 3 — module scaffolds**, on branch `phase-3-scaffolds` (built on top of Phase 2): built and verified; review gate follows Phase 2's.
-- Next: **Phase 4 — BRSS proof module**, on branch `phase-4-brss`.
+- **Phase 2 — SAI Console.** ✅ Done. UI gate done (110 screenshots); passed the independent review gate after three rounds (see below) and merged to `main`.
+- **Phase 3 — module scaffolds**, on branch `phase-3-scaffolds`: built and verified; independent review gate running.
+- Next: **Phase 4 — BRSS proof module**, on branch `phase-4-brss` (in progress).
 
 ## Acceptance criteria (final)
 
@@ -49,8 +49,8 @@ App tab says "No app yet". The BRSS staff portal is Phase 4.
 |---|---|
 | 0 — Plan | ✅ merged to `main` (Checkpoint 1 approved 10 Nov 2026) |
 | 1 — Shared core | ✅ merged to `main` |
-| 2 — SAI Console | 🔨 in progress |
-| 3 — Module scaffolds | 🔨 built, review gate pending |
+| 2 — SAI Console | ✅ merged to `main` |
+| 3 — Module scaffolds | 🔨 built, review gate running |
 | 4 — BRSS proof module | ⏳ |
 
 ## Last verification
@@ -125,15 +125,40 @@ red monograms (colours adjusted, DECISIONS P2-1); a search form that stacked on 
 business name being cut off on a phone; the Overview scrolling sideways on a phone once there was
 recent activity; badges wrapping inside table cells; and a chart bug that dropped today's bar.
 
+Review gate (independent reviewer subagent, no access to the author's reasoning):
+
+| Round | Result | What happened next |
+|---|---|---|
+| 1 | 0 critical · 0 high · 3 medium · 15 minor | All medium fixed (a file could be imported into live twice by two simultaneous clicks; uploads over 1 MB failed; staff granted the activity log could read entries about payments and people). Minor items fixed too. |
+| 2 | 1 medium · 6 minor | Fixed: re-checking a file with a different column mapping at the same moment as its sandbox import could let a mapping that never ran in the sandbox be imported into live. Minor items fixed (activity count for staff, date filter on clock-change days, export limit notice, wording). |
+| 3 | **Nothing above minor.** Gate passed. | One more minor item fixed (a mistyped year in the date filter caused an error page). |
+
+No round found a way for a user to see another business's data. Left as known minor items:
+route pages in a module's portal must be plain server components (documented in
+`MODULE_GUIDE.md` with Phase 3); a file larger than 11 MB shows the framework's own error rather
+than our message; the new import-race test relies on timing (it can fail falsely on a very slow
+machine, never pass falsely).
+
+Final numbers for Phase 2:
+
+```
+npm run check
+  tsc --noEmit            clean
+  eslint                  clean
+  vitest run              Test Files 9 passed (9) · Tests 322 passed (322)
+  secret scan             clean (299 files)
+npm run test:e2e          37 passed
+```
+
 ### Phase 3 — module scaffolds (10 Nov 2026)
 
 ```
 npm run check
   tsc --noEmit            clean
   eslint                  clean
-  vitest run              Test Files 10 passed (10) · Tests 335 passed (335)
-  secret scan             clean
-npm run test:e2e          39 passed
+  vitest run              Test Files 10 passed (10) · Tests 340 passed (340)
+  secret scan             clean (378 files)
+npm run test:e2e          41 passed
 git diff phase-2-console..phase-3-scaffolds --stat -- src/core src/app
                           only comment wording in two core files (example names made generic)
 ```

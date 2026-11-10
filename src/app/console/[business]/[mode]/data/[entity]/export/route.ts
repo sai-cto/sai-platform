@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import Papa from 'papaparse';
 import { ForbiddenError, NotFoundError } from '@/core/errors';
 import { findEntity } from '@/core/modules/registry';
-import { exportRecords, safeCell } from '@/core/records/export';
+import { EXPORT_LIMIT, exportCell, exportRecords } from '@/core/records/export';
 import { buildBusinessContext } from '@/core/tenancy/context';
 import { currentUserId } from '@/server/session';
 
@@ -22,13 +22,13 @@ export async function GET(
     if (!entity) return notFound;
     const url = new URL(request.url);
     const show = url.searchParams.get('show');
-    const { columns, rows } = await exportRecords(ctx, entity, {
+    const { columns, rows, total } = await exportRecords(ctx, entity, {
       search: url.searchParams.get('q') ?? undefined,
       archived: show === 'archived' ? 'only' : show === 'all' ? 'include' : 'exclude',
     });
     const csv = Papa.unparse({
       fields: columns.map((c) => c.label),
-      data: rows.map((row) => columns.map((c) => safeCell(row[c.key]))),
+      data: rows.map((row) => columns.map((c) => exportCell(row[c.key], c.format))),
     });
     const filename = `${ctx.business.slug}-${entity.key.replace(/\./g, '-')}-${ctx.environment}-${new Date().toISOString().slice(0, 10)}.csv`;
     return new NextResponse(csv, {
@@ -36,6 +36,8 @@ export async function GET(
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="${filename}"`,
         'Cache-Control': 'no-store',
+        // Tells the caller when the export was cut off at the limit.
+        'X-Export-Rows': `${rows.length} of ${total}${total > EXPORT_LIMIT ? ' (limit reached: narrow the search)' : ''}`,
       },
     });
   } catch (error) {

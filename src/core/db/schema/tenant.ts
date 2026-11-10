@@ -174,5 +174,13 @@ export const importJobs = tenantTable(
     fingerprint: text('fingerprint').notNull().default(''),
     completedOn: date('completed_on'),
   },
-  (t) => [sameTenant('import_jobs_file_fk', t, t.fileId, files)],
+  (t) => [
+    sameTenant('import_jobs_file_fk', t, t.fileId, files),
+    // The same file and mapping can go into LIVE only once: the database refuses a second.
+    uniqueIndex('import_jobs_live_once')
+      .on(t.businessId, t.fingerprint)
+      .where(
+        sql`${t.environment} = 'live' and ${t.status} = 'imported' and ${t.fingerprint} <> ''`,
+      ),
+  ],
 );

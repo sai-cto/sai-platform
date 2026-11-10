@@ -5,7 +5,7 @@
  *
  * How to write one: docs/MODULE_GUIDE.md.
  */
-import type { ComponentType, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { z } from 'zod';
 import type { Scope } from '../db/scope';
 import type { TenantTable } from '../records/types';
@@ -82,7 +82,12 @@ export type RouteDef = {
   title: string;
   /** The permission needed to open this page. */
   permission: string;
-  component: ComponentType<PortalPageProps>;
+  /**
+   * The page: a server-side function (usually async) that takes PortalPageProps and returns
+   * what to show. The platform calls it directly, so it must not be a 'use client' component
+   * and must not use React hooks. See "About route pages" in docs/MODULE_GUIDE.md.
+   */
+  component: (props: PortalPageProps) => ReactNode | Promise<ReactNode>;
 };
 
 export type PortalDef = { nav: NavItem[]; routes: RouteDef[] };

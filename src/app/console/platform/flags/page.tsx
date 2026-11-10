@@ -69,7 +69,7 @@ export default async function FlagsPage() {
         <Card title="Set a flag" className="mt-5">
           <ActionForm action={saveFlagAction} submitLabel="Save flag">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="Flag key" htmlFor="key" help="Lowercase, e.g. brss.new-intake">
+              <Field label="Flag key" htmlFor="key" help="Lowercase, e.g. orders.new-intake">
                 <input id="key" name="key" required list="declared-flags" className={inputClass} />
                 <datalist id="declared-flags">
                   {declared.map((d) => (

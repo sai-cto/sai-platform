@@ -1,21 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { listImportJobs } from '@/core/imports/imports';
-import { Badge, type BadgeTone } from '@/ui/badge';
+import { Badge } from '@/ui/badge';
 import { buttonClass } from '@/ui/button';
 import { formatDateTime, formatNumber } from '@/ui/format';
 import { Card, EmptyState, PageHeader, Table, Td, Th } from '@/ui/layout';
 import { guarded, requirePlatformContext } from '@/server/session';
+import { IMPORT_STATUS } from './_lib/status';
 
 export const metadata: Metadata = { title: 'Data imports' };
-
-export const IMPORT_STATUS: Record<string, [string, BadgeTone]> = {
-  uploaded: ['Uploaded', 'neutral'],
-  dry_run_ok: ['Check passed', 'blue'],
-  dry_run_failed: ['Check failed', 'red'],
-  imported: ['Imported', 'green'],
-  failed: ['Failed', 'red'],
-};
 
 export default async function ImportsPage() {
   const ctx = await requirePlatformContext();

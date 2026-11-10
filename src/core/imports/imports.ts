@@ -13,7 +13,7 @@
  *  - every imported row is created through createRecord, so it is logged like any other.
  */
 import crypto from 'node:crypto';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import Papa from 'papaparse';
 import { logActivity } from '../audit/log';
 import { businesses, importJobs } from '../db/schema';
@@ -24,7 +24,7 @@ import type { EntityDef } from '../modules/contract';
 import { entitiesFor, findEntity } from '../modules/registry';
 import { authorize } from '../rbac/permissions';
 import { importJobEntity } from '../records/core-entities';
-import { createRecord, getRecord, updateRecord } from '../records/records';
+import { createRecord, getRecord, hasPgCode, updateRecord } from '../records/records';
 import type { Row } from '../records/types';
 import type { BusinessContext, PlatformContext } from '../tenancy/context';
 
@@ -45,6 +45,17 @@ export function parseCsv(bytes: Uint8Array): ParsedCsv {
     skipEmptyLines: 'greedy',
     transformHeader: (h) => h.trim(),
   });
+  if (text.includes('\u0000') || text.includes('\uFFFD')) {
+    throw new ValidationError(
+      'The file contains characters that cannot be read. Save it as "CSV UTF-8" and try again.',
+    );
+  }
+  const broken = result.errors.find((e) => e.type === 'Quotes' || e.type === 'FieldMismatch');
+  if (broken) {
+    throw new ValidationError(
+      `The file is not a well-formed CSV (line ${(broken.row ?? 0) + 2}: ${broken.message}).`,
+    );
+  }
   const headers = (result.meta.fields ?? []).filter((h) => h !== '');
   if (headers.length === 0)
     throw new ValidationError('The file has no header row. The first line must name the columns.');
@@ -124,6 +135,18 @@ function mapRows(
   return { values, errors };
 }
 
+const ALREADY_IN_LIVE = 'This exact file and mapping has already been imported into live.';
+
+/**
+ * Makes simultaneous runs of the same import wait for each other (released when the
+ * transaction ends), so "imported once" holds even if two people click at the same moment.
+ */
+async function lockImport(s: Scope, what: string): Promise<void> {
+  await txOf(s).execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`import:${s.ctx.business.id}:${s.ctx.environment}:${what}`}, 0))`,
+  );
+}
+
 /** Step 1: upload. Stores the file and creates the job with a suggested mapping. */
 export async function createImportJob(
   ctx: BusinessContext,
@@ -194,6 +217,9 @@ export async function dryRunImport(
 ): Promise<ImportJob> {
   requireSandbox(ctx);
   return withScope(ctx, 'imports.write', async (s) => {
+    // The same lock as the sandbox import: a check can never rewrite the mapping while that
+    // import is running. It either goes first, or waits and is then refused just below.
+    await lockImport(s, id);
     const { job, entity, csv, bytes } = await loadJob(s, id);
     if (job.status === 'imported')
       throw new ValidationError('This file has already been imported.');
@@ -227,6 +253,7 @@ async function writeRows(
 export async function runSandboxImport(ctx: BusinessContext, id: string): Promise<ImportJob> {
   requireSandbox(ctx);
   return withScope(ctx, 'imports.write', async (s) => {
+    await lockImport(s, id);
     const { job, entity, csv, bytes } = await loadJob(s, id);
     if (job.status === 'imported')
       throw new ValidationError('This file has already been imported into the sandbox.');
@@ -245,10 +272,10 @@ export async function runSandboxImport(ctx: BusinessContext, id: string): Promis
     });
     await logActivity(txOf(s), ctx, {
       action: 'import',
-      entityType: entity.key,
+      entityType: importJobEntity.key,
       entityId: id,
       summary: `Imported ${values.length} ${entity.labelPlural.toLowerCase()} from ${job.filename} into the sandbox`,
-      after: { rows: values.length, file: job.filename },
+      after: { rows: values.length, file: job.filename, into: entity.key },
     });
     return done;
   });
@@ -281,6 +308,9 @@ export async function runLiveImport(
   if (errors.length > 0) throw new ValidationError('The file no longer passes the check.');
 
   return withScope(liveCtx, 'imports.write', async (s) => {
+    // Wait for any other run of this same file, THEN look whether it has already gone in.
+    // (A unique index on live import jobs is the database's own guarantee.)
+    await lockImport(s, source.job.fingerprint);
     const [already] = await s.db
       .select({ id: importJobs.id })
       .from(importJobs)
@@ -292,8 +322,7 @@ export async function runLiveImport(
         ),
       )
       .limit(1);
-    if (already)
-      throw new ValidationError('This exact file and mapping has already been imported into live.');
+    if (already) throw new ValidationError(ALREADY_IN_LIVE);
     await writeRows(s, source.entity, values);
     const job = await createRecord(s, importJobEntity, {
       entityKey: source.entity.key,
@@ -304,15 +333,47 @@ export async function runLiveImport(
       importedCount: values.length,
       fingerprint: source.job.fingerprint,
       completedOn: new Date().toISOString().slice(0, 10),
+    }).catch((error: unknown) => {
+      // The database's own "once only" rule (a unique index). The lock above means this
+      // should never be reached; if it is, the person still gets a plain message.
+      if (hasPgCode(error, '23505')) throw new ValidationError(ALREADY_IN_LIVE);
+      throw error;
     });
     await logActivity(txOf(s), liveCtx, {
       action: 'import',
-      entityType: source.entity.key,
+      entityType: importJobEntity.key,
       entityId: job.id,
       summary: `Imported ${values.length} ${source.entity.labelPlural.toLowerCase()} from ${source.job.filename} into LIVE`,
-      after: { rows: values.length, file: source.job.filename, sandboxJobId },
+      after: {
+        rows: values.length,
+        file: source.job.filename,
+        into: source.entity.key,
+        sandboxJobId,
+      },
     });
     return job;
+  });
+}
+
+/** Has this sandbox job's file already been imported into live? (For the job page.) */
+export async function liveImportOf(
+  liveCtx: BusinessContext,
+  fingerprint: string,
+): Promise<ImportJob | null> {
+  if (!fingerprint) return null;
+  return withScope({ ...liveCtx, environment: 'live' }, 'imports.read', async (s) => {
+    const [row] = await s.db
+      .select()
+      .from(importJobs)
+      .where(
+        and(
+          s.where(importJobs, 'include'),
+          eq(importJobs.fingerprint, fingerprint),
+          eq(importJobs.status, 'imported'),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   });
 }
 

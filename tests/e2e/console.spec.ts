@@ -290,13 +290,35 @@ test('import: CSV → map → check → sandbox → live', async ({ page }) => {
   await page.goto(`/console/cfr/live/data/core.customer?q=${tag}`);
   await expect(page.getByText('1–2 of 2')).toBeVisible();
 
-  // The same file cannot be imported into live twice.
+  // The job page now says it is done and offers no second import.
   await page.goto(jobUrl);
-  await page.getByRole('button', { name: 'Import into live' }).click();
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Import into live' }).click();
-  await expect(page.getByRole('alertdialog').getByRole('alert')).toContainText('already been imported into live');
+  await expect(page.getByText(/2 customers were imported into live/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Import into live' })).toHaveCount(0);
   await page.goto('/console/platform/imports');
   await expect(page.getByRole('row', { name: /good\.csv/ })).toHaveCount(2); // sandbox run + live run
+});
+
+test('a CSV larger than 1 MB uploads (up to the stated 10 MB)', async ({ page }) => {
+  await loginAs(page, SEED.tech);
+  await page.goto('/console/platform/imports/new');
+  await page.getByLabel('Import into').selectOption({ label: 'Campus Promotions — Customers' });
+  const row = `Bulk,Row,,,${'x'.repeat(900)}\n`;
+  const big = Buffer.from(`First name,Last name,Email,Phone,Notes\n${row.repeat(1500)}`); // about 1.4 MB
+  expect(big.byteLength).toBeGreaterThan(1_200_000);
+  await page.getByLabel('CSV file').setInputFiles({ name: 'big.csv', mimeType: 'text/csv', buffer: big });
+  await page.getByRole('button', { name: 'Upload and continue' }).click();
+  await expect(page).toHaveURL(/\/console\/platform\/imports\/cp\//);
+  await expect(page.getByText('1,500 rows').first()).toBeVisible();
+});
+
+test('odd query strings do not break pages', async ({ page }) => {
+  await loginAs(page, SEED.brssAdmin);
+  for (const path of ['/console/brss/live/data/core.customer?q=a&q=b&page=999999999999', '/console/brss/live/activity?q=a&q=b&from=2026-13-45&page=-3']) {
+    expect((await page.request.get(path)).status(), path).toBe(200);
+  }
+  await loginAs(page, SEED.tech);
+  expect((await page.request.get('/console/platform/users?q=a&q=b')).status()).toBe(200);
+  expect((await page.request.get('/console/executive?days=30&days=90')).status()).toBe(200);
 });
 
 test('executive view: nine businesses, all-SAI totals, nothing to edit', async ({ page }) => {

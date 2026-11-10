@@ -20,6 +20,7 @@ safest reversible option. They are collected in the first table so they are easy
 | R-9 | Row-level security covers tenant tables only; platform tables rely on the core's checks and a lint rule (details: G1-10 below). | See G1-10. | See G1-10 |
 | R-10 | Sessions have no idle timeout and expired session rows are not cleaned up (details: G1-11 below). | Needs a scheduled job, which needs hosting. | See G1-11 |
 | R-12 | Accent colours of six businesses were changed from the brand colours so they can be told apart (table under P2-1). | The brief asked for this; the exact colours are a judgement call. | `src/seed/businesses.ts`, then `npm run db:seed` |
+| R-14 | During an import, real data sits in the business's sandbox until it is reset (P2-14). | A11 and A12 pull in different directions. | Decide whether imports need a separate staging area |
 | R-13 | Customer and field portals would use the console's login and roles (P2-9). | No such portal exists yet. | Decide with the identity provider |
 | R-8 | Next.js "Cache Components" is switched off; every page renders per request. | Every console page depends on who is signed in. Per-request rendering is the simplest model for students. Next.js says the feature becomes mandatory in the next major version: see HANDOFF. | `next.config.ts` |
 
@@ -125,6 +126,11 @@ or `tenant-isolation.test.ts`.
 | P2-8 | The command palette and "g then letter" shortcuts read the current business's tabs from the page itself. | They can then never offer a tab the person is not allowed to open. |
 | P2-9 | Customer and field portal hosts use the console's login and roles for now. **NEEDS JAI REVIEW** when the first customer portal is planned. | How customers sign in depends on the undecided identity provider. No module defines such a portal yet, so the routes answer "not found". |
 | P2-10 | Screenshots in `docs/screenshots/` are JPEGs. | A hundred full-page PNGs would add roughly 15 MB to the repository. |
+
+| P2-11 | Review gate. A staff member granted the activity log sees only entries about kinds of records they may read. Entries about people, permissions and settings are for admins. Admins, the tech team and executives see the whole log. | Otherwise the log was a side door to payments and people data the same person could not open directly. |
+| P2-12 | Review gate. "A file goes into live once" is guaranteed by the database (a unique index) and simultaneous clicks wait for each other; the same for the sandbox step. | Three simultaneous clicks imported the file three times. |
+| P2-13 | Review gate. Uploads through a form may be up to 10 MB (the framework's default cap was 1 MB). Unreadable or malformed CSV files are refused with a plain message. | The form promised 10 MB. |
+| P2-14 | **NEEDS JAI REVIEW.** An imported file is real data, and it goes into the sandbox first (A12), where anyone with test-mode access to that business and permission to read those records can see it, until the sandbox is reset. A11 says the sandbox holds only fake data. | Both decisions were approved; together they mean the sandbox briefly holds real data during an import. Options: accept it (reset the sandbox after checking an import), or give imports their own staging area. |
 
 ### Accent colours (P2-1)
 

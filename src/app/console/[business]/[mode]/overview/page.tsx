@@ -87,6 +87,7 @@ export default async function OverviewPage({
 
   return (
     <div className="space-y-5">
+      <h1 className="sr-only">Overview</h1>
       <section aria-label="Key numbers" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {data.workItems !== null && mod?.workItem ? (
           <Stat

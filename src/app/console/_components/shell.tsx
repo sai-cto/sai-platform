@@ -276,7 +276,9 @@ export function Shell({
       const typing =
         target &&
         (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
-      if (typing || event.metaKey || event.ctrlKey || event.altKey) return;
+      // Single-key shortcuts are off while typing, and while any dialog or menu is open.
+      const dialogOpen = document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
+      if (typing || dialogOpen || event.metaKey || event.ctrlKey || event.altKey) return;
 
       if (event.key === '[' || event.key === ']') {
         if (businesses.length === 0) return;

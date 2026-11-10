@@ -57,6 +57,8 @@ export async function setFlag(
   input: { key: string; businessId: string | null; enabled: boolean; description?: string },
 ): Promise<void> {
   authorize(ctx, 'platform.flags.write');
+  if (typeof input.key !== 'string' || typeof input.enabled !== 'boolean')
+    throw new ValidationError('That flag is not valid.');
   const key = input.key.trim();
   if (!/^[a-z0-9][a-z0-9._-]{1,60}$/.test(key)) {
     throw new ValidationError(
