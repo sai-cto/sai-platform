@@ -6,7 +6,8 @@
  * place besides purgeRecord() that deletes tenant rows, and it can only touch sandbox rows:
  * the scope it runs in is forced to 'sandbox', and row-level security enforces that.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
+import { activityLog } from '../db/schema';
 import { logActivity } from '../audit/log';
 import { txOf, withScope, type Scope } from '../db/scope';
 import { entitiesFor, getModule } from '../modules/registry';
@@ -43,5 +44,29 @@ export async function resetSandbox(ctx: BusinessContext): Promise<void> {
       entityId: ctx.business.slug,
       summary: `Reset the ${ctx.business.name} sandbox to fresh fake data`,
     });
+  });
+}
+
+export type SandboxSummary = {
+  counts: { entityKey: string; label: string; rows: number }[];
+  lastResetAt: Date | null;
+  lastResetBy: string | null;
+};
+
+/** What is in a business's sandbox right now, and when it was last reset. */
+export async function sandboxSummary(ctx: BusinessContext): Promise<SandboxSummary> {
+  const sandboxCtx: BusinessContext = { ...ctx, environment: 'sandbox' };
+  return withScope(sandboxCtx, 'business.sandbox.use', async (s) => {
+    const counts = [];
+    for (const entity of entitiesFor(ctx.business.moduleKey)) {
+      counts.push({ entityKey: entity.key, label: entity.labelPlural, rows: await s.db.$count(entity.table, s.where(entity.table)) });
+    }
+    const [reset] = await s.db
+      .select({ at: activityLog.occurredAt, by: activityLog.actorName })
+      .from(activityLog)
+      .where(and(eq(activityLog.businessId, ctx.business.id), eq(activityLog.action, 'sandbox_reset')))
+      .orderBy(desc(activityLog.occurredAt))
+      .limit(1);
+    return { counts, lastResetAt: reset?.at ?? null, lastResetBy: reset?.by ?? null };
   });
 }

@@ -221,6 +221,11 @@ export function purgeEligibleAt(archivedAt: Date, retentionDays: number): Date {
   return new Date(archivedAt.getTime() + retentionDays * 24 * 60 * 60 * 1000);
 }
 
+/** Has this archived record passed the retention window? */
+export function isPurgeEligible(archivedAt: Date, retentionDays: number): boolean {
+  return purgeEligibleAt(archivedAt, retentionDays).getTime() <= Date.now();
+}
+
 /**
  * Permanent delete. super_admin only, and only for a record that has been archived for
  * longer than the retention window. The log keeps a tombstone (who, what, when), not the
@@ -236,7 +241,7 @@ export async function purgeRecord<T extends TenantTable>(
   const row = await findInScope(s, entity.table, id, 'only');
   const retentionDays = await getRetentionDays(txOf(s));
   const eligibleAt = purgeEligibleAt(row.archivedAt as Date, retentionDays);
-  if (eligibleAt.getTime() > Date.now()) {
+  if (!isPurgeEligible(row.archivedAt as Date, retentionDays)) {
     throw new ValidationError(
       `This record can be permanently deleted on ${eligibleAt.toISOString().slice(0, 10)} (${retentionDays} days after it was archived).`,
     );

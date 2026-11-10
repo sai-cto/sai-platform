@@ -91,6 +91,14 @@ export type WidgetDef = {
 
 export type HealthCheck = { name: string; ok: boolean; detail: string };
 
+/** One input in the module's Settings form. */
+export type SettingField = {
+  key: string;
+  label: string;
+  type: 'number' | 'text' | 'boolean';
+  help?: string;
+};
+
 export type ModuleManifest = {
   /** Must equal the slug of the business this module serves, e.g. "brss". */
   key: string;
@@ -118,7 +126,12 @@ export type ModuleManifest = {
     entityKey: string;
   };
   /** Module configuration, edited in the console's Settings tab. */
-  settings?: { schema: z.ZodType<Record<string, unknown>>; defaults: Record<string, unknown> };
+  settings?: {
+    schema: z.ZodType<Record<string, unknown>>;
+    defaults: Record<string, unknown>;
+    /** How each setting is shown in the Settings form. */
+    fields: SettingField[];
+  };
   featureFlags?: { key: string; description: string }[];
   /** Fills a business with fake data. Used for the sandbox and for local demo data. */
   seedDemoData?: (s: Scope) => Promise<void>;

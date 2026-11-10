@@ -7,6 +7,7 @@ import type { BusinessContext, PlatformContext } from '../tenancy/context';
 export type ActivityFilters = {
   action?: string;
   entityType?: string;
+  entityId?: string;
   actorUserId?: string;
   search?: string;
   from?: Date;
@@ -23,6 +24,7 @@ function conditions(filters: ActivityFilters): (SQL | undefined)[] {
   return [
     filters.action ? eq(activityLog.action, filters.action) : undefined,
     filters.entityType ? eq(activityLog.entityType, filters.entityType) : undefined,
+    filters.entityId ? eq(activityLog.entityId, filters.entityId) : undefined,
     filters.actorUserId && /^[0-9a-f-]{36}$/i.test(filters.actorUserId)
       ? eq(activityLog.actorUserId, filters.actorUserId)
       : undefined,

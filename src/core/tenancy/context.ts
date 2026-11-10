@@ -32,6 +32,8 @@ export type BusinessRef = {
   code: string;
   name: string;
   timeZone: string;
+  accentColor: string;
+  description: string;
   moduleKey: string | null;
 };
 
@@ -80,6 +82,8 @@ async function loadBusiness(slug: string): Promise<BusinessRef | null> {
       code: businesses.code,
       name: businesses.name,
       timeZone: businesses.timeZone,
+      accentColor: businesses.accentColor,
+      description: businesses.description,
       moduleKey: businessModules.moduleKey,
       moduleEnabled: businessModules.enabled,
     })
@@ -88,7 +92,8 @@ async function loadBusiness(slug: string): Promise<BusinessRef | null> {
     .where(eq(businesses.slug, slug))
     .limit(1);
   if (!row) return null;
-  return { ...row, moduleKey: row.moduleEnabled ? row.moduleKey : null };
+  const { moduleEnabled, ...business } = row;
+  return { ...business, moduleKey: moduleEnabled ? business.moduleKey : null };
 }
 
 /**
