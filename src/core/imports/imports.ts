@@ -24,7 +24,7 @@ import type { EntityDef } from '../modules/contract';
 import { entitiesFor, findEntity } from '../modules/registry';
 import { authorize } from '../rbac/permissions';
 import { importJobEntity } from '../records/core-entities';
-import { createRecord, getRecord, updateRecord } from '../records/records';
+import { createRecord, getRecord, hasPgCode, updateRecord } from '../records/records';
 import type { Row } from '../records/types';
 import type { BusinessContext, PlatformContext } from '../tenancy/context';
 
@@ -135,6 +135,8 @@ function mapRows(
   return { values, errors };
 }
 
+const ALREADY_IN_LIVE = 'This exact file and mapping has already been imported into live.';
+
 /**
  * Makes simultaneous runs of the same import wait for each other (released when the
  * transaction ends), so "imported once" holds even if two people click at the same moment.
@@ -215,6 +217,9 @@ export async function dryRunImport(
 ): Promise<ImportJob> {
   requireSandbox(ctx);
   return withScope(ctx, 'imports.write', async (s) => {
+    // The same lock as the sandbox import: a check can never rewrite the mapping while that
+    // import is running. It either goes first, or waits and is then refused just below.
+    await lockImport(s, id);
     const { job, entity, csv, bytes } = await loadJob(s, id);
     if (job.status === 'imported')
       throw new ValidationError('This file has already been imported.');
@@ -317,8 +322,7 @@ export async function runLiveImport(
         ),
       )
       .limit(1);
-    if (already)
-      throw new ValidationError('This exact file and mapping has already been imported into live.');
+    if (already) throw new ValidationError(ALREADY_IN_LIVE);
     await writeRows(s, source.entity, values);
     const job = await createRecord(s, importJobEntity, {
       entityKey: source.entity.key,
@@ -329,6 +333,11 @@ export async function runLiveImport(
       importedCount: values.length,
       fingerprint: source.job.fingerprint,
       completedOn: new Date().toISOString().slice(0, 10),
+    }).catch((error: unknown) => {
+      // The database's own "once only" rule (a unique index). The lock above means this
+      // should never be reached; if it is, the person still gets a plain message.
+      if (hasPgCode(error, '23505')) throw new ValidationError(ALREADY_IN_LIVE);
+      throw error;
     });
     await logActivity(txOf(s), liveCtx, {
       action: 'import',

@@ -64,7 +64,7 @@ export default async function ExecutivePage({
         />
         <Stat label={`Payments · ${period}`} value={formatNumber(data.totals.payments)} />
         <Stat
-          label={`Orders · ${period}`}
+          label={`Work items · ${period}`}
           value={formatNumber(data.totals.workItems)}
           hint="from businesses whose module tracks them"
         />
@@ -128,7 +128,7 @@ export default async function ExecutivePage({
                   {r.workItems === null ? (
                     <span
                       className="text-zinc-400"
-                      title="This business's module does not track orders yet"
+                      title="This business's module does not count work items yet"
                     >
                       —
                     </span>

@@ -1,5 +1,7 @@
 /** Core services added with the console: imports, CSV export, executive dashboard, registry report, health. */
 import { describe, expect, it } from 'vitest';
+import { parseActivitySearch } from '@/app/console/_components/activity-filters';
+import { activityCount, lastDays } from '@/core/analytics/analytics';
 import { executiveDashboard } from '@/core/analytics/executive';
 import { listBusinessActivity } from '@/core/audit/read';
 import { listCustomers } from '@/core/customers/customers';
@@ -127,6 +129,33 @@ describe('imports: CSV → map → check → sandbox → live', () => {
     expect((await listCustomers(live, { search: t })).total).toBe(2);
   });
 
+  it('re-checking with a different mapping while the sandbox import runs can never put an unchecked mapping into live', async () => {
+    const t = tag();
+    const sandbox = await ctxFor(USERS.tech, 'cp', 'sandbox');
+    const live = await ctxFor(USERS.tech, 'cp', 'live');
+    const platform = await platformCtxFor(USERS.tech);
+    const rows = Array.from({ length: 40 }, (_, i) => `${t}First${i},${t}Alt${i},Last`).join('\n');
+    const job = await createImportJob(sandbox, { entityKey: 'core.customer', filename: 'interleave.csv', bytes: csv(`First,Alt,Last\n${rows}\n`) });
+    await dryRunImport(sandbox, job.id, { firstName: 'First', lastName: 'Last' });
+
+    // The check starts a moment after the import, i.e. while the import is still writing rows.
+    const [imported, rechecked] = await Promise.allSettled([
+      runSandboxImport(sandbox, job.id),
+      new Promise((resolve) => setTimeout(resolve, 15)).then(() => dryRunImport(sandbox, job.id, { firstName: 'Alt', lastName: 'Last' })),
+    ]);
+    expect(imported.status).toBe('fulfilled');
+    // The check waited for the import and was then refused: the job keeps the mapping that went in.
+    expect(rechecked.status).toBe('rejected');
+    expect((rechecked as PromiseRejectedResult).reason).toBeInstanceOf(ValidationError);
+    const after = (await getImportJob(sandbox, job.id)).job;
+    expect(after.status).toBe('imported');
+    expect(after.mapping).toEqual({ firstName: 'First', lastName: 'Last' });
+
+    await runLiveImport(platform, live, job.id);
+    expect((await listCustomers(live, { search: `${t}First`, limit: 100 })).total).toBe(40);
+    expect((await listCustomers(live, { search: `${t}Alt`, limit: 100 })).total).toBe(0);
+  });
+
   it('files that cannot be read cleanly are refused with a plain message', () => {
     expect(() => parseCsv(csv('First,Last\nA\u0000,B\n'))).toThrow(/cannot be read/);
     expect(() => parseCsv(new Uint8Array([70, 105, 114, 115, 116, 10, 0xff, 0xfe, 10]))).toThrow(/cannot be read/);
@@ -238,6 +267,11 @@ describe('the activity log, for staff who were granted it', () => {
     // Asking for payment entries by name does not get round it.
     expect((await listBusinessActivity(staff, { entityType: 'core.payment' })).total).toBe(0);
     expect((await listBusinessActivity(staff, { entityType: 'membership' })).total).toBe(0);
+    // Numbers counted from the log follow the same rule: the Overview count is what they could list.
+    const week = lastDays(7, new Date(Date.now() + 60_000));
+    const listed = (await listBusinessActivity(staff, { from: week.from, to: week.to })).total;
+    expect(await withScope(staff, 'business.activity.read', (s) => activityCount(s, week))).toBe(listed);
+    expect(await withScope(admin, 'business.activity.read', (s) => activityCount(s, week))).toBeGreaterThan(listed);
 
     // Admins and executives see every kind of entry.
     for (const ctx of [admin, await ctxFor(USERS.executive, 'brss')]) {
@@ -246,5 +280,22 @@ describe('the activity log, for staff who were granted it', () => {
       }
     }
     await removeMember(admin, membershipId);
+  });
+});
+
+describe('activity log date filters', () => {
+  it('"From" and "To" are whole days in Ithaca time, including the days the clocks change', () => {
+    const range = (from: string, to: string) => {
+      const { filters } = parseActivitySearch({ from, to });
+      return [filters.from?.toISOString(), filters.to?.toISOString()];
+    };
+    // An ordinary winter day: midnight to midnight, UTC-5.
+    expect(range('2026-01-15', '2026-01-15')).toEqual(['2026-01-15T05:00:00.000Z', '2026-01-16T05:00:00.000Z']);
+    // Clocks go forward on 8 March 2026: the day is 23 hours long.
+    expect(range('2026-03-08', '2026-03-08')).toEqual(['2026-03-08T05:00:00.000Z', '2026-03-09T04:00:00.000Z']);
+    // Clocks go back on 1 November 2026: the day is 25 hours long.
+    expect(range('2026-11-01', '2026-11-01')).toEqual(['2026-11-01T04:00:00.000Z', '2026-11-02T05:00:00.000Z']);
+    // A date that does not exist is ignored, not moved to another day.
+    expect(range('2026-02-30', '2026-02-30')).toEqual([undefined, undefined]);
   });
 });

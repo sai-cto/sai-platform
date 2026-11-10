@@ -3,13 +3,14 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { withScope } from '@/core/db/scope';
 import { findEntity } from '@/core/modules/registry';
+import { EXPORT_LIMIT } from '@/core/records/export';
 import { isPurgeEligible, listRecords, purgeEligibleAt } from '@/core/records/records';
 import { getRetentionDays } from '@/core/settings/platform';
 import { Badge } from '@/ui/badge';
 import { buttonClass } from '@/ui/button';
 import { cn } from '@/ui/cn';
 import { ConfirmButton } from '@/ui/confirm-button';
-import { formatDate, formatValue } from '@/ui/format';
+import { formatDate, formatNumber, formatValue } from '@/ui/format';
 import { Card, EmptyState, PageHeader, Table, Td, Th, inputClass } from '@/ui/layout';
 import { Pagination } from '@/ui/pagination';
 import {
@@ -82,9 +83,17 @@ export default async function EntityPage({
         }
         actions={
           canExport ? (
-            <a href={`${base}/export${query({})}`} className={buttonClass()}>
-              Export CSV
-            </a>
+            <>
+              {total > EXPORT_LIMIT ? (
+                <span className="text-xs text-amber-800">
+                  An export holds the first {formatNumber(EXPORT_LIMIT)} of these{' '}
+                  {formatNumber(total)} rows. Search to narrow it down.
+                </span>
+              ) : null}
+              <a href={`${base}/export${query({})}`} className={buttonClass()}>
+                Export CSV
+              </a>
+            </>
           ) : null
         }
       />

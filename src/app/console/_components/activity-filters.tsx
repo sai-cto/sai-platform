@@ -46,9 +46,15 @@ export function parseActivitySearch(
   // "From" and "To" are days in the business's time zone (Ithaca time by default).
   const day = (value: string | undefined, endOfDay: boolean) => {
     if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
-    const start = startOfDayIn(value, timeZone);
-    if (!start) return undefined;
-    return endOfDay ? new Date(start.getTime() + 24 * 60 * 60 * 1000) : start;
+    const calendar = new Date(`${value}T00:00:00Z`);
+    // A date that does not exist (30 February) is ignored rather than quietly moved.
+    if (Number.isNaN(calendar.getTime()) || calendar.toISOString().slice(0, 10) !== value)
+      return undefined;
+    if (!endOfDay) return startOfDayIn(value, timeZone);
+    // "To" includes the whole day: up to midnight at the start of the NEXT calendar day
+    // (not "plus 24 hours", which is an hour out on the two days the clocks change).
+    const nextDay = new Date(calendar.getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    return startOfDayIn(nextDay, timeZone);
   };
   const parsedPage = Number.parseInt(first(raw.page) ?? '1', 10);
   const page = Number.isInteger(parsedPage) && parsedPage >= 1 ? Math.min(parsedPage, 100_000) : 1;
