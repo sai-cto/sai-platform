@@ -21,7 +21,7 @@ import {
 } from '../actions';
 import { buildingEntity } from '../entities';
 import { CORE, P } from '../permissions';
-import { crewCandidates, listTrucks } from '../services/appointments';
+import { listTrucks } from '../services/appointments';
 import { warehouseCounts } from '../services/articles';
 import { getPlaces } from '../services/catalog';
 import { CAMPUS_LABELS, Disclosure, Select } from './parts';
@@ -30,11 +30,10 @@ export async function OperationsPage({ ctx, basePath }: PortalPageProps) {
   const slug = ctx.business.slug;
   const mode = ctx.environment;
   const seesTrucks = can(ctx, CORE.schedulingRead);
-  const [places, counts, trucks, candidates] = await Promise.all([
+  const [places, counts, trucks] = await Promise.all([
     getPlaces(ctx),
     can(ctx, P.articlesRead) ? warehouseCounts(ctx) : [],
     seesTrucks ? listTrucks(ctx) : [],
-    crewCandidates(ctx),
   ]);
   const canCatalog = can(ctx, P.catalogWrite);
   const canSchedule = can(ctx, CORE.schedulingWrite);
@@ -125,20 +124,8 @@ export async function OperationsPage({ ctx, basePath }: PortalPageProps) {
                     </ul>
                     {canSchedule && truck.isActive ? (
                       <ActionForm action={addCrewAction.bind(null, slug, mode, truck.id)} submitLabel="Add to crew" className="flex flex-wrap items-end gap-3 space-y-0">
-                        {candidates.length > 0 ? (
-                          <Field label="Team member" htmlFor={`crew-user-${truck.id}`}>
-                            <Select id={`crew-user-${truck.id}`} name="userId" className="w-52" defaultValue="">
-                              <option value="">Someone without a login</option>
-                              {candidates.map((candidate) => (
-                                <option key={candidate.userId} value={candidate.userId}>
-                                  {candidate.name}
-                                </option>
-                              ))}
-                            </Select>
-                          </Field>
-                        ) : null}
-                        <Field label={candidates.length > 0 ? 'or a name' : 'Name'} htmlFor={`crew-name-${truck.id}`}>
-                          <input id={`crew-name-${truck.id}`} name="name" maxLength={120} className={`${inputClass} w-52`} />
+                        <Field label="Name" htmlFor={`crew-name-${truck.id}`}>
+                          <input id={`crew-name-${truck.id}`} name="name" required maxLength={120} className={`${inputClass} w-52`} />
                         </Field>
                       </ActionForm>
                     ) : null}

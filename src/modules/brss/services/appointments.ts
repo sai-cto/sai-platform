@@ -13,7 +13,6 @@ import { withScope, type Scope } from '@/core/db/scope';
 import { NotFoundError, ValidationError } from '@/core/errors';
 import { isUuid } from '@/core/ids';
 import { sendNotification } from '@/core/notifications/notifications';
-import { listMembers } from '@/core/people/memberships';
 import { authorize, can } from '@/core/rbac/permissions';
 import {
   appointmentEntity,
@@ -178,7 +177,7 @@ const bookingInput = whenInput.extend({
 async function crewOf(s: Scope, truckId: string | null): Promise<CrewMember[]> {
   if (!truckId) return [];
   const crew = await s.db
-    .select({ userId: brssTruckCrew.userId, name: brssTruckCrew.name })
+    .select({ name: brssTruckCrew.name })
     .from(brssTruckCrew)
     .where(and(s.where(brssTruckCrew), eq(brssTruckCrew.truckId, truckId)))
     .orderBy(asc(brssTruckCrew.name));
@@ -615,35 +614,15 @@ export function setTruckActive(ctx: BusinessContext, id: string, isActive: boole
   });
 }
 
-const crewInput = z.object({ userId: optionalId, name: optionalText(120) });
-
-/**
- * Adds someone to a truck's usual crew: a team member with a login (chosen from the list,
- * which needs "See who has access"), or just a name.
- */
-export async function addCrewMember(ctx: BusinessContext, truckId: string, raw: unknown) {
-  const input = parse(crewInput, raw);
-  let name = input.name;
-  if (input.userId) {
-    const member = (await listMembers(ctx)).find((m) => m.userId === input.userId && m.isActive);
-    if (!member) throw new ValidationError('Choose a team member from the list.');
-    name = member.name;
-  }
-  if (!name) throw new ValidationError('Choose a team member or enter a name.');
+/** Adds someone, by name, to a truck's usual crew. */
+export function addCrewMember(ctx: BusinessContext, truckId: string, raw: unknown) {
+  const { name } = parse(z.object({ name: requiredText('a name', 120) }), raw);
   return withScope(ctx, CORE.schedulingWrite, async (s) => {
     await assertTruck(s, truckId);
-    return createRecord(s, truckCrewEntity, { truckId, userId: input.userId, name });
+    return createRecord(s, truckCrewEntity, { truckId, name });
   });
 }
 
 export function removeCrewMember(ctx: BusinessContext, crewId: string) {
   return withScope(ctx, CORE.schedulingWrite, (s) => archiveRecord(s, truckCrewEntity, crewId));
-}
-
-/** Team members who can be put on a crew; empty for people who may not see the member list. */
-export async function crewCandidates(ctx: BusinessContext) {
-  if (!can(ctx, 'business.people.read')) return [];
-  return (await listMembers(ctx))
-    .filter((m) => m.isActive)
-    .map((m) => ({ userId: m.userId, name: m.name }));
 }

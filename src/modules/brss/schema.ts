@@ -205,7 +205,7 @@ export const brssOrderItems = tenantTable(
 // ---- scheduling (extends the core's appointments, resources and unavailability) -------------
 
 export type AppointmentType = 'pickup' | 'delivery' | 'packing' | 'supplies';
-export type CrewMember = { userId: string | null; name: string };
+export type CrewMember = { name: string };
 
 /** BRSS's extra facts about a core appointment (same row count: one per appointment). */
 export const brssAppointments = tenantTable(
@@ -241,13 +241,15 @@ export const brssAppointments = tenantTable(
   ],
 );
 
-/** Who normally rides a truck. The truck itself is a core resource of kind "truck". */
+/**
+ * Who normally rides a truck, by name. (In Salesforce these were Contacts, not logins; a link
+ * to a user account can be added once crews sign in.) The truck itself is a core resource of
+ * kind "truck".
+ */
 export const brssTruckCrew = tenantTable(
   'brss_truck_crew',
   {
     truckId: uuid('truck_id').notNull(),
-    /** The crew member's user id, when they have a login. Not a database link: users are a platform table. */
-    userId: uuid('user_id'),
     name: text('name').notNull(),
   },
   (t) => [sameTenant('brss_truck_crew_truck_fk', t, t.truckId, resources)],

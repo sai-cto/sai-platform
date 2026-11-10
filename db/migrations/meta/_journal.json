@@ -43,6 +43,13 @@
       "when": 1794299075870,
       "tag": "0005_import_live_once",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794322997008,
+      "tag": "0006_brss_module",
+      "breakpoints": true
     }
   ]
 }

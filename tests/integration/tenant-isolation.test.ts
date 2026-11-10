@@ -83,7 +83,7 @@ describe.each(OTHERS)('records: hhmc admin vs %s', (other) => {
       for (const environment of ['live', 'sandbox'] as const) {
         const theirRow = await arrange(other, environment, (s) => ensureRow(s, entity));
         const theirArchivedRow = await arrange(other, environment, async (s) => {
-          const id = await ensureRow(s, entity);
+          const id = await ensureRow(s, entity, theirRow);
           await archiveRecord(s, entity, id);
           return id;
         });
@@ -132,6 +132,8 @@ describe.each(OTHERS)('records: hhmc admin vs %s', (other) => {
         await arrange(other, environment, async (s) => {
           await expect(getRecord(s, entity, theirRow)).resolves.toBeTruthy();
           await expect(getRecord(s, entity, theirArchivedRow, 'only')).resolves.toBeTruthy();
+          // Put the archived row back, so a module's seeded rows stay usable by later tests.
+          await restoreRecord(s, entity, theirArchivedRow);
         });
       }
     },

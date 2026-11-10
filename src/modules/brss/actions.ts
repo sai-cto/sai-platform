@@ -454,7 +454,7 @@ export async function addCrewAction(
   form: FormData,
 ) {
   return run(slug, mode, async (ctx) => {
-    await addCrewMember(ctx, truckId, { userId: text(form, 'userId'), name: text(form, 'name') });
+    await addCrewMember(ctx, truckId, { name: text(form, 'name') });
     return 'Added.';
   });
 }

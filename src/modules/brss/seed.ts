@@ -414,12 +414,12 @@ export async function seedDemoData(s: Scope): Promise<void> {
   const crewRows = trucks.flatMap((truck, t) =>
     Array.from({ length: t === 2 ? 2 : 3 }, (_, i) => {
       const person = fakePerson(random, 80 + t * 3 + i);
-      return { truckId: truck.id, userId: null, name: `${person.firstName} ${person.lastName}` };
+      return { truckId: truck.id, name: `${person.firstName} ${person.lastName}` };
     }),
   );
   await seedRecords(s, truckCrewEntity, crewRows);
   const crewOf = (truckId: string) =>
-    crewRows.filter((c) => c.truckId === truckId).map((c) => ({ userId: null, name: c.name }));
+    crewRows.filter((c) => c.truckId === truckId).map((c) => ({ name: c.name }));
 
   // ---- customers
   const customers = await seedRecords(
