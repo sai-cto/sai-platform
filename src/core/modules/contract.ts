@@ -11,7 +11,7 @@ import type { Scope } from '../db/scope';
 import type { TenantTable } from '../records/types';
 import type { BusinessContext } from '../tenancy/context';
 
-/** A permission the module defines, e.g. { key: 'brss.orders.read', kind: 'read' }. */
+/** A permission the module defines, e.g. { key: '<module>.orders.read', kind: 'read' }. */
 export type PermissionDef = {
   /** Must start with "<module key>." */
   key: string;
@@ -37,7 +37,7 @@ export type ImportField = { key: string; label: string; required: boolean };
  * archive, restore, purge), is covered by the tenant-isolation tests, and can be imported into.
  */
 export type EntityDef<T extends TenantTable = TenantTable> = {
-  /** Globally unique, "<owner>.<name>", e.g. "core.customer" or "brss.order". */
+  /** Globally unique, "<owner>.<name>", e.g. "core.customer" or "<module>.order". */
   key: string;
   label: string;
   labelPlural: string;
@@ -72,7 +72,7 @@ export type PortalPageProps = {
   /** Values captured from ":name" parts of the route path. */
   params: Record<string, string>;
   searchParams: Record<string, string | undefined>;
-  /** Prefix for links inside the portal, e.g. "/console/brss/live/app". */
+  /** Prefix for links inside the portal, e.g. "/console/<business>/live/app". */
   basePath: string;
 };
 
@@ -82,7 +82,11 @@ export type RouteDef = {
   title: string;
   /** The permission needed to open this page. */
   permission: string;
-  /** A server component: a function (usually async) that takes PortalPageProps and returns the page. */
+  /**
+   * The page: a server-side function (usually async) that takes PortalPageProps and returns
+   * what to show. The platform calls it directly, so it must not be a 'use client' component
+   * and must not use React hooks. See "About route pages" in docs/MODULE_GUIDE.md.
+   */
   component: (props: PortalPageProps) => ReactNode | Promise<ReactNode>;
 };
 
@@ -108,7 +112,7 @@ export type SettingField = {
 };
 
 export type ModuleManifest = {
-  /** Must equal the slug of the business this module serves, e.g. "brss". */
+  /** Must equal the slug of the business this module serves (the name used in its URLs). */
   key: string;
   name: string;
   version: string;
@@ -127,7 +131,7 @@ export type ModuleManifest = {
     field?: PortalDef;
   };
   widgets: WidgetDef[];
-  /** The module's main unit of work, counted on the executive dashboard ("Orders" for BRSS). */
+  /** The module's main unit of work, counted on the executive dashboard (for example "Orders"). */
   workItem?: {
     label: string;
     /** Entity key whose rows are counted, by created date. */

@@ -7,10 +7,12 @@
  *   3. the database: a raw query inside A's scope returns no B rows (row-level security).
  * Route-level checks are added with the console's routes (Phase 2).
  */
-import { eq, sql } from 'drizzle-orm';
+import { eq, getTableName, is, sql } from 'drizzle-orm';
+import { PgTable } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
 import { getDb } from '@/core/db/client';
 import { businesses, memberships } from '@/core/db/schema';
+import * as platformSchema from '@/core/db/schema/platform';
 import { txOf, withScope } from '@/core/db/scope';
 import { ForbiddenError, NotFoundError } from '@/core/errors';
 import { readFile, saveFile } from '@/core/files/files';
@@ -83,7 +85,7 @@ describe.each(OTHERS)('records: hhmc admin vs %s', (other) => {
       for (const environment of ['live', 'sandbox'] as const) {
         const theirRow = await arrange(other, environment, (s) => ensureRow(s, entity));
         const theirArchivedRow = await arrange(other, environment, async (s) => {
-          const id = await ensureRow(s, entity);
+          const id = await ensureRow(s, entity, theirRow);
           await archiveRecord(s, entity, id);
           return id;
         });
@@ -132,6 +134,8 @@ describe.each(OTHERS)('records: hhmc admin vs %s', (other) => {
         await arrange(other, environment, async (s) => {
           await expect(getRecord(s, entity, theirRow)).resolves.toBeTruthy();
           await expect(getRecord(s, entity, theirArchivedRow, 'only')).resolves.toBeTruthy();
+          // Put the archived row back, so a module's seeded rows stay usable by later tests.
+          await restoreRecord(s, entity, theirArchivedRow);
         });
       }
     },
@@ -347,6 +351,8 @@ describe('people and files are isolated too', () => {
   });
 });
 
+const isTable = (value: unknown): value is PgTable => is(value, PgTable);
+
 describe('the database is set up to enforce isolation', () => {
   it('every table with a business_id column has row-level security on, with policies', async () => {
     const result = await getDb().execute<{
@@ -365,6 +371,24 @@ describe('the database is set up to enforce isolation', () => {
     for (const t of tables) {
       expect(t.rls, `${t.table_name} must have row-level security`).toBe(true);
       expect(t.policies, `${t.table_name} must have policies`).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('every table outside the platform schema is a tenant table (made with tenantTable())', async () => {
+    // A module that used a plain pgTable() would get a table with no business column and no
+    // row-level security. Platform tables are the ones declared in src/core/db/schema/platform.ts.
+    const platform = new Set((Object.values(platformSchema) as unknown[]).filter(isTable).map((t) => getTableName(t)));
+    const result = await getDb().execute<{ table_name: string; rls: boolean; tenant: boolean }>(sql`
+      select c.relname as table_name, c.relrowsecurity as rls,
+             exists (select 1 from information_schema.columns col
+                     where col.table_schema = 'public' and col.table_name = c.relname and col.column_name = 'business_id')
+         and exists (select 1 from information_schema.columns col
+                     where col.table_schema = 'public' and col.table_name = c.relname and col.column_name = 'environment') as tenant
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relkind = 'r'`);
+    for (const t of result) {
+      if (platform.has(t.table_name)) continue;
+      expect(t.tenant && t.rls, `${t.table_name} must be created with tenantTable()`).toBe(true);
     }
   });
 

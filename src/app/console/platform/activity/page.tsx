@@ -3,7 +3,7 @@ import { listPlatformActivity } from '@/core/audit/read';
 import { listAccessibleBusinesses } from '@/core/tenancy/context';
 import { Card, PageHeader } from '@/ui/layout';
 import { Pagination } from '@/ui/pagination';
-import { guarded, requirePlatformContext } from '../../../_lib/session';
+import { guarded, requirePlatformContext } from '@/server/session';
 import {
   ActivityFilters,
   activityHref,

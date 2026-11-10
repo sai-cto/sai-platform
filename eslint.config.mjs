@@ -105,11 +105,24 @@ const eslintConfig = defineConfig([
               message: 'The core may only import @/modules/registry, never a module.',
             },
             {
-              regex: '(^@/|/)app/|^next($|/)',
+              regex: '(^@/|/)(app|server)/|^next($|/)',
               message:
-                'The core must not depend on Next.js or on routes; it is also used by scripts and tests.',
+                'The core must not depend on Next.js, on routes or on the request glue in src/server; it is also used by scripts and tests.',
             },
           ],
+        },
+      ],
+      // The same boundaries for import('…') written inside a function.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'ImportExpression[source.value=/(^@\\/|\\/)(app|server|modules\\/[^\\/]+)\\/|^next($|\\/)/]',
+          message: 'The core must not load routes, the request glue, a module or Next.js.',
+        },
+        {
+          selector: 'ImportExpression[source.type!="Literal"]',
+          message: 'Dynamic imports must use a plain string, so the architecture rules can check them.',
         },
       ],
     },

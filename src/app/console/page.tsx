@@ -6,7 +6,7 @@ import { listAccessibleBusinesses } from '@/core/tenancy/context';
 import { Badge } from '@/ui/badge';
 import { Card, EmptyState, PageHeader } from '@/ui/layout';
 import { Monogram } from '@/ui/monogram';
-import { requirePlatformContext } from '../_lib/session';
+import { requirePlatformContext } from '@/server/session';
 import { ActivityTable } from './_components/activity-table';
 
 export const metadata: Metadata = { title: 'Home' };

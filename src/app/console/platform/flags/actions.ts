@@ -2,8 +2,8 @@
 
 import { setFlag } from '@/core/flags/flags';
 import type { ActionResult } from '@/ui/action-form';
-import { act, text } from '../../../_lib/actions';
-import { requirePlatformContext } from '../../../_lib/session';
+import { act, text } from '@/server/actions';
+import { requirePlatformContext } from '@/server/session';
 
 export async function saveFlagAction(
   _previous: ActionResult | null,

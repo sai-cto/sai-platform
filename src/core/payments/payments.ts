@@ -1,7 +1,7 @@
 /**
  * Taking payments and issuing refunds.
  *
- * Order of events (this is deliberate — see docs/brss-analysis/known-issues.md, KI-3):
+ * Order of events (this is deliberate — see docs/DECISIONS.md, P1-8):
  *   1. ask the provider to charge, with an idempotency key;
  *   2. write the payment row in the caller's transaction, together with whatever the
  *      caller marks as paid.

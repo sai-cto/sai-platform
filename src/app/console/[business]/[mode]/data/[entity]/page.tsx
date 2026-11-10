@@ -13,13 +13,7 @@ import { ConfirmButton } from '@/ui/confirm-button';
 import { formatDate, formatNumber, formatValue } from '@/ui/format';
 import { Card, EmptyState, PageHeader, Table, Td, Th, inputClass } from '@/ui/layout';
 import { Pagination } from '@/ui/pagination';
-import {
-  guarded,
-  one,
-  pageNumber,
-  parseMode,
-  requireBusinessContext,
-} from '../../../../../_lib/session';
+import { guarded, one, pageNumber, parseMode, requireBusinessContext } from '@/server/session';
 import { archiveRecordAction, purgeRecordAction, restoreRecordAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Data' };

@@ -9,7 +9,7 @@ import { Badge } from '@/ui/badge';
 import { ConfirmButton } from '@/ui/confirm-button';
 import { formatDateTime } from '@/ui/format';
 import { Card, Field, PageHeader, inputClass } from '@/ui/layout';
-import { guarded, requirePlatformContext } from '../../../../_lib/session';
+import { guarded, requirePlatformContext } from '@/server/session';
 import { removeMemberAction } from '../../../[business]/people/actions';
 import { addMembershipAction, setPlatformRoleAction, setUserActiveAction } from '../actions';
 

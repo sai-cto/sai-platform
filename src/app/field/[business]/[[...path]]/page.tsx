@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation';
 import { isPortalAvailable } from '@/core/modules/config';
 import { getModule } from '@/core/modules/registry';
-import { PortalHost } from '../../../_lib/portal-host';
-import { requireBusinessContext } from '../../../_lib/session';
+import { PortalHost } from '@/server/portal-host';
+import { requireBusinessContext } from '@/server/session';
 
 /**
  * Host for a business's field portal. It answers "not found" until BOTH are true:

@@ -6,7 +6,7 @@ import { buttonClass } from '@/ui/button';
 import { ConfirmButton } from '@/ui/confirm-button';
 import { formatDateTime, formatNumber } from '@/ui/format';
 import { Card, PageHeader, Table, Td, Th } from '@/ui/layout';
-import { guarded, requireBusinessContext } from '../../../_lib/session';
+import { guarded, requireBusinessContext } from '@/server/session';
 import { resetSandboxAction } from './actions';
 
 export const metadata: Metadata = { title: 'Test mode' };

@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { ROLE_LABELS } from '@/core/rbac/roles';
 import { listAccessibleBusinesses } from '@/core/tenancy/context';
-import { logoutAction } from '../_lib/auth-actions';
-import { requirePlatformContext } from '../_lib/session';
+import { logoutAction } from '@/server/auth-actions';
+import { requirePlatformContext } from '@/server/session';
 import { Shell } from './_components/shell';
 import { platformLinks, topLinks } from './_lib/nav';
 

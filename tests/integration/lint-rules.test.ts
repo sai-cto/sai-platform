@@ -50,6 +50,8 @@ describe.each(['src/modules/zz_probe/x.ts', 'src/app/zz_probe/x.ts', 'src/lib/zz
       `import { customers } from '@/core/db/schema/tenant';`,
       `import { createRecord } from '@/core/records/records';`,
       `import { tenantTable, sameTenant } from '@/core/db/tenant-table';`,
+      `import { requireBusinessContext } from '@/server/session';`,
+      `import { act } from '@/server/actions';`,
     ].join('\n');
     expect(await problems(file, `${allowed}\nexport {};\n`)).toEqual([]);
   });
@@ -57,10 +59,10 @@ describe.each(['src/modules/zz_probe/x.ts', 'src/app/zz_probe/x.ts', 'src/lib/zz
 
 describe('modules and the core keep their distance', () => {
   it('a module cannot import a route', async () => {
-    expect(await problems('src/modules/zz_probe/x.ts', `import { x } from '@/app/_lib/session';\nexport { x };\n`)).not.toEqual([]);
+    expect(await problems('src/modules/zz_probe/x.ts', `import { x } from '@/app/console/_lib/nav';\nexport { x };\n`)).not.toEqual([]);
   });
 
-  it.each([`import { x } from '@/modules/brss/manifest';`, `import { x } from '../modules/brss/manifest';`, `import { x } from '../modules/brss';`, `import { cookies } from 'next/headers';`, `import { x } from '@/app/_lib/session';`])(
+  it.each([`import { x } from '@/modules/brss/manifest';`, `import { x } from '../modules/brss/manifest';`, `import { x } from '../modules/brss';`, `import { cookies } from 'next/headers';`, `import { x } from '@/app/console/_lib/nav';`, `import { x } from '@/server/session';`, `import { x } from '../../server/actions';`, `export const load = () => import('@/server/session');`, `export const load = () => import('@/modules/brss/manifest');`])(
     'the core rejects: %s',
     async (code) => {
       expect(await problems('src/core/zz_probe.ts', `${code}\nexport {};\n`)).not.toEqual([]);

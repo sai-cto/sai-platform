@@ -6,7 +6,7 @@ import { cn } from '@/ui/cn';
 import { formatMoneyShort, formatNumber } from '@/ui/format';
 import { Card, PageHeader, Stat, Table, Td, Th } from '@/ui/layout';
 import { Monogram } from '@/ui/monogram';
-import { guarded, one, requirePlatformContext } from '../../_lib/session';
+import { guarded, one, requirePlatformContext } from '@/server/session';
 
 export const metadata: Metadata = { title: 'Executive view' };
 

@@ -6,7 +6,7 @@ import { ActionForm } from '@/ui/action-form';
 import { Badge } from '@/ui/badge';
 import { ConfirmButton } from '@/ui/confirm-button';
 import { Card, EmptyState, Field, PageHeader, Table, Td, Th, inputClass } from '@/ui/layout';
-import { guarded, requirePlatformContext } from '../../../_lib/session';
+import { guarded, requirePlatformContext } from '@/server/session';
 import { saveFlagAction, toggleFlagAction } from './actions';
 
 export const metadata: Metadata = { title: 'Feature flags' };

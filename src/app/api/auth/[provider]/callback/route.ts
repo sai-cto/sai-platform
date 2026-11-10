@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { getOAuthProvider, loginWithIdentity, recordFailedSignIn } from '@/core/auth/login';
 import { SESSION_COOKIE } from '@/core/auth/session';
 import { UnauthenticatedError } from '@/core/errors';
-import { sessionCookieOptions } from '../../../../_lib/session-cookie';
+import { sessionCookieOptions } from '@/server/session-cookie';
 
 /** Finishes a Microsoft / Google sign-in. Returns 404 while the provider is not configured. */
 export async function GET(request: Request, { params }: { params: Promise<{ provider: string }> }) {

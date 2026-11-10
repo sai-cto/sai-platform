@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: Phase 2 (console) passed its review gate and is merged to `main`._
+_Last updated: Phase 3 (module scaffolds) passed its review gate and is merged to `main`; Phase 4 (BRSS) is being built._
 
 ## In plain English
 
@@ -20,14 +20,18 @@ notifications, files and analytics.
 <http://localhost:3000> and click a user on the login page. Screenshots of every role, at
 desktop and phone width, are in `docs/screenshots/phase-2/`.
 
-**What is not there yet:** the nine business modules are not registered (Phase 3), so every
-App tab says "No app yet". The BRSS staff portal is Phase 4.
+All nine businesses are registered as modules. Until a business's own staff portal is built,
+its App tab shows a tidy "not built yet" page with its planned scope; everything else in the
+console already works for it.
+
+**What is not there yet:** the BRSS staff portal (Phase 4, being built now).
 
 ## Current phase and task
 
 - **Phase 1 — shared core.** ✅ Done. Passed the independent review gate after four rounds (see below) and merged to `main`.
 - **Phase 2 — SAI Console.** ✅ Done. UI gate done (110 screenshots); passed the independent review gate after three rounds (see below) and merged to `main`.
-- Next: **Phase 3 — module scaffolds**, on branch `phase-3-scaffolds` (built; review gate next), then **Phase 4 — BRSS**, on `phase-4-brss` (in progress).
+- **Phase 3 — module scaffolds.** ✅ Done. UI gate done (38 screenshots); passed the independent review gate after two rounds (see below) and merged to `main`.
+- Now: **Phase 4 — BRSS proof module**, on branch `phase-4-brss` (in progress).
 
 ## Acceptance criteria (final)
 
@@ -38,7 +42,7 @@ App tab says "No app yet". The BRSS staff portal is Phase 4.
 | ✅ | Logging in as each seed role shows exactly the sidebar, data and actions that role allows _(`tests/e2e/console.spec.ts`, `tests/e2e/isolation.spec.ts`, screenshots per role)_ |
 | ✅ | Archive → restore works; permanent delete only for super_admin and only past retention; every action appears in the activity log _(data layer and end-to-end through the screens)_ |
 | ✅ | Test mode clearly separates sandbox data from live data, with a persistent visual indicator _(striped banner + yellow frame on every sandbox page; `/sandbox/` in the address)_ |
-| ❌ | All 9 modules are registered; adding a 10th by following `MODULE_GUIDE.md` requires no core changes _(Phase 3)_ |
+| ✅ | All 9 modules are registered; adding a 10th by following `MODULE_GUIDE.md` requires no core changes _(registering the nine changed no code in `src/core` or `src/app`; the Phase 3 reviewer added a made-up tenth module by following the guide, with no core changes and every check green)_ |
 | ❌ | The BRSS staff portal covers the listed workflows end to end on seed data, with ported rules documented and source-cited _(Phase 4)_ |
 | ✅ | Typecheck, lint, unit and end-to-end tests all pass; the secret scan is clean _(as of the last verification below)_ |
 
@@ -49,7 +53,7 @@ App tab says "No app yet". The BRSS staff portal is Phase 4.
 | 0 — Plan | ✅ merged to `main` (Checkpoint 1 approved 10 Nov 2026) |
 | 1 — Shared core | ✅ merged to `main` |
 | 2 — SAI Console | ✅ merged to `main` |
-| 3 — Module scaffolds | ⏳ |
+| 3 — Module scaffolds | ✅ merged to `main` |
 | 4 — BRSS proof module | ⏳ |
 
 ## Last verification
@@ -148,3 +152,34 @@ npm run check
   secret scan             clean (299 files)
 npm run test:e2e          37 passed
 ```
+
+### Phase 3 — module scaffolds (10 Nov 2026)
+
+```
+npm run check
+  tsc --noEmit            clean
+  eslint                  clean
+  vitest run              Test Files 11 passed (11) · Tests 350 passed (350)
+  secret scan             clean
+npm run test:e2e          41 passed
+registering the nine modules changed no code under src/core or src/app (comment wording only);
+letting modules have server actions needed one move: the request glue went from src/app/_lib
+to src/server (44 files under src/app changed their import line, nothing else)
+```
+
+UI gate: 38 screenshots in `docs/screenshots/phase-3/` (each business's App tab as super admin;
+the same page as a business admin in live and test mode, as staff, and as staff with nothing
+granted; the executive gets "not found" for the App tab; module registry; system health).
+
+Review gate (independent reviewer subagent, no access to the author's reasoning). The reviewer
+tested the acceptance criterion directly: it invented a tenth business and followed
+`MODULE_GUIDE.md` word for word in a scratch copy.
+
+| Round | Result | What happened next |
+|---|---|---|
+| 1 | 0 critical · 0 high · 2 medium · 12 minor | The guide worked with no change to the core, but four automatic tests failed for a tenth module (a test helper reused one seeded row; tests hardcoded the number 9). Both fixed, plus the minor items: switching a portal off now also stops its actions; the core may not import the request glue; table names must start with the module key; every table outside the platform must be a tenant table; guide corrections. |
+| 2 | **Nothing above minor.** Gate passed. | Tenth-module exercise repeated: no edits to the core, the console or any existing test; typecheck, lint, 357 tests and the secret scan all green. Five new minor notes fixed (a wrong cross-reference, a test for the new action check, clearer guide wording, dynamic imports covered by the lint rule). |
+
+Left as a known minor item: the "no business is named in the core" test is a text search; a
+future business whose short code is also an ordinary word in the code (for example `CSV`) would
+trip it and need the test adjusted.

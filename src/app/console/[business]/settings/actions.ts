@@ -8,8 +8,8 @@ import {
 } from '@/core/modules/config';
 import { getModule } from '@/core/modules/registry';
 import type { ActionResult } from '@/ui/action-form';
-import { act } from '../../../_lib/actions';
-import { requireBusinessContext } from '../../../_lib/session';
+import { act } from '@/server/actions';
+import { requireBusinessContext } from '@/server/session';
 
 export async function setPortalAction(
   slug: string,

@@ -5,8 +5,8 @@ import { NotFoundError } from '@/core/errors';
 import { findEntity } from '@/core/modules/registry';
 import { archiveRecord, purgeRecord, restoreRecord } from '@/core/records/records';
 import type { ActionResult } from '@/ui/action-form';
-import { act } from '../../../../_lib/actions';
-import { parseMode, requireBusinessContext } from '../../../../_lib/session';
+import { act } from '@/server/actions';
+import { parseMode, requireBusinessContext } from '@/server/session';
 
 async function resolve(slug: string, mode: string, entityKey: string) {
   const ctx = await requireBusinessContext(slug, parseMode(mode));

@@ -1,6 +1,6 @@
 import { FlaskConical } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { parseMode, requireBusinessContext } from '../../../_lib/session';
+import { parseMode, requireBusinessContext } from '@/server/session';
 
 /**
  * Frame for pages that show live OR sandbox data. In test mode it adds the indicator that

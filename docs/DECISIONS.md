@@ -146,6 +146,21 @@ or `tenant-isolation.test.ts`.
 | Big Red Mailroom | `#B3322A` brick red | `#7A5230` | shifted to brick brown |
 | Campus Promotions | `#111111` black | `#3A3F6B` | dark indigo, to separate it from The Cornellian |
 
+## Phase 3 — module scaffolds
+
+| # | Decision | Why |
+|---|---|---|
+| P3-1 | A scaffold is one call, `scaffoldModule({ key, name, description, plannedScope })`, in the module's `manifest.ts`, plus a README. All nine share one "not built yet" page (`src/modules/_shared/`). | Nine copies of the same placeholder would be nine things to keep in step. |
+| P3-2 | The shared scaffold helper and page live under `src/modules/_shared/`, not in the core. | Registering the nine modules then changed nothing in `src/core/` or `src/app/`, which is the claim the module guide makes. |
+| P3-3 | HHMC and Real Estate list their planned scope as "Pending requirements" and contain nothing else (a test checks their folders hold only a manifest and a README). | The brief forbids building their features; their requirements are still being gathered. |
+| P3-4 | `src/modules/_template/` is a small working module to copy from. It is type-checked and linted but not registered, and the migration generator skips folders starting with `_`. | A template that is compiled cannot drift from the contract; one that is migrated would create a junk table. |
+| P3-5 | A test fails if any file in `src/core`, `src/app`, `src/server` or `src/ui` names a business (its slug or short code as a text value, its code as a word, or its full name). It is a text search, so it cannot catch every spelling. | "Never hardcode businesses" becomes checkable, and so does "a tenth module needs no core change". |
+| P3-6 | BRSS is registered as a scaffold in this phase with the Phase 4 scope listed; Phase 4 replaces it with the real module. | So Phase 3 can be reviewed on its own. |
+| P3-7 | The glue between web requests and the core (`session`, `actions`, `portal-host`) moved from `src/app/_lib` to `src/server`. The core may not import it (lint rule). | Modules are not allowed to import routes, but their server actions need the session; a neutral folder gives them that without opening `src/app`. |
+| P3-8 | A module's server actions get their context from `requireStaffPortalContext()`, which also checks that the person may open the staff portal and that the portal is switched on. | Found at the Phase 3 review gate: with the plain context, switching a portal off would have hidden its screens but left its actions callable. |
+| P3-9 | Tests that count businesses read the count from the seed list, not the number 9; the registry also checks that a module's table names start with its key; a test checks that every table outside the platform schema is a tenant table. | Found at the Phase 3 review gate by adding a made-up tenth module: the guide worked without core changes, but four tests failed on a hardcoded 9 or on the seed-row helper. |
+| P3-10 | The moving company's module description says only what the brief says ("Student moving company"). | The review found wording that could not be traced to the brief. |
+
 ## BRSS business questions (B1–B12)
 
 The CTO asked Claude to choose the most conservative reasonable answer to each and flag it.

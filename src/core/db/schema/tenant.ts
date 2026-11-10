@@ -51,7 +51,7 @@ export const payments = tenantTable(
     /** Running total of money sent back. Kept on the payment so it survives archiving or deleting refund rows. */
     refundedCents: integer('refunded_cents').notNull().default(0),
     description: text('description').notNull().default(''),
-    /** What this payment is for, e.g. subjectType "brss.order". */
+    /** What this payment is for, e.g. subjectType "<module>.order". */
     subjectType: text('subject_type'),
     subjectId: uuid('subject_id'),
     paidAt: timestamp('paid_at', { withTimezone: true }),
