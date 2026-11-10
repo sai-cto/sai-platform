@@ -1,7 +1,9 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { getOAuthProvider, loginWithIdentity } from '@/core/auth/login';
+import { getOAuthProvider, loginWithIdentity, recordFailedSignIn } from '@/core/auth/login';
 import { SESSION_COOKIE } from '@/core/auth/session';
+import { UnauthenticatedError } from '@/core/errors';
+import { sessionCookieOptions } from '../../../../_lib/session-cookie';
 
 /** Finishes a Microsoft / Google sign-in. Returns 404 while the provider is not configured. */
 export async function GET(request: Request, { params }: { params: Promise<{ provider: string }> }) {
@@ -22,15 +24,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ prov
   try {
     const identity = await provider.exchangeCode(code, codeVerifier);
     const session = await loginWithIdentity(identity);
-    store.set(SESSION_COOKIE, session.token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      expires: session.expiresAt,
-    });
+    store.set(SESSION_COOKIE, session.token, sessionCookieOptions(session.expiresAt));
     return NextResponse.redirect(new URL('/console', process.env.APP_URL ?? url.origin));
-  } catch {
+  } catch (error) {
+    // loginWithIdentity logs its own refusals; anything else (the code exchange) is logged here.
+    if (!(error instanceof UnauthenticatedError))
+      await recordFailedSignIn(provider.id, 'could not complete the exchange with the provider');
     return failed;
   }
 }

@@ -49,6 +49,11 @@ export type EntityDef<T extends TenantTable = TenantTable> = {
   listColumns: ListColumn[];
   /** Property names searched by the Data tab's search box. */
   searchColumns: string[];
+  /**
+   * Clean-up outside the database after a row is permanently deleted (for example removing
+   * a stored file's bytes). Most entities do not need this.
+   */
+  afterPurge?: (row: Record<string, unknown>) => Promise<void>;
   /** Present = the import tool can create these from a CSV. */
   import?: {
     fields: ImportField[];

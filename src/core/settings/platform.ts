@@ -16,8 +16,10 @@ export async function getRetentionDays(tx?: Tx): Promise<number> {
     .from(platformSettings)
     .where(eq(platformSettings.key, 'retention_days'))
     .limit(1);
-  const value = Number(row?.value);
-  return Number.isInteger(value) && value >= 0 ? value : DEFAULT_RETENTION_DAYS;
+  // Anything that is not a whole number of days from 1 upwards falls back to the default,
+  // so a bad value in the table can never shorten the window to zero.
+  const value = typeof row?.value === 'number' ? row.value : Number.NaN;
+  return Number.isInteger(value) && value >= 1 ? value : DEFAULT_RETENTION_DAYS;
 }
 
 export async function setRetentionDays(ctx: PlatformContext, days: number): Promise<void> {

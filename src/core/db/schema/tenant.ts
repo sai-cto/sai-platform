@@ -2,8 +2,19 @@
  * Core tenant tables: owned by exactly one business, shared by every module.
  * Each is created with tenantTable(), which adds business/environment/audit/archive columns.
  */
-import { boolean, date, index, integer, jsonb, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { tenantTable } from '../tenant-table';
+import { sql } from 'drizzle-orm';
+import {
+  boolean,
+  date,
+  index,
+  integer,
+  jsonb,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
+import { sameTenant, tenantTable } from '../tenant-table';
 
 export const customers = tenantTable(
   'customers',
@@ -24,7 +35,7 @@ export const customers = tenantTable(
 export const payments = tenantTable(
   'payments',
   {
-    customerId: uuid('customer_id').references(() => customers.id),
+    customerId: uuid('customer_id'),
     kind: text('kind').$type<'charge' | 'authorization'>().notNull().default('charge'),
     amountCents: integer('amount_cents').notNull(),
     currency: text('currency').notNull().default('usd'),
@@ -43,20 +54,27 @@ export const payments = tenantTable(
     paidAt: timestamp('paid_at', { withTimezone: true }),
   },
   (t) => [
+    sameTenant('payments_customer_fk', t, t.customerId, customers),
     index('payments_subject_idx').on(t.subjectType, t.subjectId),
     index('payments_paid_idx').on(t.businessId, t.environment, t.paidAt),
+    // One payment per idempotency key: the database itself refuses a double charge record.
+    uniqueIndex('payments_idempotency_key')
+      .on(t.businessId, t.environment, t.idempotencyKey)
+      .where(sql`${t.idempotencyKey} is not null`),
   ],
 );
 
-export const refunds = tenantTable('refunds', {
-  paymentId: uuid('payment_id')
-    .notNull()
-    .references(() => payments.id, { onDelete: 'cascade' }),
-  amountCents: integer('amount_cents').notNull(),
-  reason: text('reason').notNull().default(''),
-  status: text('status').$type<'succeeded' | 'failed'>().notNull(),
-  providerRef: text('provider_ref'),
-});
+export const refunds = tenantTable(
+  'refunds',
+  {
+    paymentId: uuid('payment_id').notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    reason: text('reason').notNull().default(''),
+    status: text('status').$type<'succeeded' | 'failed'>().notNull(),
+    providerRef: text('provider_ref'),
+  },
+  (t) => [sameTenant('refunds_payment_fk', t, t.paymentId, payments)],
+);
 
 /** Something that can be scheduled: a truck, a crew, a room. */
 export const resources = tenantTable('resources', {
@@ -68,7 +86,7 @@ export const resources = tenantTable('resources', {
 export const appointments = tenantTable(
   'appointments',
   {
-    customerId: uuid('customer_id').references(() => customers.id),
+    customerId: uuid('customer_id'),
     kind: text('kind').notNull(),
     startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
     endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
@@ -76,21 +94,29 @@ export const appointments = tenantTable(
       .$type<'unconfirmed' | 'confirmed' | 'in_progress' | 'completed' | 'canceled'>()
       .notNull()
       .default('unconfirmed'),
-    resourceId: uuid('resource_id').references(() => resources.id),
+    resourceId: uuid('resource_id'),
     subjectType: text('subject_type'),
     subjectId: uuid('subject_id'),
     notes: text('notes'),
   },
-  (t) => [index('appointments_time_idx').on(t.businessId, t.environment, t.startsAt)],
+  (t) => [
+    sameTenant('appointments_customer_fk', t, t.customerId, customers),
+    sameTenant('appointments_resource_fk', t, t.resourceId, resources),
+    index('appointments_time_idx').on(t.businessId, t.environment, t.startsAt),
+  ],
 );
 
 /** A blocked time range. resourceId null = the whole business is unavailable. */
-export const unavailability = tenantTable('unavailability', {
-  resourceId: uuid('resource_id').references(() => resources.id),
-  startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
-  endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
-  reason: text('reason').notNull().default(''),
-});
+export const unavailability = tenantTable(
+  'unavailability',
+  {
+    resourceId: uuid('resource_id'),
+    startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+    endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+    reason: text('reason').notNull().default(''),
+  },
+  (t) => [sameTenant('unavailability_resource_fk', t, t.resourceId, resources)],
+);
 
 /** Every message the platform sent or tried to send. */
 export const notifications = tenantTable('notifications', {
@@ -116,20 +142,24 @@ export const files = tenantTable('files', {
 });
 
 /** One row per CSV import run. */
-export const importJobs = tenantTable('import_jobs', {
-  entityKey: text('entity_key').notNull(),
-  filename: text('filename').notNull(),
-  fileId: uuid('file_id').references(() => files.id),
-  mapping: jsonb('mapping').$type<Record<string, string>>().notNull().default({}),
-  status: text('status')
-    .$type<'uploaded' | 'dry_run_ok' | 'dry_run_failed' | 'imported' | 'failed'>()
-    .notNull()
-    .default('uploaded'),
-  rowCount: integer('row_count').notNull().default(0),
-  importedCount: integer('imported_count').notNull().default(0),
-  errorCount: integer('error_count').notNull().default(0),
-  errors: jsonb('errors').$type<{ row: number; message: string }[]>().notNull().default([]),
-  /** SHA-256 of file + mapping, used to check a sandbox run happened before a live run. */
-  fingerprint: text('fingerprint').notNull().default(''),
-  completedOn: date('completed_on'),
-});
+export const importJobs = tenantTable(
+  'import_jobs',
+  {
+    entityKey: text('entity_key').notNull(),
+    filename: text('filename').notNull(),
+    fileId: uuid('file_id'),
+    mapping: jsonb('mapping').$type<Record<string, string>>().notNull().default({}),
+    status: text('status')
+      .$type<'uploaded' | 'dry_run_ok' | 'dry_run_failed' | 'imported' | 'failed'>()
+      .notNull()
+      .default('uploaded'),
+    rowCount: integer('row_count').notNull().default(0),
+    importedCount: integer('imported_count').notNull().default(0),
+    errorCount: integer('error_count').notNull().default(0),
+    errors: jsonb('errors').$type<{ row: number; message: string }[]>().notNull().default([]),
+    /** SHA-256 of file + mapping, used to check a sandbox run happened before a live run. */
+    fingerprint: text('fingerprint').notNull().default(''),
+    completedOn: date('completed_on'),
+  },
+  (t) => [sameTenant('import_jobs_file_fk', t, t.fileId, files)],
+);

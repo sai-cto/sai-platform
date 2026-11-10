@@ -4,11 +4,15 @@
  *
  * resetSandbox() deletes the business's sandbox rows and re-seeds them. It is the only
  * place besides purgeRecord() that deletes tenant rows, and it can only touch sandbox rows:
- * the scope it runs in is forced to 'sandbox', and row-level security enforces that.
+ *  - the scope it runs in is forced to 'sandbox', and row-level security enforces that;
+ *  - links between tenant tables never cascade and can never cross from live to sandbox
+ *    (sameTenant() in src/core/db/tenant-table.ts), so deleting a sandbox row cannot take
+ *    a live row with it.
  */
 import { and, eq } from 'drizzle-orm';
 import { logActivity } from '../audit/log';
 import { txOf, withScope, type Scope } from '../db/scope';
+import { fileStorage, storagePrefix } from '../files/storage';
 import { entitiesFor, getModule } from '../modules/registry';
 import { authorize } from '../rbac/permissions';
 import type { BusinessContext } from '../tenancy/context';
@@ -44,4 +48,6 @@ export async function resetSandbox(ctx: BusinessContext): Promise<void> {
       summary: `Reset the ${ctx.business.name} sandbox to fresh fake data`,
     });
   });
+  // The rows are gone (the transaction committed), so remove the sandbox's stored files too.
+  await fileStorage.deletePrefix(storagePrefix(ctx.business.id, 'sandbox'));
 }

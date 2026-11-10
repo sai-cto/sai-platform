@@ -6,6 +6,7 @@
  */
 import { txOf, type Scope } from '../db/scope';
 import type { EntityDef } from '../modules/contract';
+import { authorize } from '../rbac/permissions';
 import type { NewValues, Row, TenantTable } from '../records/types';
 
 export async function seedRecords<T extends TenantTable>(
@@ -13,6 +14,7 @@ export async function seedRecords<T extends TenantTable>(
   entity: EntityDef<T>,
   rows: NewValues<T>[],
 ): Promise<Row<T>[]> {
+  authorize(s.ctx, entity.writePermission);
   const isSystem = s.ctx.actor.id === null;
   if (s.ctx.environment !== 'sandbox' && !isSystem) {
     throw new Error('seedRecords() can only write sandbox data (or run from the seed script).');

@@ -7,11 +7,14 @@
  */
 import { sql } from 'drizzle-orm';
 import {
+  foreignKey,
   index,
   pgPolicy,
   pgTable,
   timestamp,
   uuid,
+  unique,
+  type AnyPgColumn,
   type PgColumnBuilderBase,
   type PgTableExtraConfigValue,
 } from 'drizzle-orm/pg-core';
@@ -62,6 +65,8 @@ export function tenantTable<
 ) {
   return pgTable(name, { ...standardColumns(), ...columns }, (table) => [
     index(`${name}_scope_idx`).on(table.businessId, table.environment),
+    // Lets other tenant tables point at a row of this one with sameTenant() (below).
+    unique(`${name}_tenant_id`).on(table.businessId, table.environment, table.id),
     // Reads: own rows, or everything for the explicit cross-business (platform) scope.
     pgPolicy(`${name}_read`, {
       for: 'select',
@@ -72,4 +77,33 @@ export function tenantTable<
     pgPolicy(`${name}_write`, { for: 'all', to: appRole, using: ownRows, withCheck: ownRows }),
     ...(extra ? extra(table) : []),
   ]);
+}
+
+type TenantColumns = { businessId: AnyPgColumn; environment: AnyPgColumn; id: AnyPgColumn };
+
+/**
+ * A link from one tenant table to another that the DATABASE guarantees stays inside the
+ * same business and the same environment. ALWAYS use this instead of `.references()` when
+ * a tenant table points at another tenant table:
+ *
+ *   tenantTable('payments', { customerId: uuid('customer_id') }, (t) => [
+ *     sameTenant('payments_customer_fk', t, t.customerId, customers),
+ *   ])
+ *
+ * Without it, a row could point at another business's row, or a live row at a sandbox row
+ * (foreign keys ignore row-level security). A test fails if a tenant table uses a plain
+ * foreign key to another tenant table. Deleting the target is refused while anything still
+ * points at it: links never cascade.
+ */
+export function sameTenant(
+  name: string,
+  self: TenantColumns,
+  column: AnyPgColumn,
+  target: TenantColumns,
+) {
+  return foreignKey({
+    name,
+    columns: [self.businessId, self.environment, column],
+    foreignColumns: [target.businessId, target.environment, target.id],
+  });
 }

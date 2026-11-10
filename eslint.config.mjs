@@ -2,23 +2,35 @@ import { defineConfig, globalIgnores } from 'eslint/config';
 import nextVitals from 'eslint-config-next/core-web-vitals';
 import nextTs from 'eslint-config-next/typescript';
 
-// Architecture rules (docs/ARCHITECTURE.md). These keep tenant isolation and the
-// activity log from being bypassed by accident.
+// Architecture rules (docs/ARCHITECTURE.md). These keep tenant isolation and the activity
+// log from being bypassed by accident. They are regular expressions so that both the alias
+// form ("@/core/…") and the relative form ("../../core/…", which editors auto-import) match.
+
 const DB_CLIENT = {
-  group: ['@/core/db/client', '**/core/db/client', 'postgres', 'drizzle-orm/postgres-js*'],
+  regex: '(^@/|/)core/db/client$|^postgres$|^drizzle-orm/postgres-js',
   message:
     'Only src/core may open a database connection. Use withScope()/withPlatformScope() and the record functions in @/core/records.',
 };
 const SYSTEM_ACTOR = {
-  group: ['@/core/tenancy/system', '**/core/tenancy/system'],
+  regex: '(^@/|/)core/tenancy/system$',
   message: 'The system actor is for seed scripts and tests only.',
 };
 const RAW_TX = {
-  name: '@/core/db/scope',
+  regex: '(^@/|/)core/db/scope$',
   importNames: ['txOf'],
   message:
     'txOf() gives raw write access and skips the activity log. Use the record functions in @/core/records.',
 };
+// Platform tables (users, memberships, sessions…) have no row-level security, so nothing
+// outside the core may query them directly. Core tenant tables come from @/core/db/schema/tenant.
+const PLATFORM_TABLES = {
+  regex: '(^@/|/)core/db/schema(/index|/platform)?$',
+  message:
+    'Import core tables from @/core/db/schema/tenant. Platform tables (users, memberships, sessions…) are only reachable through core services.',
+};
+const NO_ROUTES = { regex: '(^@/|/)app/', message: 'Modules must not import from src/app.' };
+
+const OUTSIDE_CORE = [DB_CLIENT, SYSTEM_ACTOR, RAW_TX, PLATFORM_TABLES];
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -33,43 +45,31 @@ const eslintConfig = defineConfig([
     'test-results/**',
   ]),
   {
-    // Routes, UI and modules: no direct database access, no system actor, no raw transaction.
-    files: ['src/app/**', 'src/ui/**', 'src/modules/**'],
-    rules: {
-      'no-restricted-imports': ['error', { patterns: [DB_CLIENT, SYSTEM_ACTOR], paths: [RAW_TX] }],
-    },
+    // Routes and UI: no direct database access, no system actor, no raw transaction.
+    files: ['src/app/**', 'src/ui/**'],
+    rules: { 'no-restricted-imports': ['error', { patterns: OUTSIDE_CORE }] },
   },
   {
-    // Modules must not reach into routes.
+    // Modules: the same, and they must not reach into routes either.
     files: ['src/modules/**'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            DB_CLIENT,
-            SYSTEM_ACTOR,
-            { group: ['@/app/**'], message: 'Modules must not import from src/app.' },
-          ],
-          paths: [RAW_TX],
-        },
-      ],
-    },
+    rules: { 'no-restricted-imports': ['error', { patterns: [...OUTSIDE_CORE, NO_ROUTES] }] },
   },
   {
-    // The core never imports a module — only the registry list.
+    // The core never imports a module — only the registry list — and never depends on Next.js.
     files: ['src/core/**'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
+            // A module file is always inside a module's folder: "…/modules/<key>/<file>".
+            // (src/core/modules/* has no sub-folders, so core's own imports do not match.)
             {
-              group: ['@/modules/*', '!@/modules/registry'],
+              regex: '(^@/|/)modules/[^/]+/|^@/modules/(?!registry$)',
               message: 'The core may only import @/modules/registry, never a module.',
             },
             {
-              group: ['@/app/**', 'next/*', 'next'],
+              regex: '(^@/|/)app/|^next($|/)',
               message:
                 'The core must not depend on Next.js or on routes; it is also used by scripts and tests.',
             },

@@ -13,7 +13,7 @@ src/
   core/       The shared core. Modules import from it; it never imports a module.
   modules/    One folder per business + registry.ts (the list of modules).
   seed/       The 9 businesses and the fake test users, as data.
-  ui/         Shared interface components.
+  ui/         Shared interface components (added with the console in Phase 2).
 db/migrations/   Generated SQL migrations (plus one hand-written one, 0001).
 scripts/         setup, seed, migrate, secret scan, permissions doc generator.
 tests/           integration/ (Vitest + real Postgres) and e2e/ (Playwright).
@@ -64,8 +64,27 @@ Postgres which business and environment the transaction is for; rows of any othe
 invisible and unwritable, even to a query that forgets its filter. The app connects as the role
 `sai_app`, which owns nothing and cannot bypass these policies. Migrations run as `sai_owner`.
 
+Links between tenant tables are guarded the same way. A foreign key ignores row-level security,
+so a plain one would let a row point at another business's row, or a live row at a sandbox row.
+`sameTenant()` (same file) builds a link that includes the business and the environment, and
+never cascades a delete. A test fails if a tenant table links to another tenant table without it.
+
 > If a query returns nothing and you expected rows, check that it runs inside `withScope()`.
 > Outside a scope the app role sees no tenant rows at all. That is the design working.
+
+**What layer 3 does not cover.** Row-level security protects *tenant* tables against a
+forgotten filter. It is a seatbelt for honest mistakes, not a wall against hostile code running
+inside the server: such code could set the scope itself. Platform tables (`users`,
+`memberships`, `sessions`, …) have no row-level security at all; they are protected by layer 2
+(every core function that touches them checks the context) and by an ESLint rule that stops
+routes and modules importing them. Routes and modules import core tables from
+`@/core/db/schema/tenant` only.
+
+**Order inside a function that does something outside the database.** Charging a card, sending
+an email or writing a file cannot be rolled back. Such a function checks the permission and the
+input on its first lines, before the outside call (`takePayment`, `refundPayment`, `saveFile`,
+`sendNotification`). Read helpers that take a scope check their own permission too; the
+permission passed to `withScope()` is the door, not the only check.
 
 ## Live and sandbox (test mode)
 
@@ -126,8 +145,9 @@ A module is a folder under `src/modules/<key>/` exporting one manifest
 `docs/MODULE_GUIDE.md`.
 
 There are three portal types — staff, customer, field — sharing one login and one data layer.
-The staff portal is embedded in the console. Customer and field portals have hosting routes
-that answer "not found" until a module defines that portal **and** its toggle is on.
+The staff portal is embedded in the console. Customer and field portals get hosting routes
+(added with the console in Phase 2) that answer "not found" until a module defines that portal
+**and** its toggle is on.
 
 ## Core services and their adapters
 
@@ -140,10 +160,11 @@ that answer "not found" until a module defines that portal **and** its toggle is
 
 ## Rules that must not be broken
 
-1. Never define a business table with `pgTable()`. Use `tenantTable()`.
+1. Never define a business table with `pgTable()`. Use `tenantTable()`, and link tenant tables to each other with `sameTenant()`, never `.references()`.
 2. Never import `src/core/db/client` outside `src/core`. Use `withScope()`.
 3. Never write a tenant table except through the record functions.
 4. Never hardcode a business (name, slug, colour) in a component. Businesses are data.
 5. Never put a secret in the repository or the database. Secrets live in `.env.local`.
 6. Never change the permission matrix or role list without the CTO's sign-off.
-7. Every new rule gets a test. Run `npm run check` before committing.
+7. In a function with an effect outside the database (payment, email, file), check the permission first.
+8. Every new rule gets a test. Run `npm run check` before committing.

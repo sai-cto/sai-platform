@@ -8,10 +8,11 @@
  * If the transaction fails after step 1, retrying with the same key returns the same
  * charge, so nobody is charged twice and nothing is ever "paid" without a payment row.
  */
-import { and, eq, sum } from 'drizzle-orm';
+import { and, eq, sql, sum } from 'drizzle-orm';
 import { payments, refunds } from '../db/schema';
-import type { Scope } from '../db/scope';
+import { txOf, type Scope } from '../db/scope';
 import { ValidationError } from '../errors';
+import { authorize } from '../rbac/permissions';
 import { paymentEntity, refundEntity } from '../records/core-entities';
 import { createRecord, getRecord } from '../records/records';
 import type { Row } from '../records/types';
@@ -43,6 +44,13 @@ export type TakePaymentInput = {
   subjectId?: string;
 };
 
+/** Makes concurrent calls for the same key wait for each other (released when the transaction ends). */
+async function lockKey(s: Scope, key: string): Promise<void> {
+  await txOf(s).execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`${s.ctx.business.id}:${s.ctx.environment}:${key}`}, 0))`,
+  );
+}
+
 /**
  * Charges (or records) a payment. Returns the payment row; check row.status.
  * A failed card attempt is recorded with status "failed" so there is a trace of it.
@@ -51,10 +59,16 @@ export async function takePayment(
   s: Scope,
   input: TakePaymentInput,
 ): Promise<Row<typeof payments>> {
+  // Permission and input first: nobody without payments.write can reach the provider.
+  authorize(s.ctx, 'payments.write');
   if (!Number.isInteger(input.amountCents) || input.amountCents <= 0)
     throw new ValidationError('The amount must be more than zero.');
   if (!input.idempotencyKey) throw new ValidationError('A payment needs an idempotency key.');
 
+  // Same key = same payment. The lock makes a second, simultaneous request wait here until
+  // the first has finished; it then finds the first one's row and returns it. The unique
+  // index on (business, environment, idempotency_key) is the database's own guarantee.
+  await lockKey(s, input.idempotencyKey);
   const [existing] = await s.db
     .select()
     .from(payments)
@@ -116,6 +130,7 @@ export async function takePayment(
 
 /** How much of a payment has already been refunded. */
 export async function refundedCents(s: Scope, paymentId: string): Promise<number> {
+  authorize(s.ctx, 'payments.read');
   const [row] = await s.db
     .select({ total: sum(refunds.amountCents) })
     .from(refunds)
@@ -129,11 +144,21 @@ export async function refundPayment(
   s: Scope,
   input: { paymentId: string; amountCents: number; reason: string },
 ): Promise<Row<typeof refunds>> {
+  // Permission and input first: nobody without payments.write can reach the provider.
+  authorize(s.ctx, 'payments.write');
+  if (!Number.isInteger(input.amountCents) || input.amountCents <= 0)
+    throw new ValidationError('The refund must be more than zero.');
   const payment = await getRecord(s, paymentEntity, input.paymentId);
   if (payment.status !== 'succeeded' || payment.kind !== 'charge')
     throw new ValidationError('Only a completed charge can be refunded.');
-  if (!Number.isInteger(input.amountCents) || input.amountCents <= 0)
-    throw new ValidationError('The refund must be more than zero.');
+
+  // Lock the payment row so two refunds at the same moment cannot both see "nothing
+  // refunded yet" and together give back more than was paid.
+  await txOf(s)
+    .select({ id: payments.id })
+    .from(payments)
+    .where(and(s.where(payments), eq(payments.id, payment.id)))
+    .for('update');
   const already = await refundedCents(s, payment.id);
   if (already + input.amountCents > payment.amountCents) {
     throw new ValidationError(
@@ -148,7 +173,14 @@ export async function refundPayment(
       status: 'succeeded',
     });
   }
-  const provider = payment.provider === 'stripe' ? providerFor(s.ctx.environment) : mockProvider;
+  // Refund through the provider that took the payment. Never "refund" a Stripe payment
+  // through the mock: that would record money as returned when none was.
+  const provider = payment.provider === 'mock' ? mockProvider : providerFor(s.ctx.environment);
+  if (provider.name !== payment.provider) {
+    throw new ValidationError(
+      `This payment was taken with ${payment.provider}, which is not the active payment provider. Ask the tech team.`,
+    );
+  }
   const result = await provider.refund({
     providerRef: payment.providerRef ?? '',
     amountCents: input.amountCents,

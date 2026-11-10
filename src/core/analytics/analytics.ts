@@ -8,6 +8,8 @@ import { and, count, eq, gte, isNull, lt, sql, sum, type SQL } from 'drizzle-orm
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { activityLog, payments, refunds } from '../db/schema';
 import type { PlatformScope, Scope } from '../db/scope';
+import type { EntityDef } from '../modules/contract';
+import { authorize } from '../rbac/permissions';
 import type { TenantTable } from '../records/types';
 
 export type DateRange = { from: Date; to: Date };
@@ -27,7 +29,7 @@ function bucketExpr(column: AnyPgColumn, bucket: Bucket, timeZone: string): SQL<
   // The unit and time zone are written into the SQL text (not sent as parameters) so the
   // same expression can be used in both SELECT and GROUP BY. Both are checked first:
   // bucket is a closed union, and the time zone must look like "Area/City".
-  if (!/^[A-Za-z_]+(\/[A-Za-z_+-]+)*$/.test(timeZone))
+  if (!/^[A-Za-z_]+(\/[A-Za-z0-9_+-]+)*$/.test(timeZone))
     throw new Error(`Invalid time zone: ${timeZone}`);
   const unit = sql.raw(`'${bucket}'`);
   const zone = sql.raw(`'${timeZone}'`);
@@ -44,6 +46,7 @@ const num = (value: unknown) => Number(value ?? 0);
 // ---------------------------------------------------------------- one business
 
 export async function revenueSummary(s: Scope, range: DateRange): Promise<Revenue> {
+  authorize(s.ctx, 'payments.read');
   const [paid] = await s.db
     .select({ total: sum(payments.amountCents), n: count() })
     .from(payments)
@@ -79,21 +82,23 @@ export async function revenueSeries(
   return rows.map((r) => ({ bucket: r.bucket, value: num(r.value) }));
 }
 
-/** How many rows of a tenant table were created in the range. */
-export async function createdCount(
-  s: Scope,
-  table: TenantTable,
-  range: DateRange,
-): Promise<number> {
-  return s.db.$count(table, and(s.where(table), inRange(table.createdAt, range)));
+/** How many records of an entity were created in the range. Needs the entity's read permission. */
+export async function createdCount(s: Scope, entity: EntityDef, range: DateRange): Promise<number> {
+  authorize(s.ctx, entity.readPermission);
+  return s.db.$count(
+    entity.table,
+    and(s.where(entity.table), inRange(entity.table.createdAt, range)),
+  );
 }
 
 export async function createdSeries(
   s: Scope,
-  table: TenantTable,
+  entity: EntityDef,
   range: DateRange,
   bucket: Bucket,
 ): Promise<SeriesPoint[]> {
+  authorize(s.ctx, entity.readPermission);
+  const table = entity.table;
   const b = bucketExpr(table.createdAt, bucket, s.ctx.business.timeZone);
   const rows = await s.db
     .select({ bucket: b, value: count() })
@@ -105,6 +110,7 @@ export async function createdSeries(
 }
 
 export async function activityCount(s: Scope, range: DateRange): Promise<number> {
+  authorize(s.ctx, 'business.activity.read');
   return s.db.$count(
     activityLog,
     and(
@@ -121,6 +127,7 @@ export async function revenueByBusiness(
   s: PlatformScope,
   range: DateRange,
 ): Promise<Map<string, Revenue>> {
+  authorize(s.ctx, 'executive.dashboard.read');
   const paid = await s.db
     .select({ businessId: payments.businessId, total: sum(payments.amountCents), n: count() })
     .from(payments)
@@ -163,6 +170,7 @@ export async function revenueSeriesByBusiness(
   range: DateRange,
   bucket: Bucket,
 ): Promise<BusinessSeriesPoint[]> {
+  authorize(s.ctx, 'executive.dashboard.read');
   const b = bucketExpr(payments.paidAt, bucket, PLATFORM_TIME_ZONE);
   const rows = await s.db
     .select({ businessId: payments.businessId, bucket: b, value: sum(payments.amountCents) })
@@ -178,6 +186,7 @@ export async function createdCountByBusiness(
   table: TenantTable,
   range: DateRange,
 ): Promise<Map<string, number>> {
+  authorize(s.ctx, 'executive.dashboard.read');
   const rows = await s.db
     .select({ businessId: table.businessId, n: count() })
     .from(table)
@@ -190,6 +199,7 @@ export async function activityCountByBusiness(
   s: PlatformScope,
   range: DateRange,
 ): Promise<Map<string, number>> {
+  authorize(s.ctx, 'executive.dashboard.read');
   const rows = await s.db
     .select({ businessId: activityLog.businessId, n: count() })
     .from(activityLog)

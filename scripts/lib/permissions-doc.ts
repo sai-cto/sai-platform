@@ -91,15 +91,17 @@ These are enforced in code and each has a test (file in brackets).
 | Rule | Where it is tested |
 |---|---|
 | A business admin or staff member cannot open, read or write another business — through the context, the record functions, or a raw database query | \`tests/integration/tenant-isolation.test.ts\` |
+| A record can only link to records of the same business and the same environment (the database refuses anything else), and links never cascade a delete | \`tests/integration/tenant-isolation.test.ts\` |
+| Permission is checked before any payment, refund, file write or email leaves the platform | \`tests/integration/hardening.test.ts\` |
+| The same payment request is never charged twice, and refunds can never exceed what was paid, even when requests arrive at the same moment | \`tests/integration/hardening.test.ts\` |
 | Live and sandbox data cannot see or change each other | \`tests/integration/tenant-isolation.test.ts\` |
 | Executives cannot write anything, in any business or on the platform | \`tests/integration/permissions.test.ts\` |
 | "Delete" archives (recoverable). Permanent delete needs super admin **and** the record archived longer than the retention window (default 30 days, configurable by super admin only) | \`tests/integration/retention.test.ts\` |
 | Every create, update, archive, restore, permanent delete, permission change, settings change and sign-in writes an activity log entry in the same transaction; the log cannot be edited or deleted | \`tests/integration/audit.test.ts\` |
 | Only super admin can grant or remove platform roles, or deactivate a platform-role account | \`tests/integration/permissions.test.ts\` |
-| The last super admin cannot be demoted or deactivated; a business always keeps one active admin | \`tests/integration/permissions.test.ts\` |
+| The last super admin cannot be demoted or deactivated; a business always keeps one usable admin (also when an account is deactivated, and when two removals happen at once) | \`tests/integration/permissions.test.ts\`, \`tests/integration/hardening.test.ts\` |
 | A person with business roles cannot be given a platform role, and the reverse | \`tests/integration/permissions.test.ts\` |
 | Staff can only be granted actions marked 🔑 | \`tests/integration/permissions.test.ts\` |
 | Using test mode (sandbox) needs \`business.sandbox.use\`; the sandbox always uses the mock payment provider | \`tests/integration/permissions.test.ts\`, \`tests/integration/services.test.ts\` |
-| Routes and exports return "not found" for another business | \`tests/e2e/isolation.spec.ts\` |
 `;
 }

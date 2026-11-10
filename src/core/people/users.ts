@@ -9,10 +9,12 @@ import { logActivity } from '../audit/log';
 import { revokeAllSessions } from '../auth/session';
 import { getDb, type Tx } from '../db/client';
 import { businesses, memberships, users } from '../db/schema';
+import { lockAndCountAdmins } from './admins';
 import { NotFoundError, ValidationError } from '../errors';
 import { authorize } from '../rbac/permissions';
 import { PLATFORM_ROLES, type PlatformRole } from '../rbac/roles';
 import type { PlatformContext } from '../tenancy/context';
+import { isUuid } from '../ids';
 
 export type UserWithAccess = {
   id: string;
@@ -96,16 +98,18 @@ export async function createUser(ctx: PlatformContext, raw: unknown): Promise<st
   });
 }
 
+/** Counts active super admins, locking those rows so two simultaneous demotions cannot both pass. */
 async function activeSuperAdminCount(tx: Tx): Promise<number> {
-  const [row] = await tx
-    .select({ n: count() })
+  const rows = await tx
+    .select({ id: users.id })
     .from(users)
-    .where(and(eq(users.platformRole, 'super_admin'), eq(users.isActive, true)));
-  return row.n;
+    .where(and(eq(users.platformRole, 'super_admin'), eq(users.isActive, true)))
+    .for('update');
+  return rows.length;
 }
 
 async function loadUser(tx: Tx, userId: string) {
-  if (!/^[0-9a-f-]{36}$/i.test(userId)) throw new NotFoundError();
+  if (!isUuid(userId)) throw new NotFoundError();
   const [user] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!user) throw new NotFoundError();
   return user;
@@ -175,6 +179,27 @@ export async function setUserActive(
       (await activeSuperAdminCount(tx)) <= 1
     ) {
       throw new ValidationError('This is the last super admin and cannot be deactivated.');
+    }
+    if (!isActive) {
+      // A business must always keep one usable admin: refuse if this account is the only one.
+      const adminOf = await tx
+        .select({ businessId: memberships.businessId, name: businesses.name })
+        .from(memberships)
+        .innerJoin(businesses, eq(businesses.id, memberships.businessId))
+        .where(
+          and(
+            eq(memberships.userId, userId),
+            eq(memberships.role, 'business_admin'),
+            eq(memberships.isActive, true),
+          ),
+        );
+      for (const b of adminOf) {
+        if ((await lockAndCountAdmins(tx, b.businessId)) <= 1) {
+          throw new ValidationError(
+            `${user.name} is the only admin of ${b.name}. Give that business another admin first.`,
+          );
+        }
+      }
     }
     await tx.update(users).set({ isActive }).where(eq(users.id, userId));
     if (!isActive) await revokeAllSessions(tx, userId);

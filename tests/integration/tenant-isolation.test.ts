@@ -5,7 +5,7 @@
  *   1. the context: A's admin cannot even open B;
  *   2. the record functions: with A's context, B's rows do not exist;
  *   3. the database: a raw query inside A's scope returns no B rows (row-level security).
- * Route-level checks (every console URL and export) are in tests/e2e/isolation.spec.ts.
+ * Route-level checks are added with the console's routes (Phase 2).
  */
 import { eq, sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
@@ -30,10 +30,12 @@ import {
   restoreRecord,
   updateRecord,
 } from '@/core/records/records';
-import { customerEntity } from '@/core/records/core-entities';
+import { customerEntity, paymentEntity } from '@/core/records/core-entities';
+import { takePayment } from '@/core/payments/payments';
+import { bookAppointment } from '@/core/scheduling/scheduling';
 import { buildBusinessContext } from '@/core/tenancy/context';
 import { SEED_BUSINESSES } from '@/seed/businesses';
-import { USERS, ageArchive, arrange, ctxFor, ensureRow, tableNameOf, userId } from './helpers';
+import { USERS, ageArchive, arrange, asOwner, ctxFor, ensureRow, tableNameOf, userId } from './helpers';
 
 // A = HHMC (the admin under test), B = every other business.
 const A = 'hhmc';
@@ -91,16 +93,21 @@ describe.each(OTHERS)('records: hhmc admin vs %s', (other) => {
         // hhmc's module has no permission for another module's entity, so open the scope with a
         // permission the admin does hold, then try each operation on the other business's row.
         await withScope(mine, 'business.overview.read', async (s) => {
+          // Where the admin HOLDS the entity's permissions (in their own business), the only
+          // thing stopping them is isolation, so the answer must be exactly "not found".
+          // Where they do not hold them at all (imports; another module's entity), "forbidden".
+          const holds = mine.permissions.has(entity.readPermission) && mine.permissions.has(entity.writePermission);
           const denied = (p: Promise<unknown>) =>
-            expect(p).rejects.toSatisfy(
-              (e: unknown) => e instanceof NotFoundError || e instanceof ForbiddenError,
-            );
+            holds
+              ? expect(p).rejects.toBeInstanceOf(NotFoundError)
+              : expect(p).rejects.toSatisfy((e: unknown) => e instanceof NotFoundError || e instanceof ForbiddenError);
           await denied(getRecord(s, entity, theirRow));
           await denied(getRecord(s, entity, theirRow, 'include'));
           await denied(updateRecord(s, entity, theirRow, {} as never));
           await denied(archiveRecord(s, entity, theirRow));
           await denied(restoreRecord(s, entity, theirArchivedRow));
-          await denied(purgeRecord(s, entity, theirArchivedRow));
+          // An admin can never purge anything, anywhere.
+          await expect(purgeRecord(s, entity, theirArchivedRow)).rejects.toBeInstanceOf(ForbiddenError);
 
           // Level 3: even a raw, unfiltered query inside A's scope cannot see B's rows.
           const raw = await txOf(s)
@@ -184,14 +191,12 @@ describe('records: a row can never be written INTO another business', () => {
     const mine = await ctxFor(USERS.hhmcAdmin, A);
     await expect(
       withScope(mine, 'customers.write', (s) =>
-        txOf(s)
-          .insert(customerEntity.table)
-          .values({
-            businessId: brssId,
-            environment: 'live',
-            firstName: 'Raw',
-            lastName: 'Insert',
-          }),
+        txOf(s).insert(customerEntity.table).values({
+          businessId: brssId,
+          environment: 'live',
+          firstName: 'Raw',
+          lastName: 'Insert',
+        }),
       ),
     ).rejects.toThrow();
   });
@@ -199,6 +204,77 @@ describe('records: a row can never be written INTO another business', () => {
   it('with no scope set at all, the app role sees no tenant rows', async () => {
     const rows = await getDb().select().from(customerEntity.table).limit(5);
     expect(rows).toHaveLength(0);
+  });
+});
+
+describe('links between records stay inside one business and one environment', () => {
+  const brssCustomer = (environment: 'live' | 'sandbox') => arrange('brss', environment, (s) => ensureRow(s, customerEntity));
+  const LINK_ERROR = /linked record does not exist/;
+  const manual = { amountCents: 1, status: 'succeeded', provider: 'manual' } as const;
+
+  it('a payment, appointment or raw record cannot point at another business’s customer', async () => {
+    const theirs = await brssCustomer('live');
+    const mine = await ctxFor(USERS.hhmcAdmin, A);
+    await expect(
+      withScope(mine, 'payments.write', (s) => takePayment(s, { amountCents: 500, description: 'x', idempotencyKey: `iso-${Date.now()}`, method: 'cash', customerId: theirs })),
+    ).rejects.toThrow(LINK_ERROR);
+    await expect(
+      withScope(mine, 'scheduling.write', (s) => bookAppointment(s, { kind: 'visit', startsAt: new Date(Date.now() + 9e9), endsAt: new Date(Date.now() + 9e9 + 3.6e6), customerId: theirs })),
+    ).rejects.toThrow(LINK_ERROR);
+    await expect(withScope(mine, 'payments.write', (s) => createRecord(s, paymentEntity, { ...manual, customerId: theirs }))).rejects.toThrow(LINK_ERROR);
+    // An id that exists nowhere gives exactly the same answer, so ids cannot be probed.
+    await expect(
+      withScope(mine, 'payments.write', (s) => createRecord(s, paymentEntity, { ...manual, customerId: '00000000-0000-4000-8000-000000000001' })),
+    ).rejects.toThrow(LINK_ERROR);
+  });
+
+  it('an existing record cannot be re-pointed at another business’s record', async () => {
+    const theirs = await brssCustomer('live');
+    const mine = await ctxFor(USERS.hhmcAdmin, A);
+    await expect(
+      withScope(mine, 'payments.write', async (s) => {
+        const payment = await createRecord(s, paymentEntity, manual);
+        return updateRecord(s, paymentEntity, payment.id, { customerId: theirs });
+      }),
+    ).rejects.toThrow(LINK_ERROR);
+  });
+
+  it('a live record cannot point at a sandbox record, and the reverse', async () => {
+    const sandboxCustomer = await brssCustomer('sandbox');
+    const liveCustomer = await brssCustomer('live');
+    const live = await ctxFor(USERS.brssAdmin, 'brss', 'live');
+    const sandbox = await ctxFor(USERS.brssAdmin, 'brss', 'sandbox');
+    await expect(withScope(live, 'payments.write', (s) => createRecord(s, paymentEntity, { ...manual, customerId: sandboxCustomer }))).rejects.toThrow(LINK_ERROR);
+    await expect(withScope(sandbox, 'payments.write', (s) => createRecord(s, paymentEntity, { ...manual, customerId: liveCustomer }))).rejects.toThrow(LINK_ERROR);
+  });
+
+  it('even the database owner cannot create a cross-business link', async () => {
+    const theirs = await brssCustomer('live');
+    const mine = await ctxFor(USERS.hhmcAdmin, A);
+    await expect(
+      asOwner((q) => q`insert into payments (business_id, environment, customer_id, amount_cents, status, provider) values (${mine.business.id}, 'live', ${theirs}, 1, 'succeeded', 'manual')`),
+    ).rejects.toThrow(/foreign key/);
+  });
+
+  it('every foreign key between tenant tables includes business and environment, and none cascades', async () => {
+    const rows = await asOwner(
+      (q) => q<{ name: string; child: string; parent: string; columns: string[]; delete_rule: string }[]>`
+        select con.conname as name, child.relname as child, parent.relname as parent, con.confdeltype as delete_rule,
+               array(select a.attname::text from unnest(con.conkey) k join pg_attribute a on a.attrelid = con.conrelid and a.attnum = k) as columns
+        from pg_constraint con
+        join pg_class child on child.oid = con.conrelid
+        join pg_class parent on parent.oid = con.confrelid
+        where con.contype = 'f'
+          and exists (select 1 from information_schema.columns c where c.table_name = child.relname and c.column_name = 'archived_at')`,
+    );
+    const tenantTables = new Set(rows.map((r) => r.child));
+    const betweenTenants = rows.filter((r) => tenantTables.has(r.parent));
+    expect(betweenTenants.length).toBeGreaterThanOrEqual(6);
+    for (const fk of betweenTenants) {
+      expect(fk.columns, `${fk.name} must be created with sameTenant()`).toEqual(expect.arrayContaining(['business_id', 'environment']));
+    }
+    // 'a' = NO ACTION. Nothing a tenant table points at may be deleted out from under it.
+    for (const fk of rows) expect(fk.delete_rule, `${fk.name} must not cascade`).toBe('a');
   });
 });
 

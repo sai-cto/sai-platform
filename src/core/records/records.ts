@@ -20,6 +20,7 @@ import type { EntityDef } from '../modules/contract';
 import { authorize } from '../rbac/permissions';
 import { getRetentionDays } from '../settings/platform';
 import type { NewValues, Patch, Row, TenantTable } from './types';
+import { isUuid } from '../ids';
 
 type AnyRow = Record<string, unknown>;
 const STANDARD = new Set<string>(STANDARD_COLUMN_KEYS);
@@ -45,7 +46,7 @@ async function findInScope(
   id: string,
   archived: ArchivedFilter,
 ): Promise<AnyRow> {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new NotFoundError();
+  if (!isUuid(id)) throw new NotFoundError();
   const [row] = await s.db
     .select()
     .from(table)
@@ -116,16 +117,18 @@ export async function createRecord<T extends TenantTable>(
   values: NewValues<T>,
 ): Promise<Row<T>> {
   authorize(s.ctx, entity.writePermission);
-  const [row] = await txOf(s)
-    .insert(entity.table)
-    .values({
-      ...withoutStandard(values as AnyRow),
-      businessId: s.ctx.business.id,
-      environment: s.ctx.environment,
-      createdBy: s.ctx.actor.id,
-      updatedBy: s.ctx.actor.id,
-    } as never)
-    .returning();
+  const [row] = await writing(() =>
+    txOf(s)
+      .insert(entity.table)
+      .values({
+        ...withoutStandard(values as AnyRow),
+        businessId: s.ctx.business.id,
+        environment: s.ctx.environment,
+        createdBy: s.ctx.actor.id,
+        updatedBy: s.ctx.actor.id,
+      } as never)
+      .returning(),
+  );
   const created = row as AnyRow;
   await logActivity(txOf(s), s.ctx, {
     action: 'create',
@@ -152,11 +155,13 @@ export async function updateRecord<T extends TenantTable>(
     ),
   );
   if (Object.keys(changes).length === 0) return before as Row<T>;
-  const [row] = await txOf(s)
-    .update(entity.table)
-    .set({ ...changes, updatedAt: new Date(), updatedBy: s.ctx.actor.id } as never)
-    .where(and(s.where(entity.table), eq(entity.table.id, id)))
-    .returning();
+  const [row] = await writing(() =>
+    txOf(s)
+      .update(entity.table)
+      .set({ ...changes, updatedAt: new Date(), updatedBy: s.ctx.actor.id } as never)
+      .where(and(s.where(entity.table), eq(entity.table.id, id)))
+      .returning(),
+  );
   const after = row as AnyRow;
   await logActivity(txOf(s), s.ctx, {
     action: 'update',
@@ -256,6 +261,7 @@ export async function purgeRecord<T extends TenantTable>(
     }
     throw error;
   }
+  if (entity.afterPurge) await entity.afterPurge(row);
   await logActivity(txOf(s), s.ctx, {
     action: 'purge',
     entityType: entity.key,
@@ -266,13 +272,31 @@ export async function purgeRecord<T extends TenantTable>(
   });
 }
 
-function isForeignKeyViolation(error: unknown): boolean {
+/** Does this error (or the error that caused it) carry this Postgres error code? */
+export function hasPgCode(error: unknown, code: string): boolean {
   const seen = new Set<unknown>();
   let current: unknown = error;
   while (current && typeof current === 'object' && !seen.has(current)) {
     seen.add(current);
-    if ((current as { code?: string }).code === '23503') return true;
+    if ((current as { code?: string }).code === code) return true;
     current = (current as { cause?: unknown }).cause;
   }
   return false;
+}
+
+const isForeignKeyViolation = (error: unknown) => hasPgCode(error, '23503');
+
+/**
+ * Runs a write. If the database refuses it because a linked record is not in this business
+ * and environment (or does not exist at all — the two look identical on purpose), the
+ * caller gets one plain message instead of a database error.
+ */
+async function writing<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (isForeignKeyViolation(error))
+      throw new ValidationError('A linked record does not exist in this business.');
+    throw error;
+  }
 }
