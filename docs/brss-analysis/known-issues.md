@@ -89,6 +89,6 @@ same reasoning and are marked for review in `docs/DECISIONS.md`.
 - **Today:** rules such as "appointment date = tomorrow" and "days until delivery = 20" are evaluated
   only when a record is saved, so they fire rarely or more than once.
 - **Source:** `workflows/Appointment__c.workflow-meta.xml:158-182,203-227`,
-  `workflows/Order.workflow-meta.xml:294`
+  `workflows/Order.workflow-meta.xml:294-310`
 - **New platform:** confirmation emails are sent at the moment the event happens. Day-before reminders
   need a scheduler, which is out of scope until hosting is decided (see `docs/HANDOFF.md`).
