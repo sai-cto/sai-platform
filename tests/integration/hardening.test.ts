@@ -591,3 +591,51 @@ describe('third review', () => {
     await fileStorage.delete(fresh);
   });
 });
+
+describe('fourth review: small hardening', () => {
+  it('text the database cannot store is refused before the provider is called', async () => {
+    const ctx = await ctxFor(USERS.brssAdmin, 'brss');
+    const charge = vi.spyOn(mockProvider, 'charge');
+    const refund = vi.spyOn(mockProvider, 'refund');
+    try {
+      await expect(withScope(ctx, 'payments.write', (s) => takePayment(s, { amountCents: 100, description: 'a\u0000b', idempotencyKey: key() }))).rejects.toBeInstanceOf(ValidationError);
+      const payment = await withScope(ctx, 'payments.write', (s) => takePayment(s, { amountCents: 100, description: 'ok', idempotencyKey: key() }));
+      charge.mockClear();
+      await expect(withScope(ctx, 'payments.write', (s) => refundPayment(s, { paymentId: payment.id, amountCents: 50, reason: 'r\u0000' }))).rejects.toBeInstanceOf(ValidationError);
+      expect(charge).not.toHaveBeenCalled();
+      expect(refund).not.toHaveBeenCalled();
+    } finally {
+      charge.mockRestore();
+      refund.mockRestore();
+    }
+  });
+
+  it('the database keeps the refunded total between zero and the amount paid', async () => {
+    const ctx = await ctxFor(USERS.brssAdmin, 'brss');
+    await expect(
+      withScope(ctx, 'payments.write', async (s) => {
+        const payment = await takePayment(s, { amountCents: 100, description: 'bounded', idempotencyKey: key() });
+        await updateRecord(s, paymentEntity, payment.id, { refundedCents: 101 });
+      }),
+    ).rejects.toThrow();
+    await expect(
+      withScope(ctx, 'payments.write', async (s) => {
+        const payment = await takePayment(s, { amountCents: 100, description: 'bounded', idempotencyKey: key() });
+        await updateRecord(s, paymentEntity, payment.id, { refundedCents: -1 });
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('revenue still subtracts a refund whose row was archived', async () => {
+    const ctx = await ctxFor(USERS.superAdmin, 'corn', 'sandbox');
+    const range = () => lastDays(1, new Date(Date.now() + 60_000));
+    const before = await withScope(ctx, 'payments.read', (s) => revenueSummary(s, range()));
+    await withScope(ctx, 'payments.write', async (s) => {
+      const payment = await takePayment(s, { amountCents: 1000, description: 'archived refund', idempotencyKey: key() });
+      const refund = await refundPayment(s, { paymentId: payment.id, amountCents: 400, reason: 'r' });
+      await archiveRecord(s, refundEntity, refund.id);
+    });
+    const after = await withScope(ctx, 'payments.read', (s) => revenueSummary(s, range()));
+    expect(after.netCents - before.netCents).toBe(600);
+  });
+});

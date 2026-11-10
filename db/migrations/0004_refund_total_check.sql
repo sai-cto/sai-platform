@@ -1,0 +1,1 @@
+ALTER TABLE "payments" ADD CONSTRAINT "payments_refunded_within_amount" CHECK ("payments"."refunded_cents" >= 0 and "payments"."refunded_cents" <= "payments"."amount_cents");

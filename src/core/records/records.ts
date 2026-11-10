@@ -150,7 +150,8 @@ export async function updateRecord<T extends TenantTable>(
   authorize(s.ctx, entity.writePermission);
   const before = await findInScope(s, entity.table, id, 'exclude');
   const locked = (entity.immutableFields ?? []).filter(
-    (field) => field in (patch as AnyRow) && !same(before[field], (patch as AnyRow)[field]),
+    (field) =>
+      (patch as AnyRow)[field] !== undefined && !same(before[field], (patch as AnyRow)[field]),
   );
   if (locked.length > 0)
     throw new ValidationError(
