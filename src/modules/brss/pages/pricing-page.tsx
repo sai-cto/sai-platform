@@ -18,7 +18,8 @@ import { P } from '../permissions';
 import { PRODUCT_KINDS, PRODUCT_ROLES, STORAGE_TERMS, labelOf } from '../rules';
 import { loadSettings } from '../settings';
 import { getPriceList } from '../services/catalog';
-import { Check, Disclosure, Select } from './parts';
+import { Check, Select } from './parts';
+import { Disclosure } from './disclosure';
 
 export async function PricingPage({ ctx }: PortalPageProps) {
   const [{ products, storageTerms }, settings] = await Promise.all([
@@ -131,7 +132,7 @@ export async function PricingPage({ ctx }: PortalPageProps) {
 
         {canWrite ? (
           <Card title="Add a product" flush>
-            <Disclosure summary="New product" open={products.length === 0}>
+            <Disclosure summary="New product" startOpen={products.length === 0}>
               <ActionForm
                 action={createProductAction.bind(null, slug, mode)}
                 submitLabel="Add product"

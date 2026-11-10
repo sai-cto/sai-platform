@@ -19,7 +19,8 @@ import type { brssProducts } from '../../schema';
 import type { BrssSettings } from '../../settings';
 import type { OrderDetail } from '../../services/orders';
 import { PaymentForm } from '../forms/payment-form';
-import { Disclosure, Select, Warning } from '../parts';
+import { Select, Warning } from '../parts';
+import { Disclosure } from '../disclosure';
 
 export function ChargesCard({
   ctx,
@@ -197,7 +198,7 @@ export function ChargesCard({
         <div className="border-t border-zinc-200 p-4">
           <h3 className="mb-3 text-sm font-semibold text-zinc-900">Take payment</h3>
           <PaymentForm
-action={payOrderAction.bind(null, slug, mode, order.id)}
+            action={payOrderAction.bind(null, slug, mode, order.id)}
             unpaidCents={unpaidCents}
             taxPercent={settings.taxPercent}
             maxDiscountCents={maxDiscountCents(

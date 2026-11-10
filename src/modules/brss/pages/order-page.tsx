@@ -23,7 +23,8 @@ import { AppointmentsCard } from './order/appointments-card';
 import { ArticlesCard } from './order/articles-card';
 import { ChargesCard } from './order/charges-card';
 import { OrderFields } from './order-fields';
-import { CAMPUS_LABELS, Disclosure, Fact, OrderStatusBadge, ServiceList, formatDay } from './parts';
+import { CAMPUS_LABELS, Fact, OrderStatusBadge, ServiceList, formatDay } from './parts';
+import { Disclosure } from './disclosure';
 
 export async function OrderPage({ ctx, params, basePath }: PortalPageProps) {
   const detail = await getOrder(ctx, params.id);

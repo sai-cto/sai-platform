@@ -101,7 +101,15 @@ export function IntakeForm({
   );
 
   return (
-    <ActionForm action={action} submitLabel={submitLabel} resetOnSuccess={!initial}>
+    <ActionForm
+      action={action}
+      submitLabel={submitLabel}
+      resetOnSuccess={!initial}
+      // After adding an article, the sizes are cleared for the next one.
+      onSuccess={() => {
+        if (!initial) setSize({ lengthIn: 0, widthIn: 0, heightIn: 0, weightLb: 0 });
+      }}
+    >
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Kind of article" htmlFor="intake-type">
           <select

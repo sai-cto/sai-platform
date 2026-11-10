@@ -25,7 +25,8 @@ import { CORE, P } from '../permissions';
 import { listTrucks } from '../services/appointments';
 import { warehouseCounts } from '../services/articles';
 import { getPlaces } from '../services/catalog';
-import { CAMPUS_LABELS, Disclosure, Select } from './parts';
+import { CAMPUS_LABELS, Select } from './parts';
+import { Disclosure } from './disclosure';
 
 export async function OperationsPage({ ctx, basePath }: PortalPageProps) {
   const slug = ctx.business.slug;

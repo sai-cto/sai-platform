@@ -10,7 +10,7 @@ import type { listTrucks } from '../../services/appointments';
 import type { OrderDetail } from '../../services/orders';
 import { AppointmentRow } from '../appointment-row';
 import { AppointmentForm } from '../forms/appointment-form';
-import { Disclosure } from '../parts';
+import { Disclosure } from '../disclosure';
 
 export function AppointmentsCard({
   ctx,
@@ -64,7 +64,7 @@ export function AppointmentsCard({
         </ul>
       )}
       {canBook ? (
-        <Disclosure summary="Book an appointment" open={appointments.length === 0}>
+        <Disclosure summary="Book an appointment" startOpen={appointments.length === 0}>
           <AppointmentForm
             action={bookAppointmentAction.bind(null, ctx.business.slug, ctx.environment, order.id)}
             regions={places.regions.map((r) => ({ id: r.id, name: r.name }))}

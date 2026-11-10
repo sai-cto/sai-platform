@@ -26,7 +26,8 @@ import {
 } from '../services/appointments';
 import { getPlaces } from '../services/catalog';
 import { AppointmentRow } from './appointment-row';
-import { Check, Disclosure, Select, formatWeekday } from './parts';
+import { Check, Select, formatWeekday } from './parts';
+import { Disclosure } from './disclosure';
 
 export async function SchedulePage({ ctx, searchParams, basePath }: PortalPageProps) {
   const days = Number.parseInt(searchParams.days ?? '14', 10);
@@ -64,6 +65,8 @@ export async function SchedulePage({ ctx, searchParams, basePath }: PortalPagePr
       <div className="space-y-5">
         <Card flush>
           <form
+            // A new key when the filters change, so the fields always show what is applied.
+            key={JSON.stringify(searchParams)}
             method="get"
             action={base}
             className="grid grid-cols-2 items-end gap-3 border-b border-zinc-200 p-3 md:grid-cols-4 xl:grid-cols-7"

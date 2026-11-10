@@ -83,6 +83,8 @@ export async function OrdersPage({ ctx, searchParams, basePath }: PortalPageProp
 
       <Card flush>
         <form
+          // A new key when the filters change, so the fields always show what is applied.
+          key={JSON.stringify(searchParams)}
           method="get"
           action={basePath}
           className="grid grid-cols-2 items-end gap-3 border-b border-zinc-200 p-3 md:grid-cols-4 xl:grid-cols-8"

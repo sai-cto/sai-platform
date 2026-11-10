@@ -11,7 +11,8 @@ import { createZipZoneAction, removeCatalogItemAction, setZoneRateAction } from 
 import { zipZoneEntity, zoneRateEntity } from '../entities';
 import { P } from '../permissions';
 import { getZones, lookupShipping } from '../services/catalog';
-import { Disclosure, Select } from './parts';
+import { Select } from './parts';
+import { Disclosure } from './disclosure';
 
 const three = (prefix: number) => String(prefix).padStart(3, '0');
 

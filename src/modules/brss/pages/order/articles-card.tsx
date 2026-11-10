@@ -25,7 +25,8 @@ import type { brssArticles, brssProducts } from '../../schema';
 import type { BrssSettings } from '../../settings';
 import type { OrderDetail } from '../../services/orders';
 import { IntakeForm } from '../forms/intake-form';
-import { ArticleStatusBadge, Disclosure, Select } from '../parts';
+import { ArticleStatusBadge, Select } from '../parts';
+import { Disclosure } from '../disclosure';
 
 export function locationText(
   article: Pick<typeof brssArticles.$inferSelect, 'section' | 'row' | 'pallet'>,
@@ -167,7 +168,7 @@ export function ArticlesCard({
       ) : null}
 
       {canIntake ? (
-        <Disclosure summary="Take in an article" open={articles.length === 0}>
+        <Disclosure summary="Take in an article" startOpen={articles.length === 0}>
           <IntakeForm
             action={intakeArticleAction.bind(null, slug, mode, order.id)}
             types={articleTypeChoices(order.services)}

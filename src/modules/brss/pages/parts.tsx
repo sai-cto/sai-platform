@@ -127,29 +127,6 @@ export function Fact({ label, children }: { label: string; children: ReactNode }
   );
 }
 
-/** A fold-out section ("Change details ▸") that needs no JavaScript. */
-export function Disclosure({
-  summary,
-  children,
-  open,
-}: {
-  summary: string;
-  children: ReactNode;
-  open?: boolean;
-}) {
-  return (
-    <details open={open} className="group border-t border-zinc-200">
-      <summary className="cursor-pointer list-none px-4 py-2.5 text-sm font-medium text-zinc-700 select-none hover:text-zinc-900 [&::-webkit-details-marker]:hidden">
-        <span className="mr-1.5 inline-block text-zinc-400 transition-transform group-open:rotate-90">
-          ›
-        </span>
-        {summary}
-      </summary>
-      <div className="px-4 pb-4">{children}</div>
-    </details>
-  );
-}
-
 /** An amber box for things staff must not miss. */
 export function Warning({ title, children }: { title: string; children: ReactNode }) {
   return (
