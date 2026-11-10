@@ -19,6 +19,8 @@ safest reversible option. They are collected in the first table so they are easy
 | R-11 | Microsoft sign-in accepts any account in SAI's directory, guests included (details: G1-16 below). | See G1-16. | See G1-16 |
 | R-9 | Row-level security covers tenant tables only; platform tables rely on the core's checks and a lint rule (details: G1-10 below). | See G1-10. | See G1-10 |
 | R-10 | Sessions have no idle timeout and expired session rows are not cleaned up (details: G1-11 below). | Needs a scheduled job, which needs hosting. | See G1-11 |
+| R-12 | Accent colours of six businesses were changed from the brand colours so they can be told apart (table under P2-1). | The brief asked for this; the exact colours are a judgement call. | `src/seed/businesses.ts`, then `npm run db:seed` |
+| R-13 | Customer and field portals would use the console's login and roles (P2-9). | No such portal exists yet. | Decide with the identity provider |
 | R-8 | Next.js "Cache Components" is switched off; every page renders per request. | Every console page depends on who is signed in. Per-request rendering is the simplest model for students. Next.js says the feature becomes mandatory in the next major version: see HANDOFF. | `next.config.ts` |
 
 ## Locked by the brief (not Claude's to change)
@@ -105,6 +107,35 @@ or `tenant-isolation.test.ts`.
 | G1-14 | Second review. Changes to who has access take a lock first and decide afterwards (per business, per user). Only *usable* admins (active membership and active account) count towards "a business keeps one admin". | Closed the remaining races; a deactivated admin could not be removed. |
 | G1-15 | The generic record functions (`createRecord` …) enforce separation, permissions and logging, but not business rules. Business rules live in services (`takePayment`, `refundPayment`, …). Screens must call the service, not the generic function, for records that have rules. | A refund created with `createRecord` skips the "not more than was paid" rule. No screen does this; the Data tab only archives and restores. |
 | G1-16 | **NEEDS JAI REVIEW.** Microsoft sign-in trusts any account of SAI's own directory, including guests invited into it; it does not additionally check the email's domain. | Guest accounts are controlled by whoever administers the directory. Add a domain check when the directory is chosen, if guests are used. |
+
+## Phase 2 — SAI Console
+
+| # | Decision | Why |
+|---|---|---|
+| P2-1 | **Accent colours were adjusted** (table below). **NEEDS JAI REVIEW.** | Five brand colours were near-identical reds and two were black, so the sidebar monograms could not be told apart. Each final colour stays in its brand's family where possible. Neighbouring businesses in the sidebar were checked for separation, including under simulated colour-blindness. The monogram always shows the short code as text, so colour is never the only cue. |
+| P2-2 | One light theme. System fonts. | A dark theme doubles the visual testing for no requirement. System fonts need no download. |
+| P2-3 | Charts use one blue for data, never a business's brand colour; businesses are compared with labelled bars and small trend lines, not a nine-colour legend; every chart sits beside a table with the same numbers. | Brand colours are for identity. Nine series colours cannot be told apart reliably. |
+| P2-4 | The Overview only shows a number if the person may read the records behind it (staff without payment access see no revenue). | "Limited to what their business admin grants" applies to summaries too. |
+| P2-5 | The executive dashboard's "Orders" column shows "—" for a business whose module has not defined its unit of work. | A zero would read as "no orders" rather than "not tracked yet". |
+| P2-6 | Imports: at most 2,000 rows per file; all rows or none; every imported row is created and logged like any other record; a file goes into live once. | Keeps an import reviewable and makes a repeat impossible. |
+| P2-7 | Module settings are edited through a form generated from the fields the module declares; the module's schema validates them. | No settings screen has to be hand-built per module. |
+| P2-8 | The command palette and "g then letter" shortcuts read the current business's tabs from the page itself. | They can then never offer a tab the person is not allowed to open. |
+| P2-9 | Customer and field portal hosts use the console's login and roles for now. **NEEDS JAI REVIEW** when the first customer portal is planned. | How customers sign in depends on the undecided identity provider. No module defines such a portal yet, so the routes answer "not found". |
+| P2-10 | Screenshots in `docs/screenshots/` are JPEGs. | A hundred full-page PNGs would add roughly 15 MB to the repository. |
+
+### Accent colours (P2-1)
+
+| Business | Brand colour (brief) | Final accent | Change |
+|---|---|---|---|
+| Hired Hands Moving Company | `#1F4E9C` blue | `#1F4E9C` | none |
+| Student Agencies Real Estate | `#5A5A5A` slate gray | `#6B6B6B` | slightly lighter, to separate it from the two near-blacks |
+| Big Red Shipping & Storage | `#E2231A` red | `#E2231A` | none (it keeps the pure red) |
+| The Cornellian | `#1A1A1A` near-black | `#1A1A1A` | none |
+| Cornell Freshman Register | `#C8102E` red | `#C2185B` | shifted toward raspberry |
+| Student Agencies Tutoring | `#8B1E2D` maroon | `#6B1238` | deeper wine |
+| Cornell Bigger Beds | `#9B1C1C` dark red | `#D9580D` | shifted to burnt orange |
+| Big Red Mailroom | `#B3322A` brick red | `#7A5230` | shifted to brick brown |
+| Campus Promotions | `#111111` black | `#3A3F6B` | dark indigo, to separate it from The Cornellian |
 
 ## BRSS business questions (B1–B12)
 

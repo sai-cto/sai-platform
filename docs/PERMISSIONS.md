@@ -106,4 +106,7 @@ These are enforced in code and each has a test (file in brackets).
 | The last super admin cannot be demoted or deactivated; a business always keeps one usable admin (also when an account is deactivated, and when two removals happen at once) | `tests/integration/permissions.test.ts`, `tests/integration/hardening.test.ts` |
 | A person with business roles cannot be given a platform role, and the reverse | `tests/integration/permissions.test.ts` |
 | Staff can only be granted actions marked 🔑 | `tests/integration/permissions.test.ts` |
+| Every page, export and portal URL of another business — and the Platform section and executive view for business roles — answers "not found" | `tests/e2e/isolation.spec.ts` |
+| Each role sees exactly its own navigation, tabs and actions in the console | `tests/e2e/console.spec.ts` |
+| A file is imported into a sandbox first; importing into live needs a successful sandbox run of the same file and mapping, and happens once | `tests/integration/console-services.test.ts` |
 | Using test mode (sandbox) needs `business.sandbox.use`; the sandbox always uses the mock payment provider | `tests/integration/permissions.test.ts`, `tests/integration/services.test.ts` |
