@@ -5,6 +5,7 @@
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   date,
   index,
   integer,
@@ -59,6 +60,11 @@ export const payments = tenantTable(
     sameTenant('payments_customer_fk', t, t.customerId, customers),
     index('payments_subject_idx').on(t.subjectType, t.subjectId),
     index('payments_paid_idx').on(t.businessId, t.environment, t.paidAt),
+    // The refunded total can never go below zero or above what was paid.
+    check(
+      'payments_refunded_within_amount',
+      sql`${t.refundedCents} >= 0 and ${t.refundedCents} <= ${t.amountCents}`,
+    ),
     // One payment per idempotency key: the database itself refuses a double charge record.
     uniqueIndex('payments_idempotency_key')
       .on(t.businessId, t.environment, t.idempotencyKey)

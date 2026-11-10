@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: Phase 1, review gate pending._
+_Last updated: Phase 1 complete and merged to `main`; Phase 2 (console) in progress._
 
 ## In plain English
 
@@ -18,8 +18,8 @@ dashboard) is Phase 2. The nine business modules are Phase 3. The BRSS staff por
 
 ## Current phase and task
 
-- **Phase 1 — shared core.** Built. Waiting on: independent review gate → fix findings → merge to `main`.
-- Next: **Phase 2 — SAI Console**, on branch `phase-2-console`.
+- **Phase 1 — shared core.** ✅ Done. Passed the independent review gate after four rounds (see below) and merged to `main`.
+- **Phase 2 — SAI Console**, on branch `phase-2-console`: in progress.
 
 ## Acceptance criteria (final)
 
@@ -39,8 +39,8 @@ dashboard) is Phase 2. The nine business modules are Phase 3. The BRSS staff por
 | Phase | Status |
 |---|---|
 | 0 — Plan | ✅ merged to `main` (Checkpoint 1 approved 10 Nov 2026) |
-| 1 — Shared core | 🔨 built, review gate pending |
-| 2 — SAI Console | ⏳ |
+| 1 — Shared core | ✅ merged to `main` |
+| 2 — SAI Console | 🔨 in progress |
 | 3 — Module scaffolds | ⏳ |
 | 4 — BRSS proof module | ⏳ |
 
@@ -73,3 +73,27 @@ Guardrails that always apply: never push `--force`; never rewrite `main`; never 
 non-trivial dependencies beyond those in DECISIONS A3; at most 2 subagents at once.
 
 ## Verification log
+
+### Phase 1 — shared core (10 Nov 2026)
+
+```
+npm run check
+  tsc --noEmit            clean
+  eslint                  clean
+  vitest run              Test Files 8 passed (8) · Tests 303 passed (303)
+  secret scan             clean (122 files)
+npm run test:e2e          11 passed
+```
+
+Review gate (independent reviewer subagent, no access to the author's reasoning):
+
+| Round | Result | What happened next |
+|---|---|---|
+| 1 | 0 critical · 3 high · 11 medium · 12 minor | All high and medium fixed, 31 tests added |
+| 2 | 1 partial + 4 new (1 high, 3 medium) | All fixed, 49 tests added |
+| 3 | 2 medium (one a regression from round 2's fix) | Both fixed, 38 tests added |
+| 4 | **Nothing above minor.** Gate passed. | Minor items fixed as well (3 tests added) |
+
+No round found a way for a user to reach another business's data. The findings were holes in
+the data layer that a future screen or module could have hit; each fix has a test that fails
+if the fix is removed. Decisions that came out of the gate: `DECISIONS.md`, G1-1 … G1-19.

@@ -38,6 +38,7 @@ function bucketExpr(column: AnyPgColumn, bucket: Bucket, timeZone: string): SQL<
 
 const inRange = (column: AnyPgColumn, range: DateRange) =>
   and(gte(column, range.from), lt(column, range.to));
+// (Refunds are counted even when their row is archived: archiving hides a row, it does not un-send money.)
 const liveOnly = (table: TenantTable) =>
   and(eq(table.environment, 'live'), isNull(table.archivedAt));
 const paidCharge = and(eq(payments.status, 'succeeded'), eq(payments.kind, 'charge'));
@@ -55,7 +56,11 @@ export async function revenueSummary(s: Scope, range: DateRange): Promise<Revenu
     .select({ total: sum(refunds.amountCents) })
     .from(refunds)
     .where(
-      and(s.where(refunds), eq(refunds.status, 'succeeded'), inRange(refunds.createdAt, range)),
+      and(
+        s.where(refunds, 'include'),
+        eq(refunds.status, 'succeeded'),
+        inRange(refunds.createdAt, range),
+      ),
     );
   const grossCents = num(paid?.total);
   const refundedCents = num(refunded?.total);
@@ -138,7 +143,11 @@ export async function revenueByBusiness(
     .select({ businessId: refunds.businessId, total: sum(refunds.amountCents) })
     .from(refunds)
     .where(
-      and(liveOnly(refunds), eq(refunds.status, 'succeeded'), inRange(refunds.createdAt, range)),
+      and(
+        eq(refunds.environment, 'live'),
+        eq(refunds.status, 'succeeded'),
+        inRange(refunds.createdAt, range),
+      ),
     )
     .groupBy(refunds.businessId);
   const result = new Map<string, Revenue>();

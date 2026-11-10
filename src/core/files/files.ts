@@ -57,7 +57,10 @@ export async function saveFile(
       subjectId: input.subjectId ?? null,
     });
   } catch (error) {
-    await fileStorage.delete(storageKey);
+    // The original error is what matters; a failed clean-up must not hide it.
+    await fileStorage
+      .delete(storageKey)
+      .catch((cleanupError) => console.error('Could not remove file bytes:', cleanupError));
     throw error;
   }
 }

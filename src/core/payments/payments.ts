@@ -34,6 +34,11 @@ export function providerFor(environment: 'live' | 'sandbox'): PaymentProvider {
   return mockProvider;
 }
 
+/** True if any of the texts holds a character the database cannot store (the NUL byte). */
+function hasControlCharacters(...texts: (string | undefined)[]): boolean {
+  return texts.some((text) => text !== undefined && text.includes('\u0000'));
+}
+
 /** The most one payment may be: $1,000,000. Far above anything real; well inside what the database can store. */
 export const MAX_PAYMENT_CENTS = 100_000_000;
 
@@ -78,6 +83,8 @@ export async function takePayment(
     throw new ValidationError('A linked record does not exist in this business.');
   if (input.idempotencyKey.length > 200 || input.description.length > 1000)
     throw new ValidationError('The payment description or key is too long.');
+  if (hasControlCharacters(input.description, input.idempotencyKey, input.subjectType))
+    throw new ValidationError('The payment text contains characters that cannot be stored.');
 
   // Same key = same payment. The lock makes a second, simultaneous request wait here until
   // the first has finished; it then finds the first one's row and returns it. The unique
@@ -178,6 +185,10 @@ export async function refundPayment(
   if (!Number.isInteger(input.amountCents) || input.amountCents <= 0)
     throw new ValidationError('The refund must be more than zero.');
   if (!isUuid(input.paymentId)) throw new NotFoundError();
+  if (input.reason.length > 500 || hasControlCharacters(input.reason))
+    throw new ValidationError(
+      'The refund reason is too long or contains characters that cannot be stored.',
+    );
 
   // Load AND lock the payment in one step, so two refunds at the same moment cannot both
   // see "nothing refunded yet" and together give back more than was paid.

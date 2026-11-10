@@ -50,8 +50,8 @@ const NO_DYNAMIC_LOADS = [
 ];
 // Path tricks that would make an import look different from what it is ("a/../b", "a/./b", "a/").
 const NO_PATH_TRICKS = {
-  regex: '^@/.*(/\\.\\.?/|/$)',
-  message: 'Write the import path plainly (no "/./", "/../" or trailing "/").',
+  regex: '^@/.*(/\\.\\.?/|//|/$)|[^./]/\\.\\.?/',
+  message: 'Write the import path plainly (no "/./", "/../" in the middle, "//" or trailing "/").',
 };
 
 const OUTSIDE_CORE = [DB_CLIENT, SYSTEM_ACTOR, RAW_TX, PLATFORM_TABLES, NO_PATH_TRICKS];
