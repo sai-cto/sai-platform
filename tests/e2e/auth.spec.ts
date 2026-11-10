@@ -2,10 +2,16 @@ import { expect, test } from '@playwright/test';
 import { ALL_CODES, SEED, loginAs } from './helpers';
 
 test('signed-out visitors are sent to the login page', async ({ page }) => {
+  // Checked at the HTTP level (one redirect straight to /login, no page content)…
   for (const path of ['/console', '/', '/console/brss/live/overview', '/console/platform/users', '/console/executive']) {
-    await page.goto(path);
-    await expect(page).toHaveURL(/\/login/);
+    const response = await page.request.get(path, { maxRedirects: 0 });
+    expect(response.status(), path).toBe(307);
+    expect(response.headers().location, path).toBe('/login');
   }
+  // …and once in a real browser.
+  await page.goto('/console/brss/live/overview');
+  await expect(page).toHaveURL(/\/login/);
+  await expect(page.getByRole('heading', { name: 'SAI Console' })).toBeVisible();
 });
 
 test('the health endpoint reports the database is up', async ({ request }) => {
