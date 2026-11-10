@@ -78,11 +78,11 @@ export async function loadPlaces(s: Scope) {
   return { regions, buildings, warehouses };
 }
 
-export function getPlaces(ctx: BusinessContext) {
+export async function getPlaces(ctx: BusinessContext) {
   return withScope(ctx, P.catalogRead, loadPlaces);
 }
 
-export function getPriceList(ctx: BusinessContext) {
+export async function getPriceList(ctx: BusinessContext) {
   return withScope(ctx, P.catalogRead, async (s) => {
     const [products, storageTerms] = await Promise.all([
       s.db.select().from(brssProducts).where(s.where(brssProducts)).orderBy(asc(brssProducts.name)),
@@ -96,7 +96,7 @@ export function getPriceList(ctx: BusinessContext) {
   });
 }
 
-export function getZones(ctx: BusinessContext) {
+export async function getZones(ctx: BusinessContext) {
   return withScope(ctx, P.catalogRead, async (s) => {
     const [zipZones, zoneRates] = await Promise.all([
       s.db.select().from(brssZipZones).where(s.where(brssZipZones)).orderBy(asc(brssZipZones.zipLow)),
@@ -125,7 +125,7 @@ const regionInput = z.object({
   sortOrder: wholeNumber('the order', 0, 999).default(0),
 });
 
-export function createRegion(ctx: BusinessContext, raw: unknown) {
+export async function createRegion(ctx: BusinessContext, raw: unknown) {
   return withScope(ctx, P.catalogWrite, (s) =>
     createRecord(s, regionEntity, parse(regionInput, raw)),
   );
@@ -137,14 +137,14 @@ const buildingInput = z.object({
   campusCategory: z.enum(['on_campus', 'off_campus'], { message: 'Choose a campus category' }),
 });
 
-export function createBuilding(ctx: BusinessContext, raw: unknown) {
+export async function createBuilding(ctx: BusinessContext, raw: unknown) {
   return withScope(ctx, P.catalogWrite, (s) =>
     createRecord(s, buildingEntity, parse(buildingInput, raw)),
   );
 }
 
 /** KI-7: a manager can correct a building's campus category without a developer. */
-export function setBuildingCampusCategory(ctx: BusinessContext, id: string, raw: unknown) {
+export async function setBuildingCampusCategory(ctx: BusinessContext, id: string, raw: unknown) {
   const campusCategory = parse(buildingInput.shape.campusCategory, raw);
   return withScope(ctx, P.catalogWrite, (s) =>
     updateRecord(s, buildingEntity, id, { campusCategory }),
@@ -153,12 +153,12 @@ export function setBuildingCampusCategory(ctx: BusinessContext, id: string, raw:
 
 // ---------------------------------------------------------------- warehouses
 
-export function createWarehouse(ctx: BusinessContext, raw: unknown) {
+export async function createWarehouse(ctx: BusinessContext, raw: unknown) {
   const values = parse(z.object({ name: requiredText('a name', 80) }), raw);
   return withScope(ctx, P.catalogWrite, (s) => createRecord(s, warehouseEntity, values));
 }
 
-export function setWarehouseActive(ctx: BusinessContext, id: string, isActive: boolean) {
+export async function setWarehouseActive(ctx: BusinessContext, id: string, isActive: boolean) {
   return withScope(ctx, P.catalogWrite, (s) => updateRecord(s, warehouseEntity, id, { isActive }));
 }
 
@@ -207,7 +207,7 @@ async function assertRoleFree(s: Scope, role: ProductRole | null, exceptId?: str
     );
 }
 
-export function createProduct(ctx: BusinessContext, raw: unknown) {
+export async function createProduct(ctx: BusinessContext, raw: unknown) {
   const values = parseProduct(raw);
   return withScope(ctx, P.catalogWrite, async (s) => {
     await assertRoleFree(s, values.role);
@@ -218,7 +218,7 @@ export function createProduct(ctx: BusinessContext, raw: unknown) {
 const productChange = z.object({ price: z.string(), isActive: z.boolean() });
 
 /** Changing a price affects new charges only: charges already on an order keep their price. */
-export function updateProduct(ctx: BusinessContext, id: string, raw: unknown) {
+export async function updateProduct(ctx: BusinessContext, id: string, raw: unknown) {
   const { price, isActive } = parse(productChange, raw);
   const unitPriceCents = dollarsToCents(price);
   if (unitPriceCents === null) throw new ValidationError('Enter the price in dollars, like 12.50.');
@@ -240,7 +240,7 @@ const storageTermInput = z.object({
 });
 
 /** R-ORD-034: one product per (term, overweight or not). Saving the same pair again replaces it. */
-export function setStorageTermProduct(ctx: BusinessContext, raw: unknown) {
+export async function setStorageTermProduct(ctx: BusinessContext, raw: unknown) {
   const values = parse(storageTermInput, raw);
   return withScope(ctx, P.catalogWrite, async (s) => {
     const [product] = await s.db
@@ -278,7 +278,7 @@ const zipZoneInput = z
   .refine((v) => v.zipLow <= v.zipHigh, 'The first prefix cannot be after the last one');
 
 /** R-SCH-148: ranges may not overlap, so a zip always has one answer. */
-export function createZipZone(ctx: BusinessContext, raw: unknown) {
+export async function createZipZone(ctx: BusinessContext, raw: unknown) {
   const values = parse(zipZoneInput, raw);
   return withScope(ctx, P.catalogWrite, async (s) => {
     const existing = await s.db.select().from(brssZipZones).where(s.where(brssZipZones));
@@ -299,7 +299,7 @@ const zoneRateInput = z.object({
 });
 
 /** R-SCH-152: one rate row per zone and weight. Saving the same pair again replaces its prices. */
-export function setZoneRate(ctx: BusinessContext, raw: unknown) {
+export async function setZoneRate(ctx: BusinessContext, raw: unknown) {
   const { shipHome, shipCornell, ...key } = parse(zoneRateInput, raw);
   const shipHomeCents = dollarsToCents(shipHome);
   const shipCornellCents = dollarsToCents(shipCornell);
@@ -335,7 +335,7 @@ const REMOVABLE: Record<string, EntityDef> = Object.fromEntries(
  * "Remove" on the reference-data pages. It archives (recoverable from the Data tab); records
  * that already use the item keep pointing at it.
  */
-export function removeCatalogItem(ctx: BusinessContext, entityKey: string, id: string) {
+export async function removeCatalogItem(ctx: BusinessContext, entityKey: string, id: string) {
   const entity = REMOVABLE[entityKey];
   if (!entity) throw new ValidationError('That cannot be removed here.');
   return withScope(ctx, P.catalogWrite, (s) => archiveRecord(s, entity, id));

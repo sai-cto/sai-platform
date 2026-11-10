@@ -44,6 +44,9 @@ import { optionalId, optionalText, parse, requiredText } from './input';
 
 export const ORDERS_PAGE_SIZE = 25;
 
+/** The order in which one article's charges are listed. */
+const CHARGE_ORDER: string[] = ['storage', 'ship_to_home', 'ship_to_cornell_fee', 'ship_to_cornell', 'insurance'];
+
 // ---------------------------------------------------------------- the dashboard
 
 export type OrderFilters = {
@@ -130,7 +133,7 @@ export type OrderListRow = {
   nextAppointment: { startsAt: Date; type: string; status: string } | null;
 };
 
-export function listOrders(ctx: BusinessContext, filters: OrderFilters = {}) {
+export async function listOrders(ctx: BusinessContext, filters: OrderFilters = {}) {
   return withScope(ctx, P.ordersRead, async (s) => {
     const page = Math.max(1, filters.page ?? 1);
     const { rows: orders, total } = await listRecords(s, orderEntity, {
@@ -219,7 +222,7 @@ export function listOrders(ctx: BusinessContext, filters: OrderFilters = {}) {
 }
 
 /** The numbers above the dashboard table. */
-export function orderCounts(ctx: BusinessContext) {
+export async function orderCounts(ctx: BusinessContext) {
   return withScope(ctx, P.ordersRead, async (s) => {
     const byStatus = await s.db
       .select({ status: brssOrders.status, n: sql<number>`count(*)::int` })
@@ -268,7 +271,7 @@ async function findOrder(s: Scope, id: string) {
  * One order with everything on its page. Each part needs its own permission; a part the
  * person may not see comes back as null and the page says so.
  */
-export function getOrder(ctx: BusinessContext, id: string) {
+export async function getOrder(ctx: BusinessContext, id: string) {
   return withScope(ctx, P.ordersRead, async (s) => {
     const order = await findOrder(s, id);
 
@@ -280,11 +283,23 @@ export function getOrder(ctx: BusinessContext, id: string) {
           .limit(1)
       : [];
 
+    // Charges in a steady order: article by article (in article-number order), each article's
+    // charges in the order of CHARGE_ORDER, then the charges added by hand, oldest first.
     const items = await s.db
-      .select()
+      .select({ item: brssOrderItems, articleNumber: brssArticles.articleNumber })
       .from(brssOrderItems)
+      .leftJoin(brssArticles, eq(brssArticles.id, brssOrderItems.articleId))
       .where(and(s.where(brssOrderItems), eq(brssOrderItems.orderId, id)))
-      .orderBy(asc(brssOrderItems.createdAt), asc(brssOrderItems.id));
+      .orderBy(asc(brssOrderItems.createdAt), asc(brssOrderItems.id))
+      .then((rows) =>
+        rows
+          .sort(
+            (a, b) =>
+              (a.articleNumber ?? '~').localeCompare(b.articleNumber ?? '~') ||
+              CHARGE_ORDER.indexOf(a.item.rule ?? '') - CHARGE_ORDER.indexOf(b.item.rule ?? ''),
+          )
+          .map((row) => row.item),
+      );
 
     const articles = can(ctx, P.articlesRead)
       ? await s.db
@@ -444,7 +459,7 @@ function orderValues(v: OrderFields, shipToZone: number | null) {
  * Creates an order: status Open (R-ORD-005), for an existing customer or a new one
  * (R-ORD-004: an order always has a customer). Creating a customer needs customers.write.
  */
-export function createOrder(ctx: BusinessContext, raw: Record<string, unknown>) {
+export async function createOrder(ctx: BusinessContext, raw: Record<string, unknown>) {
   const fields = parse(orderFields, raw);
   checkOrderFields(fields);
   const existingId = parse(optionalId, raw.customerId);
@@ -474,7 +489,7 @@ export function createOrder(ctx: BusinessContext, raw: Record<string, unknown>) 
 }
 
 /** Changes an order's details. Charges not yet paid are worked out again afterwards. */
-export function updateOrder(ctx: BusinessContext, id: string, raw: unknown) {
+export async function updateOrder(ctx: BusinessContext, id: string, raw: unknown) {
   const fields = parse(orderFields, raw);
   checkOrderFields(fields);
   return withScope(ctx, P.ordersWrite, async (s) => {
@@ -507,7 +522,7 @@ const statusKeys = ORDER_STATUSES.map((s) => s.key) as [OrderStatus, ...OrderSta
  *    Nothing is refunded automatically.
  *  - Closed: every article on the order becomes Delivered (R-ORD-021, R-ORD-077).
  */
-export function setOrderStatus(ctx: BusinessContext, id: string, raw: unknown) {
+export async function setOrderStatus(ctx: BusinessContext, id: string, raw: unknown) {
   const status = parse(z.enum(statusKeys, { message: 'Choose a status' }), raw);
   return withScope(ctx, P.ordersWrite, async (s) => {
     const current = await findOrder(s, id);
@@ -547,7 +562,7 @@ export function setOrderStatus(ctx: BusinessContext, id: string, raw: unknown) {
 }
 
 /** Customers to choose from on the new-order form (newest first, optionally searched). */
-export function findCustomers(ctx: BusinessContext, search?: string) {
+export async function findCustomers(ctx: BusinessContext, search?: string) {
   return withScope(ctx, CORE.customersRead, async (s) => {
     const { rows } = await listRecords(s, customerEntity, { search, limit: 200 });
     return rows.map((row) => ({ id: row.id, name: customerName(row), email: row.email }));

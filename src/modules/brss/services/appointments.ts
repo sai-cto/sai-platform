@@ -205,7 +205,7 @@ async function assertTruck(s: Scope, truckId: string | null): Promise<void> {
  *  - R-SCH-029: there is no limit on how many appointments share a time.
  * Booking changes the order, so it needs the order permission as well as scheduling.
  */
-export function bookAppointment(ctx: BusinessContext, raw: unknown) {
+export async function bookAppointment(ctx: BusinessContext, raw: unknown) {
   const input = parse(bookingInput, raw);
   authorize(ctx, P.ordersWrite);
   return withScope(ctx, CORE.schedulingWrite, async (s) => {
@@ -309,7 +309,7 @@ async function findVisit(s: Scope, appointmentId: string) {
  * The status is left as it is (the old system reset it only when the CUSTOMER rescheduled
  * online, R-SCH-033; that page is not part of the staff portal).
  */
-export function rescheduleAppointment(ctx: BusinessContext, appointmentId: string, raw: unknown) {
+export async function rescheduleAppointment(ctx: BusinessContext, appointmentId: string, raw: unknown) {
   const input = parse(whenInput, raw);
   return withScope(ctx, CORE.schedulingWrite, async (s) => {
     const { appointment, detail } = await findVisit(s, appointmentId);
@@ -343,7 +343,7 @@ const statusKeys = APPOINTMENT_STATUSES.map((s) => s.key) as [
  * R-SCH-036: moving to Confirmed emails the customer for pickup, delivery and supplies
  * appointments. Sending needs the "Send notifications" permission.
  */
-export function setAppointmentStatus(ctx: BusinessContext, appointmentId: string, raw: unknown) {
+export async function setAppointmentStatus(ctx: BusinessContext, appointmentId: string, raw: unknown) {
   const status = parse(z.enum(statusKeys, { message: 'Choose a status' }), raw);
   return withScope(ctx, CORE.schedulingWrite, async (s) => {
     const { appointment, detail } = await findVisit(s, appointmentId);
@@ -384,7 +384,7 @@ export function setAppointmentStatus(ctx: BusinessContext, appointmentId: string
  * R-SCH-091, R-SCH-092: the truck's crew is copied onto the appointment as it is now;
  * later changes to the truck's crew do not change appointments already assigned.
  */
-export function assignTruck(ctx: BusinessContext, appointmentId: string, raw: unknown) {
+export async function assignTruck(ctx: BusinessContext, appointmentId: string, raw: unknown) {
   const truckId = parse(optionalId, raw);
   return withScope(ctx, CORE.schedulingWrite, async (s) => {
     const { detail } = await findVisit(s, appointmentId);
@@ -406,7 +406,7 @@ export type ScheduleFilters = {
   truckId?: string;
 };
 
-export function listSchedule(ctx: BusinessContext, filters: ScheduleFilters = {}) {
+export async function listSchedule(ctx: BusinessContext, filters: ScheduleFilters = {}) {
   return withScope(ctx, CORE.schedulingRead, async (s) => {
     const timeZone = ctx.business.timeZone;
     const from =
@@ -490,7 +490,7 @@ const blockInput = z
  * R-SCH-068: ticking all five windows is the same as all day.
  * R-SCH-067: appointments that already exist are not changed.
  */
-export function createBlock(ctx: BusinessContext, raw: unknown) {
+export async function createBlock(ctx: BusinessContext, raw: unknown) {
   const input = parse(blockInput, raw);
   if (!input.allDay && input.slots.length === 0)
     throw new ValidationError('Tick "All day" or at least one time.'); // R-SCH-070
@@ -524,7 +524,7 @@ export function createBlock(ctx: BusinessContext, raw: unknown) {
 }
 
 /** R-SCH-059: unavailability that has not ended yet, soonest first. */
-export function listBlocks(ctx: BusinessContext) {
+export async function listBlocks(ctx: BusinessContext) {
   return withScope(ctx, CORE.schedulingRead, async (s) => {
     const blocks = await s.db
       .select()
@@ -559,7 +559,7 @@ export function listBlocks(ctx: BusinessContext) {
 }
 
 /** Lifts an unavailability (archived, so it can be restored from the Data tab). */
-export function removeBlock(ctx: BusinessContext, id: string) {
+export async function removeBlock(ctx: BusinessContext, id: string) {
   return withScope(ctx, CORE.schedulingWrite, async (s) => {
     if (!isUuid(id)) throw new NotFoundError();
     const limits = await s.db
@@ -574,7 +574,7 @@ export function removeBlock(ctx: BusinessContext, id: string) {
 // ---------------------------------------------------------------- trucks and crews
 
 /** R-SCH-089: a truck has a name and a crew. It has no capacity, region or schedule of its own. */
-export function listTrucks(ctx: BusinessContext) {
+export async function listTrucks(ctx: BusinessContext) {
   return withScope(ctx, CORE.schedulingRead, async (s) => {
     const trucks = await s.db
       .select()
@@ -593,14 +593,14 @@ export function listTrucks(ctx: BusinessContext) {
   });
 }
 
-export function createTruck(ctx: BusinessContext, raw: unknown) {
+export async function createTruck(ctx: BusinessContext, raw: unknown) {
   const { name } = parse(z.object({ name: requiredText('a name', 80) }), raw);
   return withScope(ctx, CORE.schedulingWrite, (s) =>
     createRecord(s, resourceEntity, { kind: 'truck', name }),
   );
 }
 
-export function setTruckActive(ctx: BusinessContext, id: string, isActive: boolean) {
+export async function setTruckActive(ctx: BusinessContext, id: string, isActive: boolean) {
   return withScope(ctx, CORE.schedulingWrite, async (s) => {
     const [truck] = isUuid(id)
       ? await s.db
@@ -615,7 +615,7 @@ export function setTruckActive(ctx: BusinessContext, id: string, isActive: boole
 }
 
 /** Adds someone, by name, to a truck's usual crew. */
-export function addCrewMember(ctx: BusinessContext, truckId: string, raw: unknown) {
+export async function addCrewMember(ctx: BusinessContext, truckId: string, raw: unknown) {
   const { name } = parse(z.object({ name: requiredText('a name', 120) }), raw);
   return withScope(ctx, CORE.schedulingWrite, async (s) => {
     await assertTruck(s, truckId);
@@ -623,6 +623,6 @@ export function addCrewMember(ctx: BusinessContext, truckId: string, raw: unknow
   });
 }
 
-export function removeCrewMember(ctx: BusinessContext, crewId: string) {
+export async function removeCrewMember(ctx: BusinessContext, crewId: string) {
   return withScope(ctx, CORE.schedulingWrite, (s) => archiveRecord(s, truckCrewEntity, crewId));
 }

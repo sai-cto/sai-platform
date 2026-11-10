@@ -152,12 +152,12 @@ export async function recalculateCharges(
 }
 
 /** "Work out charges again" on the order page. */
-export function recalculateOrder(ctx: BusinessContext, orderId: string) {
+export async function recalculateOrder(ctx: BusinessContext, orderId: string) {
   return withScope(ctx, P.ordersWrite, (s) => recalculateCharges(s, orderId));
 }
 
 /** What cannot be priced right now, without changing anything (shown on the order page). */
-export function pricingProblems(ctx: BusinessContext, orderId: string) {
+export async function pricingProblems(ctx: BusinessContext, orderId: string) {
   return withScope(ctx, P.ordersRead, async (s) => {
     const order = await findOrder(s, orderId);
     if (!isOrderActive(order.status)) return [];
@@ -212,7 +212,7 @@ const chargeInput = z.object({
  * its description, unit price and quantity. Price and quantity must both be above zero.
  * (Fees such as a late reschedule are added this way: the old system has no rule for them.)
  */
-export function addCharge(ctx: BusinessContext, orderId: string, raw: unknown) {
+export async function addCharge(ctx: BusinessContext, orderId: string, raw: unknown) {
   const input = parse(chargeInput, raw);
   const typedPrice = input.price === '' ? undefined : dollarsToCents(input.price);
   if (typedPrice === null) throw new ValidationError('Enter the price in dollars, like 12.50.');
@@ -242,7 +242,7 @@ export function addCharge(ctx: BusinessContext, orderId: string, raw: unknown) {
 }
 
 /** Takes an unpaid hand-added line off the order (archived, so it can be restored). */
-export function removeCharge(ctx: BusinessContext, itemId: string) {
+export async function removeCharge(ctx: BusinessContext, itemId: string) {
   return withScope(ctx, P.ordersWrite, async (s) => {
     if (!isUuid(itemId)) throw new NotFoundError();
     const [line] = await s.db
@@ -262,28 +262,6 @@ export function removeCharge(ctx: BusinessContext, itemId: string) {
 }
 
 // ---------------------------------------------------------------- payment
-
-/** The amounts on the payment form, before anyone presses the button. */
-export function paymentPreview(input: {
-  unpaidCents: number;
-  canDiscountAny: boolean;
-  taxPercent: number;
-  maxStaffDiscountPercent: number;
-}) {
-  return {
-    maxDiscountCents: maxDiscountCents(
-      input.unpaidCents,
-      input.canDiscountAny,
-      input.maxStaffDiscountPercent,
-    ),
-    totals: computeTotals({
-      subtotalCents: input.unpaidCents,
-      discountCents: 0,
-      tipCents: 0,
-      taxPercent: input.taxPercent,
-    }),
-  };
-}
 
 const paymentInput = z.object({
   discount: z.string().default('0'),
@@ -311,7 +289,7 @@ export type PaymentOutcome = { paid: boolean; message: string };
  *  - R-ORD-086: the first payment on a storage order starts the storage clock.
  *  - A declined card leaves a "failed" payment on record and every line unpaid.
  */
-export function payOrder(
+export async function payOrder(
   ctx: BusinessContext,
   orderId: string,
   raw: unknown,
@@ -413,7 +391,7 @@ const refundInput = z.object({ amount: z.string(), reason: requiredText('a reaso
  * Gives money back on one of the order's payments. The charges stay marked paid: what a
  * refund should undo on the order is an open question (README), so staff decide by hand.
  */
-export function refundOrderPayment(ctx: BusinessContext, orderId: string, paymentId: string, raw: unknown) {
+export async function refundOrderPayment(ctx: BusinessContext, orderId: string, paymentId: string, raw: unknown) {
   const input = parse(refundInput, raw);
   const amountCents = dollarsToCents(input.amount);
   if (amountCents === null || amountCents <= 0)

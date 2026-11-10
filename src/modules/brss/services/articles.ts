@@ -194,7 +194,7 @@ async function articleValues(
  * which could leave articles belonging to no order: not copied.)
  * R-ORD-069: a flat rate box with quantity N creates N identical articles.
  */
-export function intakeArticle(ctx: BusinessContext, orderId: string, raw: unknown) {
+export async function intakeArticle(ctx: BusinessContext, orderId: string, raw: unknown) {
   const input = parse(intakeInput, raw);
   authorize(ctx, P.articlesWrite);
   return withScope(ctx, P.ordersWrite, async (s) => {
@@ -233,7 +233,7 @@ export function intakeArticle(ctx: BusinessContext, orderId: string, raw: unknow
 }
 
 /** Corrects an article's details from an order's page; unpaid charges are worked out again. */
-export function updateArticleOnOrder(
+export async function updateArticleOnOrder(
   ctx: BusinessContext,
   orderId: string,
   articleId: string,
@@ -275,7 +275,7 @@ async function findLink(s: Scope, orderId: string, articleId: string) {
  * R-ORD-073: the customer's earlier articles that are not on this order yet, newest first,
  * whatever their status. (Whether a delivered article should be offered is an open question.)
  */
-export function earlierArticles(ctx: BusinessContext, orderId: string) {
+export async function earlierArticles(ctx: BusinessContext, orderId: string) {
   return withScope(ctx, P.articlesRead, async (s) => {
     const order = await findOrder(s, orderId);
     const onOrder = s.db
@@ -298,7 +298,7 @@ export function earlierArticles(ctx: BusinessContext, orderId: string) {
 }
 
 /** R-ORD-073: puts one of the customer's earlier articles on this order. */
-export function attachArticle(ctx: BusinessContext, orderId: string, articleId: string) {
+export async function attachArticle(ctx: BusinessContext, orderId: string, articleId: string) {
   return withScope(ctx, P.ordersWrite, async (s) => {
     await lockOrder(s, orderId);
     const order = await findOrder(s, orderId);
@@ -329,7 +329,7 @@ export function attachArticle(ctx: BusinessContext, orderId: string, articleId: 
  * Takes an article off an order. The article itself stays (it belongs to the customer).
  * Refused once any of its charges on this order has been paid.
  */
-export function detachArticle(ctx: BusinessContext, orderId: string, articleId: string) {
+export async function detachArticle(ctx: BusinessContext, orderId: string, articleId: string) {
   return withScope(ctx, P.ordersWrite, async (s) => {
     await lockOrder(s, orderId);
     const link = await findLink(s, orderId, articleId);
@@ -363,7 +363,7 @@ const statusInput = z.enum(statusKeys, { message: 'Choose a status' });
  * R-ORD-079: an article's status is set by hand and any status may follow any other.
  * Every change is in the activity log with who made it.
  */
-export function setArticleStatus(ctx: BusinessContext, articleId: string, raw: unknown) {
+export async function setArticleStatus(ctx: BusinessContext, articleId: string, raw: unknown) {
   const status = parse(statusInput, raw);
   return withScope(ctx, P.articlesWrite, (s) =>
     updateRecord(s, articleEntity, articleId, { status }),
@@ -371,7 +371,7 @@ export function setArticleStatus(ctx: BusinessContext, articleId: string, raw: u
 }
 
 /** R-ORD-078: sets every article on an order to one status at once. */
-export function setOrderArticlesStatus(ctx: BusinessContext, orderId: string, raw: unknown) {
+export async function setOrderArticlesStatus(ctx: BusinessContext, orderId: string, raw: unknown) {
   const status = parse(statusInput, raw);
   return withScope(ctx, P.articlesWrite, async (s) => {
     await findOrder(s, orderId);
@@ -409,7 +409,7 @@ const locationInput = z.object({
  * R-ORD-081: where an article sits: warehouse, section, row, pallet.
  * R-ORD-076: giving a location to an article that had none sets its status to Stored.
  */
-export function setArticleLocation(ctx: BusinessContext, articleId: string, raw: unknown) {
+export async function setArticleLocation(ctx: BusinessContext, articleId: string, raw: unknown) {
   const after = parse(locationInput, raw);
   return withScope(ctx, P.articlesWrite, async (s) => {
     const before = await findArticle(s, articleId);
@@ -440,7 +440,7 @@ export type ArticleFilters = {
   page?: number;
 };
 
-export function listArticles(ctx: BusinessContext, filters: ArticleFilters = {}) {
+export async function listArticles(ctx: BusinessContext, filters: ArticleFilters = {}) {
   return withScope(ctx, P.articlesRead, async (s) => {
     const term = filters.q?.trim();
     const pattern = term ? `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
@@ -513,7 +513,7 @@ export function listArticles(ctx: BusinessContext, filters: ArticleFilters = {})
 }
 
 /** One article with the orders it has been on. */
-export function getArticle(ctx: BusinessContext, id: string) {
+export async function getArticle(ctx: BusinessContext, id: string) {
   return withScope(ctx, P.articlesRead, async (s) => {
     const article = await findArticle(s, id);
     const [customer] = can(ctx, CORE.customersRead)
@@ -556,7 +556,7 @@ export function getArticle(ctx: BusinessContext, id: string) {
 }
 
 /** How many articles sit in each warehouse, and how many have no location yet (Operations page). */
-export function warehouseCounts(ctx: BusinessContext) {
+export async function warehouseCounts(ctx: BusinessContext) {
   return withScope(ctx, P.articlesRead, async (s) => {
     const rows = await s.db
       .select({ warehouseId: brssArticles.warehouseId, n: sql<number>`count(*)::int` })
