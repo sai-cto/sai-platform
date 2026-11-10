@@ -223,7 +223,11 @@ export function IntakeForm({
             </select>
           </Field>
           {type === 'flat_rate_box' && !initial ? (
-            <Field label="How many" htmlFor="intake-quantity" help="Each box becomes its own article.">
+            <Field
+              label="How many"
+              htmlFor="intake-quantity"
+              help="Each box becomes its own article."
+            >
               <input
                 id="intake-quantity"
                 name="quantity"

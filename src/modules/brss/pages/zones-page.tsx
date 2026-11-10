@@ -1,6 +1,7 @@
 /** Zip zones: which shipping zone a zip code is in, and what each zone costs by weight. */
 import type { PortalPageProps } from '@/core/modules/contract';
 import { can } from '@/core/rbac/permissions';
+import { cn } from '@/ui/cn';
 import { ActionForm } from '@/ui/action-form';
 import { buttonClass } from '@/ui/button';
 import { ConfirmButton } from '@/ui/confirm-button';
@@ -38,10 +39,25 @@ export async function ZonesPage({ ctx, searchParams, basePath }: PortalPageProps
         <Card title="Look up a price">
           <form method="get" action={base} className="flex flex-wrap items-end gap-3">
             <Field label="Zip code" htmlFor="z-zip">
-              <input id="z-zip" name="zip" inputMode="numeric" required defaultValue={searchParams.zip} className={`${inputClass} w-32`} />
+              <input
+                id="z-zip"
+                name="zip"
+                inputMode="numeric"
+                required
+                defaultValue={searchParams.zip}
+                className={cn(inputClass, 'w-32')}
+              />
             </Field>
             <Field label="Billable weight (lb)" htmlFor="z-weight">
-              <input id="z-weight" name="weight" type="number" min="1" required defaultValue={searchParams.weight} className={`${inputClass} w-32`} />
+              <input
+                id="z-weight"
+                name="weight"
+                type="number"
+                min="1"
+                required
+                defaultValue={searchParams.weight}
+                className={cn(inputClass, 'w-32')}
+              />
             </Field>
             <button type="submit" className={buttonClass({ variant: 'primary' })}>
               Look up
@@ -79,7 +95,13 @@ export async function ZonesPage({ ctx, searchParams, basePath }: PortalPageProps
                   <Td>
                     {canWrite ? (
                       <ConfirmButton
-                        action={removeCatalogItemAction.bind(null, slug, mode, zipZoneEntity.key, range.id)}
+                        action={removeCatalogItemAction.bind(
+                          null,
+                          slug,
+                          mode,
+                          zipZoneEntity.key,
+                          range.id,
+                        )}
                         confirmTitle="Remove this zip range?"
                         confirmBody="Boxes shipped to these zips cannot be priced until another range covers them."
                         confirmLabel="Remove"
@@ -94,15 +116,43 @@ export async function ZonesPage({ ctx, searchParams, basePath }: PortalPageProps
           </Table>
           {canWrite ? (
             <Disclosure summary="Add a zip range">
-              <ActionForm action={createZipZoneAction.bind(null, slug, mode)} submitLabel="Add range" className="flex flex-wrap items-end gap-3 space-y-0">
+              <ActionForm
+                action={createZipZoneAction.bind(null, slug, mode)}
+                submitLabel="Add range"
+                className="flex flex-wrap items-end gap-3 space-y-0"
+              >
                 <Field label="From (first 3 digits)" htmlFor="zr-low">
-                  <input id="zr-low" name="zipLow" type="number" min="0" max="999" required className={`${inputClass} w-28`} />
+                  <input
+                    id="zr-low"
+                    name="zipLow"
+                    type="number"
+                    min="0"
+                    max="999"
+                    required
+                    className={cn(inputClass, 'w-28')}
+                  />
                 </Field>
                 <Field label="To (first 3 digits)" htmlFor="zr-high">
-                  <input id="zr-high" name="zipHigh" type="number" min="0" max="999" required className={`${inputClass} w-28`} />
+                  <input
+                    id="zr-high"
+                    name="zipHigh"
+                    type="number"
+                    min="0"
+                    max="999"
+                    required
+                    className={cn(inputClass, 'w-28')}
+                  />
                 </Field>
                 <Field label="Zone" htmlFor="zr-zone">
-                  <input id="zr-zone" name="zone" type="number" min="1" max="99" required className={`${inputClass} w-20`} />
+                  <input
+                    id="zr-zone"
+                    name="zone"
+                    type="number"
+                    min="1"
+                    max="99"
+                    required
+                    className={cn(inputClass, 'w-20')}
+                  />
                 </Field>
               </ActionForm>
             </Disclosure>
@@ -118,9 +168,18 @@ export async function ZonesPage({ ctx, searchParams, basePath }: PortalPageProps
             <p className="p-4 text-sm text-zinc-500">No rates yet.</p>
           ) : (
             <>
-              <form method="get" action={base} className="flex flex-wrap items-end gap-3 border-b border-zinc-200 p-3">
+              <form
+                method="get"
+                action={base}
+                className="flex flex-wrap items-end gap-3 border-b border-zinc-200 p-3"
+              >
                 <Field label="Zone" htmlFor="rate-zone">
-                  <Select id="rate-zone" name="zone" defaultValue={String(shownZone)} className="w-28">
+                  <Select
+                    id="rate-zone"
+                    name="zone"
+                    defaultValue={String(shownZone)}
+                    className="w-28"
+                  >
                     {zones.map((zone) => (
                       <option key={zone} value={zone}>
                         Zone {zone}
@@ -148,12 +207,22 @@ export async function ZonesPage({ ctx, searchParams, basePath }: PortalPageProps
                       .map((rate) => (
                         <tr key={rate.id}>
                           <Td className="whitespace-nowrap tabular-nums">{rate.weightLb} lb</Td>
-                          <Td className="text-right tabular-nums">{formatMoney(rate.shipHomeCents)}</Td>
-                          <Td className="text-right tabular-nums">{formatMoney(rate.shipCornellCents)}</Td>
+                          <Td className="text-right tabular-nums">
+                            {formatMoney(rate.shipHomeCents)}
+                          </Td>
+                          <Td className="text-right tabular-nums">
+                            {formatMoney(rate.shipCornellCents)}
+                          </Td>
                           <Td>
                             {canWrite ? (
                               <ConfirmButton
-                                action={removeCatalogItemAction.bind(null, slug, mode, zoneRateEntity.key, rate.id)}
+                                action={removeCatalogItemAction.bind(
+                                  null,
+                                  slug,
+                                  mode,
+                                  zoneRateEntity.key,
+                                  rate.id,
+                                )}
                                 confirmTitle={`Remove the ${rate.weightLb} lb rate for zone ${rate.zone}?`}
                                 confirmBody="Boxes of this weight to this zone cannot be priced without it."
                                 confirmLabel="Remove"
@@ -171,18 +240,50 @@ export async function ZonesPage({ ctx, searchParams, basePath }: PortalPageProps
           )}
           {canWrite ? (
             <Disclosure summary="Set a rate">
-              <ActionForm action={setZoneRateAction.bind(null, slug, mode)} submitLabel="Save rate" className="flex flex-wrap items-end gap-3 space-y-0">
+              <ActionForm
+                action={setZoneRateAction.bind(null, slug, mode)}
+                submitLabel="Save rate"
+                className="flex flex-wrap items-end gap-3 space-y-0"
+              >
                 <Field label="Zone" htmlFor="sr-zone">
-                  <input id="sr-zone" name="zone" type="number" min="1" max="99" required className={`${inputClass} w-20`} />
+                  <input
+                    id="sr-zone"
+                    name="zone"
+                    type="number"
+                    min="1"
+                    max="99"
+                    required
+                    className={cn(inputClass, 'w-20')}
+                  />
                 </Field>
                 <Field label="Weight (lb)" htmlFor="sr-weight">
-                  <input id="sr-weight" name="weightLb" type="number" min="1" max="1000" required className={`${inputClass} w-24`} />
+                  <input
+                    id="sr-weight"
+                    name="weightLb"
+                    type="number"
+                    min="1"
+                    max="1000"
+                    required
+                    className={cn(inputClass, 'w-24')}
+                  />
                 </Field>
                 <Field label="Ship to home ($)" htmlFor="sr-home">
-                  <input id="sr-home" name="shipHome" inputMode="decimal" required className={`${inputClass} w-28`} />
+                  <input
+                    id="sr-home"
+                    name="shipHome"
+                    inputMode="decimal"
+                    required
+                    className={cn(inputClass, 'w-28')}
+                  />
                 </Field>
                 <Field label="Ship to Cornell ($)" htmlFor="sr-cornell">
-                  <input id="sr-cornell" name="shipCornell" inputMode="decimal" required className={`${inputClass} w-28`} />
+                  <input
+                    id="sr-cornell"
+                    name="shipCornell"
+                    inputMode="decimal"
+                    required
+                    className={cn(inputClass, 'w-28')}
+                  />
                 </Field>
               </ActionForm>
             </Disclosure>

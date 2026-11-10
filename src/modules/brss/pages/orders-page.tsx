@@ -7,7 +7,15 @@ import { formatDate, formatMoney, formatNumber } from '@/ui/format';
 import { Card, EmptyState, Field, PageHeader, Stat, Table, Td, Th, inputClass } from '@/ui/layout';
 import { Pagination } from '@/ui/pagination';
 import { P } from '../permissions';
-import { APPOINTMENT_TYPES, ORDER_SERVICES, ORDER_STATUSES, labelOf, localDate, slotOf, TIME_SLOTS } from '../rules';
+import {
+  APPOINTMENT_TYPES,
+  ORDER_SERVICES,
+  ORDER_STATUSES,
+  labelOf,
+  localDate,
+  slotOf,
+  TIME_SLOTS,
+} from '../rules';
 import type { AppointmentType, OrderService, OrderStatus } from '../schema';
 import { getPlaces } from '../services/catalog';
 import { ORDERS_PAGE_SIZE, listOrders, orderCounts, type OrderFilters } from '../services/orders';
@@ -133,10 +141,22 @@ export async function OrdersPage({ ctx, searchParams, basePath }: PortalPageProp
             </Field>
           ) : null}
           <Field label="Placed from" htmlFor="f-from">
-            <input id="f-from" name="from" type="date" defaultValue={filters.from} className={inputClass} />
+            <input
+              id="f-from"
+              name="from"
+              type="date"
+              defaultValue={filters.from}
+              className={inputClass}
+            />
           </Field>
           <Field label="Placed to" htmlFor="f-to">
-            <input id="f-to" name="to" type="date" defaultValue={filters.to} className={inputClass} />
+            <input
+              id="f-to"
+              name="to"
+              type="date"
+              defaultValue={filters.to}
+              className={inputClass}
+            />
           </Field>
           <div className="col-span-2 flex gap-2 md:col-span-4 xl:col-span-8">
             <button type="submit" className={buttonClass({ variant: 'primary' })}>
@@ -161,7 +181,6 @@ export async function OrdersPage({ ctx, searchParams, basePath }: PortalPageProp
                 <Th>Campus</Th>
                 <Th className="text-right">Articles</Th>
                 <Th className="text-right">Charges</Th>
-                <Th className="text-right">To pay</Th>
                 <Th>Placed</Th>
                 <Th>Storage ends</Th>
                 <Th>Next appointment</Th>
@@ -174,7 +193,10 @@ export async function OrdersPage({ ctx, searchParams, basePath }: PortalPageProp
                 return (
                   <tr key={order.id} className={order.status === 'closed' ? 'text-zinc-500' : ''}>
                     <Td className="font-medium whitespace-nowrap">
-                      <Link href={`${basePath}/orders/${order.id}`} className="text-zinc-900 underline-offset-2 hover:underline">
+                      <Link
+                        href={`${basePath}/orders/${order.id}`}
+                        className="text-zinc-900 underline-offset-2 hover:underline"
+                      >
                         {order.orderNumber}
                       </Link>
                     </Td>
@@ -189,15 +211,19 @@ export async function OrdersPage({ ctx, searchParams, basePath }: PortalPageProp
                       {order.campusCategory ? CAMPUS_LABELS[order.campusCategory] : '—'}
                     </Td>
                     <Td className="text-right tabular-nums">{order.articleCount}</Td>
-                    <Td className="text-right tabular-nums">{formatMoney(order.totalCents)}</Td>
-                    <Td className="text-right tabular-nums">
-                      {order.unpaidCents > 0 ? formatMoney(order.unpaidCents) : '—'}
+                    <Td className="text-right whitespace-nowrap tabular-nums">
+                      {formatMoney(order.totalCents)}
+                      {order.unpaidCents > 0 ? (
+                        <span className="block text-xs text-amber-800">
+                          {formatMoney(order.unpaidCents)} to pay
+                        </span>
+                      ) : null}
                     </Td>
                     <Td className="whitespace-nowrap">{formatDate(order.createdAt)}</Td>
                     <Td className="whitespace-nowrap">
                       {formatDay(order.storageExpires)}
                       {order.deliveryScheduled ? (
-                        <span className="ml-1 text-xs text-zinc-500">· delivery booked</span>
+                        <span className="block text-xs text-zinc-500">Delivery booked</span>
                       ) : null}
                     </Td>
                     <Td className="whitespace-nowrap">

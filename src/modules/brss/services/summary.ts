@@ -39,7 +39,10 @@ export async function openWorkSummary(s: Scope) {
       .where(
         and(
           s.where(brssArticles),
-          or(isNull(brssArticles.status), notInArray(brssArticles.status, ['delivered', 'shipped'])),
+          or(
+            isNull(brssArticles.status),
+            notInArray(brssArticles.status, ['delivered', 'shipped']),
+          ),
         ),
       ),
     s.db

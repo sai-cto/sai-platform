@@ -14,7 +14,13 @@ import {
   setOrderArticlesStatusAction,
 } from '../../actions';
 import { P } from '../../permissions';
-import { ARTICLE_STATUSES, ARTICLE_TYPES, articleTypeChoices, isOrderActive, labelOf } from '../../rules';
+import {
+  ARTICLE_STATUSES,
+  ARTICLE_TYPES,
+  articleTypeChoices,
+  isOrderActive,
+  labelOf,
+} from '../../rules';
 import type { brssArticles, brssProducts } from '../../schema';
 import type { BrssSettings } from '../../settings';
 import type { OrderDetail } from '../../services/orders';
@@ -89,19 +95,24 @@ export function ArticlesCard({
             {articles.map(({ article, productName, warehouseName }) => (
               <tr key={article.id}>
                 <Td className="font-medium whitespace-nowrap">
-                  <Link href={`${basePath}/articles/${article.id}`} className="underline-offset-2 hover:underline">
+                  <Link
+                    href={`${basePath}/articles/${article.id}`}
+                    className="underline-offset-2 hover:underline"
+                  >
                     {article.articleNumber}
                   </Link>
                 </Td>
                 <Td className="whitespace-nowrap">
                   {productName ?? labelOf(ARTICLE_TYPES, article.type)}
                 </Td>
-                <Td>{article.description ?? '—'}</Td>
+                <Td className="min-w-40">{article.description ?? '—'}</Td>
                 <Td className="text-right whitespace-nowrap tabular-nums">
                   {article.billableWeightLb > 0 ? `${article.billableWeightLb} lb` : '—'}
                 </Td>
                 <Td className="text-right tabular-nums">
-                  {article.additionalInsuranceCents > 0 ? formatMoney(article.additionalInsuranceCents) : '—'}
+                  {article.additionalInsuranceCents > 0
+                    ? formatMoney(article.additionalInsuranceCents)
+                    : '—'}
                 </Td>
                 <Td>
                   <ArticleStatusBadge status={article.status} />
@@ -138,6 +149,7 @@ export function ArticlesCard({
           <ActionForm
             action={setOrderArticlesStatusAction.bind(null, slug, mode, order.id)}
             submitLabel="Set on every article"
+            submitVariant="secondary"
             className="flex flex-wrap items-end gap-3 space-y-0"
             resetOnSuccess={false}
           >
@@ -160,8 +172,16 @@ export function ArticlesCard({
             action={intakeArticleAction.bind(null, slug, mode, order.id)}
             types={articleTypeChoices(order.services)}
             products={products
-              .filter((p) => p.isActive && (p.kind === 'storage_item' || p.kind === 'flat_rate_box'))
-              .map((p) => ({ id: p.id, name: p.name, kind: p.kind, role: p.role, unitPriceCents: p.unitPriceCents }))}
+              .filter(
+                (p) => p.isActive && (p.kind === 'storage_item' || p.kind === 'flat_rate_box'),
+              )
+              .map((p) => ({
+                id: p.id,
+                name: p.name,
+                kind: p.kind,
+                role: p.role,
+                unitPriceCents: p.unitPriceCents,
+              }))}
             toCornell={order.services.includes('ship_to_cornell')}
             divisor={settings.dimensionalDivisor}
             maxBillableLb={settings.maxBillableWeightLb}
@@ -175,6 +195,7 @@ export function ArticlesCard({
           <ActionForm
             action={attachArticleAction.bind(null, slug, mode, order.id)}
             submitLabel="Add to this order"
+            submitVariant="secondary"
             className="flex flex-wrap items-end gap-3 space-y-0"
           >
             <Field label="Earlier article" htmlFor="earlier-article">

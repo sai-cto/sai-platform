@@ -1,6 +1,7 @@
 /** The price list, and which storage product applies to which term. */
 import type { PortalPageProps } from '@/core/modules/contract';
 import { can } from '@/core/rbac/permissions';
+import { cn } from '@/ui/cn';
 import { ActionForm } from '@/ui/action-form';
 import { Badge } from '@/ui/badge';
 import { ConfirmButton } from '@/ui/confirm-button';
@@ -40,7 +41,12 @@ export async function PricingPage({ ctx }: PortalPageProps) {
           const rows = products.filter((p) => p.kind === kind.key);
           if (rows.length === 0) return null;
           return (
-            <Card key={kind.key} title={kind.label} description={`Price is ${kind.priceUnit}.`} flush>
+            <Card
+              key={kind.key}
+              title={kind.label}
+              description={`Price is ${kind.priceUnit}.`}
+              flush
+            >
               <Table>
                 <thead>
                   <tr>
@@ -65,13 +71,16 @@ export async function PricingPage({ ctx }: PortalPageProps) {
                         ) : null}
                       </Td>
                       <Td className="whitespace-nowrap">{product.code}</Td>
-                      <Td className="text-right tabular-nums">{formatMoney(product.unitPriceCents)}</Td>
+                      <Td className="text-right tabular-nums">
+                        {formatMoney(product.unitPriceCents)}
+                      </Td>
                       <Td>
                         {canWrite ? (
                           <span className="flex items-end gap-3">
                             <ActionForm
                               action={updateProductAction.bind(null, slug, mode, product.id)}
                               submitLabel="Save"
+                              submitVariant="secondary"
                               className="flex items-end gap-2 space-y-0"
                               resetOnSuccess={false}
                             >
@@ -83,12 +92,22 @@ export async function PricingPage({ ctx }: PortalPageProps) {
                                 name="price"
                                 inputMode="decimal"
                                 defaultValue={(product.unitPriceCents / 100).toFixed(2)}
-                                className={`${inputClass} w-24 text-right`}
+                                className={cn(inputClass, 'w-24 text-right')}
                               />
-                              <Check name="isActive" label="Active" defaultChecked={product.isActive} />
+                              <Check
+                                name="isActive"
+                                label="Active"
+                                defaultChecked={product.isActive}
+                              />
                             </ActionForm>
                             <ConfirmButton
-                              action={removeCatalogItemAction.bind(null, slug, mode, productEntity.key, product.id)}
+                              action={removeCatalogItemAction.bind(
+                                null,
+                                slug,
+                                mode,
+                                productEntity.key,
+                                product.id,
+                              )}
                               confirmTitle={`Remove ${product.name}?`}
                               confirmBody="It leaves the price list. Charges already made with it are kept."
                               confirmLabel="Remove"
@@ -113,16 +132,31 @@ export async function PricingPage({ ctx }: PortalPageProps) {
         {canWrite ? (
           <Card title="Add a product" flush>
             <Disclosure summary="New product" open={products.length === 0}>
-              <ActionForm action={createProductAction.bind(null, slug, mode)} submitLabel="Add product">
+              <ActionForm
+                action={createProductAction.bind(null, slug, mode)}
+                submitLabel="Add product"
+              >
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Field label="Name" htmlFor="p-name">
-                    <input id="p-name" name="name" required maxLength={120} className={inputClass} />
+                    <input
+                      id="p-name"
+                      name="name"
+                      required
+                      maxLength={120}
+                      className={inputClass}
+                    />
                   </Field>
                   <Field label="Code" htmlFor="p-code">
                     <input id="p-code" name="code" required maxLength={40} className={inputClass} />
                   </Field>
                   <Field label="Price (dollars)" htmlFor="p-price">
-                    <input id="p-price" name="price" required inputMode="decimal" className={inputClass} />
+                    <input
+                      id="p-price"
+                      name="price"
+                      required
+                      inputMode="decimal"
+                      className={inputClass}
+                    />
                   </Field>
                   <Field label="Kind" htmlFor="p-kind">
                     <Select id="p-kind" name="kind">
@@ -133,7 +167,11 @@ export async function PricingPage({ ctx }: PortalPageProps) {
                       ))}
                     </Select>
                   </Field>
-                  <Field label="Used by a pricing rule" htmlFor="p-role" help="Most products: leave as “No”.">
+                  <Field
+                    label="Used by a pricing rule"
+                    htmlFor="p-role"
+                    help="Most products: leave as “No”."
+                  >
                     <Select id="p-role" name="role" defaultValue="">
                       <option value="">No</option>
                       {PRODUCT_ROLES.map((role) => (
@@ -144,7 +182,12 @@ export async function PricingPage({ ctx }: PortalPageProps) {
                     </Select>
                   </Field>
                   <Field label="Description" htmlFor="p-description">
-                    <input id="p-description" name="description" maxLength={500} className={inputClass} />
+                    <input
+                      id="p-description"
+                      name="description"
+                      maxLength={500}
+                      className={inputClass}
+                    />
                   </Field>
                 </div>
               </ActionForm>
@@ -158,7 +201,9 @@ export async function PricingPage({ ctx }: PortalPageProps) {
           flush
         >
           {storageTerms.length === 0 ? (
-            <p className="p-4 text-sm text-zinc-500">No storage terms are set up, so standard boxes cannot be priced.</p>
+            <p className="p-4 text-sm text-zinc-500">
+              No storage terms are set up, so standard boxes cannot be priced.
+            </p>
           ) : (
             <Table>
               <thead>
@@ -176,16 +221,28 @@ export async function PricingPage({ ctx }: PortalPageProps) {
                   return (
                     <tr key={term.id}>
                       <Td className="whitespace-nowrap">{term.termMonths} months</Td>
-                      <Td className="whitespace-nowrap">{term.isOverweight ? 'Overweight' : 'Standard'}</Td>
+                      <Td className="whitespace-nowrap">
+                        {term.isOverweight ? 'Overweight' : 'Standard'}
+                      </Td>
                       <Td>
                         {product?.name ?? 'Removed product'}
-                        {product && !product.isActive ? ' (not active: boxes cannot be priced)' : ''}
+                        {product && !product.isActive
+                          ? ' (not active: boxes cannot be priced)'
+                          : ''}
                       </Td>
-                      <Td className="text-right tabular-nums">{product ? formatMoney(product.unitPriceCents) : '—'}</Td>
+                      <Td className="text-right tabular-nums">
+                        {product ? formatMoney(product.unitPriceCents) : '—'}
+                      </Td>
                       <Td>
                         {canWrite ? (
                           <ConfirmButton
-                            action={removeCatalogItemAction.bind(null, slug, mode, storageTermEntity.key, term.id)}
+                            action={removeCatalogItemAction.bind(
+                              null,
+                              slug,
+                              mode,
+                              storageTermEntity.key,
+                              term.id,
+                            )}
                             confirmTitle="Remove this storage term?"
                             confirmBody="Boxes stored for this term will be priced with the nearest shorter term, if there is one."
                             confirmLabel="Remove"
@@ -205,7 +262,16 @@ export async function PricingPage({ ctx }: PortalPageProps) {
               <ActionForm action={setStorageTermAction.bind(null, slug, mode)} submitLabel="Save">
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Field label="Term (months)" htmlFor="st-term">
-                    <input id="st-term" name="termMonths" type="number" min="1" max="99" required list="st-terms" className={inputClass} />
+                    <input
+                      id="st-term"
+                      name="termMonths"
+                      type="number"
+                      min="1"
+                      max="99"
+                      required
+                      list="st-terms"
+                      className={inputClass}
+                    />
                     <datalist id="st-terms">
                       {STORAGE_TERMS.map((term) => (
                         <option key={term.months} value={term.months} />

@@ -25,7 +25,10 @@ export function PaymentForm({
   taxPercent: number;
   /** The largest discount this person may give on this payment. */
   maxDiscountCents: number;
-  /** Made by the server for this one form, so pressing twice cannot charge twice. */
+  /**
+   * Made by the server each time the page is drawn, so pressing the button twice cannot charge
+   * twice, and a new attempt after a declined card is a new payment.
+   */
   idempotencyKey: string;
   /** Some charges could not be priced: the person must tick a box to go ahead without them. */
   hasUnpriced: boolean;
@@ -41,7 +44,9 @@ export function PaymentForm({
   return (
     <ActionForm
       action={action}
-      submitLabel={totals.totalCents > 0 ? `Take payment of ${money(totals.totalCents)}` : 'Mark as paid'}
+      submitLabel={
+        totals.totalCents > 0 ? `Take payment of ${money(totals.totalCents)}` : 'Mark as paid'
+      }
     >
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
       <div className="grid gap-3 sm:grid-cols-3">
@@ -101,7 +106,11 @@ export function PaymentForm({
       ) : null}
       {hasUnpriced ? (
         <label className="flex items-start gap-2 text-sm text-amber-900">
-          <input type="checkbox" name="acceptUnpriced" className="mt-0.5 size-4 rounded border-zinc-300" />
+          <input
+            type="checkbox"
+            name="acceptUnpriced"
+            className="mt-0.5 size-4 rounded border-zinc-300"
+          />
           Take payment without the charges that could not be worked out (listed above)
         </label>
       ) : null}

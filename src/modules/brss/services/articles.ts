@@ -2,7 +2,19 @@
  * Articles: the boxes and items BRSS handles. Intake on an order, later edits, and the
  * status and warehouse location updates that follow a box through storage and delivery.
  */
-import { and, asc, desc, eq, ilike, inArray, isNull, notInArray, or, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  notInArray,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import { z } from 'zod';
 import { customers } from '@/core/db/schema/tenant';
 import { withScope, type Scope } from '@/core/db/scope';
@@ -97,11 +109,7 @@ type IntakeInput = z.infer<typeof intakeInput>;
  * Turns what the intake form sent into the values to store, applying the intake rules.
  * Shared by intake (new article) and editing (existing article).
  */
-async function articleValues(
-  s: Scope,
-  order: typeof brssOrders.$inferSelect,
-  input: IntakeInput,
-) {
+async function articleValues(s: Scope, order: typeof brssOrders.$inferSelect, input: IntakeInput) {
   const settings = await loadSettings(s.ctx);
   // R-ORD-065: only a storage order that is not ship-to-Cornell offers the other types.
   if (!articleTypeChoices(order.services).includes(input.type))
@@ -306,7 +314,7 @@ export async function attachArticle(ctx: BusinessContext, orderId: string, artic
       throw new ValidationError(`This order is ${order.status}; articles cannot be added.`);
     const article = await findArticle(s, articleId);
     if (article.customerId !== order.customerId)
-      throw new ValidationError("That article belongs to a different customer.");
+      throw new ValidationError('That article belongs to a different customer.');
     // R-ORD-062: an article is on an order once.
     const [already] = await s.db
       .select({ id: brssOrderArticles.id })
@@ -380,7 +388,11 @@ export async function setOrderArticlesStatus(ctx: BusinessContext, orderId: stri
       .from(brssOrderArticles)
       .innerJoin(brssArticles, eq(brssArticles.id, brssOrderArticles.articleId))
       .where(
-        and(s.where(brssOrderArticles), s.where(brssArticles), eq(brssOrderArticles.orderId, orderId)),
+        and(
+          s.where(brssOrderArticles),
+          s.where(brssArticles),
+          eq(brssOrderArticles.orderId, orderId),
+        ),
       );
     if (linked.length === 0) throw new ValidationError('This order has no articles yet.');
     for (const article of linked) await updateRecord(s, articleEntity, article.id, { status });
@@ -496,7 +508,10 @@ export async function listArticles(ctx: BusinessContext, filters: ArticleFilters
               ),
             )
         : [];
-    const warehouses = await s.db.select().from(brssWarehouses).where(s.where(brssWarehouses, 'include'));
+    const warehouses = await s.db
+      .select()
+      .from(brssWarehouses)
+      .where(s.where(brssWarehouses, 'include'));
     return {
       total,
       page,
@@ -542,7 +557,11 @@ export async function getArticle(ctx: BusinessContext, id: string) {
           .from(brssOrderArticles)
           .innerJoin(brssOrders, eq(brssOrders.id, brssOrderArticles.orderId))
           .where(
-            and(s.where(brssOrderArticles), s.where(brssOrders), eq(brssOrderArticles.articleId, id)),
+            and(
+              s.where(brssOrderArticles),
+              s.where(brssOrders),
+              eq(brssOrderArticles.articleId, id),
+            ),
           )
           .orderBy(asc(brssOrders.createdAt))
       : [];
@@ -565,7 +584,10 @@ export async function warehouseCounts(ctx: BusinessContext) {
         and(
           s.where(brssArticles),
           // Articles that have left (delivered or shipped) no longer take up space.
-          or(isNull(brssArticles.status), notInArray(brssArticles.status, ['delivered', 'shipped'])),
+          or(
+            isNull(brssArticles.status),
+            notInArray(brssArticles.status, ['delivered', 'shipped']),
+          ),
         ),
       )
       .groupBy(brssArticles.warehouseId);

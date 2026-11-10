@@ -309,7 +309,11 @@ async function findVisit(s: Scope, appointmentId: string) {
  * The status is left as it is (the old system reset it only when the CUSTOMER rescheduled
  * online, R-SCH-033; that page is not part of the staff portal).
  */
-export async function rescheduleAppointment(ctx: BusinessContext, appointmentId: string, raw: unknown) {
+export async function rescheduleAppointment(
+  ctx: BusinessContext,
+  appointmentId: string,
+  raw: unknown,
+) {
   const input = parse(whenInput, raw);
   return withScope(ctx, CORE.schedulingWrite, async (s) => {
     const { appointment, detail } = await findVisit(s, appointmentId);
@@ -343,15 +347,18 @@ const statusKeys = APPOINTMENT_STATUSES.map((s) => s.key) as [
  * R-SCH-036: moving to Confirmed emails the customer for pickup, delivery and supplies
  * appointments. Sending needs the "Send notifications" permission.
  */
-export async function setAppointmentStatus(ctx: BusinessContext, appointmentId: string, raw: unknown) {
+export async function setAppointmentStatus(
+  ctx: BusinessContext,
+  appointmentId: string,
+  raw: unknown,
+) {
   const status = parse(z.enum(statusKeys, { message: 'Choose a status' }), raw);
   return withScope(ctx, CORE.schedulingWrite, async (s) => {
     const { appointment, detail } = await findVisit(s, appointmentId);
     if (appointment.status === status) return { emailed: null as string | null };
     await updateRecord(s, appointmentEntity, appointmentId, { status });
 
-    if (status !== 'confirmed' || !sendsConfirmationEmail(detail.type))
-      return { emailed: null };
+    if (status !== 'confirmed' || !sendsConfirmationEmail(detail.type)) return { emailed: null };
     const [customer] = appointment.customerId
       ? await s.db
           .select()
@@ -496,10 +503,7 @@ export async function createBlock(ctx: BusinessContext, raw: unknown) {
     throw new ValidationError('Tick "All day" or at least one time.'); // R-SCH-070
   if (input.endDate > addDays(input.startDate, 92))
     throw new ValidationError('An unavailability can cover at most three months.');
-  const ranges = blockRanges(
-    { ...input, slots: input.slots as SlotKey[] },
-    ctx.business.timeZone,
-  );
+  const ranges = blockRanges({ ...input, slots: input.slots as SlotKey[] }, ctx.business.timeZone);
   return withScope(ctx, CORE.schedulingWrite, async (s) => {
     if (input.buildingIds.length > 0) {
       const known = await s.db

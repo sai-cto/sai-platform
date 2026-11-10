@@ -43,7 +43,11 @@ export function AppointmentsCard({
   const activeTrucks = trucks.filter((truck) => truck.isActive);
 
   return (
-    <Card title="Appointments" description="Pickups, deliveries, packing and supplies drop-offs." flush>
+    <Card
+      title="Appointments"
+      description="Pickups, deliveries, packing and supplies drop-offs."
+      flush
+    >
       {appointments.length === 0 ? (
         <EmptyState title="Nothing booked yet" />
       ) : (
@@ -64,7 +68,11 @@ export function AppointmentsCard({
           <AppointmentForm
             action={bookAppointmentAction.bind(null, ctx.business.slug, ctx.environment, order.id)}
             regions={places.regions.map((r) => ({ id: r.id, name: r.name }))}
-            buildings={places.buildings.map((b) => ({ id: b.id, name: b.name, regionId: b.regionId }))}
+            buildings={places.buildings.map((b) => ({
+              id: b.id,
+              name: b.name,
+              regionId: b.regionId,
+            }))}
             trucks={activeTrucks.map((t) => ({ id: t.id, name: t.name }))}
             earliest={earliest}
             canOverride={can(ctx, P.appointmentsOverride)}

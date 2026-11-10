@@ -90,7 +90,10 @@ export async function getPriceList(ctx: BusinessContext) {
         .select()
         .from(brssStorageTermProducts)
         .where(s.where(brssStorageTermProducts))
-        .orderBy(asc(brssStorageTermProducts.termMonths), asc(brssStorageTermProducts.isOverweight)),
+        .orderBy(
+          asc(brssStorageTermProducts.termMonths),
+          asc(brssStorageTermProducts.isOverweight),
+        ),
     ]);
     return { products, storageTerms };
   });
@@ -99,7 +102,11 @@ export async function getPriceList(ctx: BusinessContext) {
 export async function getZones(ctx: BusinessContext) {
   return withScope(ctx, P.catalogRead, async (s) => {
     const [zipZones, zoneRates] = await Promise.all([
-      s.db.select().from(brssZipZones).where(s.where(brssZipZones)).orderBy(asc(brssZipZones.zipLow)),
+      s.db
+        .select()
+        .from(brssZipZones)
+        .where(s.where(brssZipZones))
+        .orderBy(asc(brssZipZones.zipLow)),
       s.db
         .select()
         .from(brssZoneRates)
@@ -326,9 +333,15 @@ export async function setZoneRate(ctx: BusinessContext, raw: unknown) {
 // ---------------------------------------------------------------- removing
 
 const REMOVABLE: Record<string, EntityDef> = Object.fromEntries(
-  [regionEntity, buildingEntity, warehouseEntity, productEntity, storageTermEntity, zipZoneEntity, zoneRateEntity].map(
-    (entity) => [entity.key, entity as EntityDef],
-  ),
+  [
+    regionEntity,
+    buildingEntity,
+    warehouseEntity,
+    productEntity,
+    storageTermEntity,
+    zipZoneEntity,
+    zoneRateEntity,
+  ].map((entity) => [entity.key, entity as EntityDef]),
 );
 
 /**

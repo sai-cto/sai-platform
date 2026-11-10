@@ -85,9 +85,13 @@ export function AppointmentRow({
           : ''}
         {detail.packingHours > 0 ? ` · ${detail.packingHours} h packing` : ''}
       </p>
-      {appointment.notes ? <p className="text-xs text-zinc-500">Note: {appointment.notes}</p> : null}
+      {appointment.notes ? (
+        <p className="text-xs text-zinc-500">Note: {appointment.notes}</p>
+      ) : null}
       {detail.overrideReason ? (
-        <p className="text-xs text-amber-800">Booked in spite of the rules: {detail.overrideReason}</p>
+        <p className="text-xs text-amber-800">
+          Booked in spite of the rules: {detail.overrideReason}
+        </p>
       ) : null}
 
       {canWrite ? (
@@ -95,11 +99,17 @@ export function AppointmentRow({
           <ActionForm
             action={setAppointmentStatusAction.bind(null, slug, mode, id)}
             submitLabel="Save status"
+            submitVariant="secondary"
             className="flex flex-wrap items-end gap-2 space-y-0"
             resetOnSuccess={false}
           >
             <Field label="Status" htmlFor={`status-${id}`}>
-              <Select id={`status-${id}`} name="status" defaultValue={appointment.status} className="w-40">
+              <Select
+                id={`status-${id}`}
+                name="status"
+                defaultValue={appointment.status}
+                className="w-40"
+              >
                 {APPOINTMENT_STATUSES.map((status) => (
                   <option key={status.key} value={status.key}>
                     {status.label}
@@ -112,11 +122,17 @@ export function AppointmentRow({
             <ActionForm
               action={assignTruckAction.bind(null, slug, mode, id)}
               submitLabel="Save truck"
+              submitVariant="secondary"
               className="flex flex-wrap items-end gap-2 space-y-0"
               resetOnSuccess={false}
             >
               <Field label="Truck" htmlFor={`truck-${id}`}>
-                <Select id={`truck-${id}`} name="truckId" defaultValue={appointment.resourceId ?? ''} className="w-40">
+                <Select
+                  id={`truck-${id}`}
+                  name="truckId"
+                  defaultValue={appointment.resourceId ?? ''}
+                  className="w-40"
+                >
                   <option value="">Not assigned</option>
                   {trucks.map((truck) => (
                     <option key={truck.id} value={truck.id}>

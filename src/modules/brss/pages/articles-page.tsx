@@ -17,7 +17,8 @@ export async function ArticlesPage({ ctx, searchParams, basePath }: PortalPagePr
   const status =
     searchParams.status === 'none'
       ? 'none'
-      : (ARTICLE_STATUSES.find((s) => s.key === searchParams.status)?.key as ArticleStatus | undefined);
+      : (ARTICLE_STATUSES.find((s) => s.key === searchParams.status)?.key as
+          ArticleStatus | undefined);
   const parsedPage = Number.parseInt(searchParams.page ?? '1', 10);
   const [{ rows, total, page }, places] = await Promise.all([
     listArticles(ctx, {
@@ -45,9 +46,20 @@ export async function ArticlesPage({ ctx, searchParams, basePath }: PortalPagePr
         description="Every box and item BRSS is handling or has handled. Open one to change its status or location."
       />
       <Card flush>
-        <form method="get" action={base} className="grid grid-cols-2 items-end gap-3 border-b border-zinc-200 p-3 md:grid-cols-5">
+        <form
+          method="get"
+          action={base}
+          className="grid grid-cols-2 items-end gap-3 border-b border-zinc-200 p-3 md:grid-cols-5"
+        >
           <Field label="Search" htmlFor="a-q" className="col-span-2">
-            <input id="a-q" name="q" type="search" defaultValue={searchParams.q} placeholder="Article number, description, customer" className={inputClass} />
+            <input
+              id="a-q"
+              name="q"
+              type="search"
+              defaultValue={searchParams.q}
+              placeholder="Article number, description, customer"
+              className={inputClass}
+            />
           </Field>
           <Field label="Status" htmlFor="a-status">
             <Select id="a-status" name="status" defaultValue={status ?? ''}>
@@ -100,7 +112,10 @@ export async function ArticlesPage({ ctx, searchParams, basePath }: PortalPagePr
               {rows.map((article) => (
                 <tr key={article.id}>
                   <Td className="font-medium whitespace-nowrap">
-                    <Link href={`${base}/${article.id}`} className="underline-offset-2 hover:underline">
+                    <Link
+                      href={`${base}/${article.id}`}
+                      className="underline-offset-2 hover:underline"
+                    >
                       {article.articleNumber}
                     </Link>
                   </Td>
@@ -113,7 +128,9 @@ export async function ArticlesPage({ ctx, searchParams, basePath }: PortalPagePr
                   <Td>
                     <ArticleStatusBadge status={article.status} />
                   </Td>
-                  <Td className="whitespace-nowrap">{locationText(article, article.warehouseName)}</Td>
+                  <Td className="whitespace-nowrap">
+                    {locationText(article, article.warehouseName)}
+                  </Td>
                 </tr>
               ))}
             </tbody>

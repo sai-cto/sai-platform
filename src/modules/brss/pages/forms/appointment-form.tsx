@@ -71,7 +71,11 @@ export function WhenFields({
             Book anyway if the time is blocked or at short notice
           </label>
           {override ? (
-            <Field label="Why" htmlFor={`${idPrefix}-why`} help="Kept with the appointment and in the activity log.">
+            <Field
+              label="Why"
+              htmlFor={`${idPrefix}-why`}
+              help="Kept with the appointment and in the activity log."
+            >
               <input
                 id={`${idPrefix}-why`}
                 name="overrideReason"
@@ -168,7 +172,13 @@ export function AppointmentForm({
       {needsAddress ? (
         <div className="grid gap-3 sm:grid-cols-4">
           <Field label="Street address" htmlFor="appt-address1" className="sm:col-span-2">
-            <input id="appt-address1" name="address1" required maxLength={200} className={inputClass} />
+            <input
+              id="appt-address1"
+              name="address1"
+              required
+              maxLength={200}
+              className={inputClass}
+            />
           </Field>
           <Field label="City" htmlFor="appt-city">
             <input id="appt-city" name="city" required maxLength={80} className={inputClass} />
@@ -180,13 +190,34 @@ export function AppointmentForm({
       ) : null}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Field label="Boxes (estimate)" htmlFor="appt-boxes">
-          <input id="appt-boxes" name="estimatedBoxes" type="number" min="0" max="999" className={inputClass} />
+          <input
+            id="appt-boxes"
+            name="estimatedBoxes"
+            type="number"
+            min="0"
+            max="999"
+            className={inputClass}
+          />
         </Field>
         <Field label="Other items (estimate)" htmlFor="appt-items">
-          <input id="appt-items" name="estimatedOtherItems" type="number" min="0" max="999" className={inputClass} />
+          <input
+            id="appt-items"
+            name="estimatedOtherItems"
+            type="number"
+            min="0"
+            max="999"
+            className={inputClass}
+          />
         </Field>
         <Field label="Packing hours" htmlFor="appt-hours">
-          <input id="appt-hours" name="packingHours" type="number" min="0" max="99" className={inputClass} />
+          <input
+            id="appt-hours"
+            name="packingHours"
+            type="number"
+            min="0"
+            max="99"
+            className={inputClass}
+          />
         </Field>
         <Field label="Truck" htmlFor="appt-truck">
           <select id="appt-truck" name="truckId" className={inputClass}>

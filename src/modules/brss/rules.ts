@@ -539,7 +539,8 @@ export function priceArticle(input: {
     product: PriceProduct,
     description: string,
     unitPriceCents: number,
-  ) => lines.push({ articleId: article.id, rule, productId: product.id, description, unitPriceCents });
+  ) =>
+    lines.push({ articleId: article.id, rule, productId: product.id, description, unitPriceCents });
 
   // ---- storage (R-ORD-032)
   if (services.includes('storage')) {

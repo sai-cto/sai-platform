@@ -23,7 +23,8 @@ export async function ArticlePage({ ctx, params, basePath }: PortalPageProps) {
   // The status the screen suggests next: the one after the current one in the usual order.
   const currentIndex = ARTICLE_STATUSES.findIndex((s) => s.key === article.status);
   const suggested = ARTICLE_STATUSES[Math.min(currentIndex + 1, ARTICLE_STATUSES.length - 1)].key;
-  const warehouses = places?.warehouses.filter((w) => w.isActive || w.id === article.warehouseId) ?? [];
+  const warehouses =
+    places?.warehouses.filter((w) => w.isActive || w.id === article.warehouseId) ?? [];
 
   return (
     <>
@@ -52,24 +53,37 @@ export async function ArticlePage({ ctx, params, basePath }: PortalPageProps) {
               {article.billableWeightLb > 0 ? `${article.billableWeightLb} lb` : '—'}
             </Fact>
             <Fact label="Extra insurance">
-              {article.additionalInsuranceCents > 0 ? formatMoney(article.additionalInsuranceCents) : 'None'}
+              {article.additionalInsuranceCents > 0
+                ? formatMoney(article.additionalInsuranceCents)
+                : 'None'}
             </Fact>
             {article.otherStoragePriceCents !== null ? (
-              <Fact label="Storage price a month">{formatMoney(article.otherStoragePriceCents)}</Fact>
+              <Fact label="Storage price a month">
+                {formatMoney(article.otherStoragePriceCents)}
+              </Fact>
             ) : null}
           </dl>
         </Card>
 
         {canWrite ? (
           <div className="grid gap-5 lg:grid-cols-2">
-            <Card title="Status" description="Any status can be set. Every change is kept in the activity log.">
+            <Card
+              title="Status"
+              description="Any status can be set. Every change is kept in the activity log."
+            >
               <ActionForm
                 action={setArticleStatusAction.bind(null, slug, mode, article.id)}
                 submitLabel="Save status"
+                submitVariant="secondary"
                 resetOnSuccess={false}
               >
                 <Field label="Status" htmlFor="article-status">
-                  <Select id="article-status" name="status" defaultValue={suggested} key={article.status ?? 'none'}>
+                  <Select
+                    id="article-status"
+                    name="status"
+                    defaultValue={suggested}
+                    key={article.status ?? 'none'}
+                  >
                     {ARTICLE_STATUSES.map((status) => (
                       <option key={status.key} value={status.key}>
                         {status.label}
@@ -92,7 +106,11 @@ export async function ArticlePage({ ctx, params, basePath }: PortalPageProps) {
                 >
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Warehouse" htmlFor="loc-warehouse">
-                      <Select id="loc-warehouse" name="warehouseId" defaultValue={article.warehouseId ?? ''}>
+                      <Select
+                        id="loc-warehouse"
+                        name="warehouseId"
+                        defaultValue={article.warehouseId ?? ''}
+                      >
                         <option value="">None</option>
                         {warehouses.map((warehouse) => (
                           <option key={warehouse.id} value={warehouse.id}>
@@ -122,7 +140,15 @@ export async function ArticlePage({ ctx, params, basePath }: PortalPageProps) {
                       </Select>
                     </Field>
                     <Field label="Pallet number" htmlFor="loc-pallet">
-                      <input id="loc-pallet" name="pallet" type="number" min="0" max="99" defaultValue={article.pallet ?? ''} className={inputClass} />
+                      <input
+                        id="loc-pallet"
+                        name="pallet"
+                        type="number"
+                        min="0"
+                        max="99"
+                        defaultValue={article.pallet ?? ''}
+                        className={inputClass}
+                      />
                     </Field>
                   </div>
                 </ActionForm>
@@ -141,8 +167,14 @@ export async function ArticlePage({ ctx, params, basePath }: PortalPageProps) {
           ) : (
             <ul className="divide-y divide-zinc-200">
               {orders.map((order) => (
-                <li key={order.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
-                  <Link href={`${basePath}/orders/${order.id}`} className="font-medium underline-offset-2 hover:underline">
+                <li
+                  key={order.id}
+                  className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm"
+                >
+                  <Link
+                    href={`${basePath}/orders/${order.id}`}
+                    className="font-medium underline-offset-2 hover:underline"
+                  >
                     {order.orderNumber}
                   </Link>
                   <OrderStatusBadge status={order.status} />

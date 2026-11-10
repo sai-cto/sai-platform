@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import type { PortalPageProps } from '@/core/modules/contract';
 import { can } from '@/core/rbac/permissions';
+import { cn } from '@/ui/cn';
 import { ActionForm } from '@/ui/action-form';
 import { buttonClass } from '@/ui/button';
 import { ConfirmButton } from '@/ui/confirm-button';
@@ -17,7 +18,12 @@ import {
   localDate,
 } from '../rules';
 import { loadSettings } from '../settings';
-import { listBlocks, listSchedule, listTrucks, type ScheduleFilters } from '../services/appointments';
+import {
+  listBlocks,
+  listSchedule,
+  listTrucks,
+  type ScheduleFilters,
+} from '../services/appointments';
 import { getPlaces } from '../services/catalog';
 import { AppointmentRow } from './appointment-row';
 import { Check, Disclosure, Select, formatWeekday } from './parts';
@@ -57,9 +63,19 @@ export async function SchedulePage({ ctx, searchParams, basePath }: PortalPagePr
       />
       <div className="space-y-5">
         <Card flush>
-          <form method="get" action={base} className="grid grid-cols-2 items-end gap-3 border-b border-zinc-200 p-3 md:grid-cols-4 xl:grid-cols-7">
+          <form
+            method="get"
+            action={base}
+            className="grid grid-cols-2 items-end gap-3 border-b border-zinc-200 p-3 md:grid-cols-4 xl:grid-cols-7"
+          >
             <Field label="From" htmlFor="s-from">
-              <input id="s-from" name="from" type="date" defaultValue={schedule.from} className={inputClass} />
+              <input
+                id="s-from"
+                name="from"
+                type="date"
+                defaultValue={schedule.from}
+                className={inputClass}
+              />
             </Field>
             <Field label="Days shown" htmlFor="s-days">
               <Select id="s-days" name="days" defaultValue={String(schedule.days)}>
@@ -152,7 +168,10 @@ export async function SchedulePage({ ctx, searchParams, basePath }: PortalPagePr
                             {row.orderNumber && row.detail.orderId ? (
                               <>
                                 {' · '}
-                                <Link href={`${basePath}/orders/${row.detail.orderId}`} className="underline underline-offset-2">
+                                <Link
+                                  href={`${basePath}/orders/${row.detail.orderId}`}
+                                  className="underline underline-offset-2"
+                                >
                                   Order {row.orderNumber}
                                 </Link>
                               </>
@@ -178,9 +197,14 @@ export async function SchedulePage({ ctx, searchParams, basePath }: PortalPagePr
           ) : (
             <ul className="divide-y divide-zinc-200">
               {blocks.map((block) => (
-                <li key={block.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 text-sm">
+                <li
+                  key={block.id}
+                  className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 text-sm"
+                >
                   <span>
-                    <span className="font-medium text-zinc-900">{block.reason || 'Unavailable'}</span>
+                    <span className="font-medium text-zinc-900">
+                      {block.reason || 'Unavailable'}
+                    </span>
                     <span className="block text-zinc-600">
                       {formatDateTime(block.startsAt)} to {formatDateTime(block.endsAt)} ·{' '}
                       {block.buildings.length > 0 ? block.buildings.join(', ') : 'every location'}
@@ -188,7 +212,12 @@ export async function SchedulePage({ ctx, searchParams, basePath }: PortalPagePr
                   </span>
                   {canWrite ? (
                     <ConfirmButton
-                      action={removeBlockAction.bind(null, ctx.business.slug, ctx.environment, block.id)}
+                      action={removeBlockAction.bind(
+                        null,
+                        ctx.business.slug,
+                        ctx.environment,
+                        block.id,
+                      )}
                       confirmTitle="Lift this unavailability?"
                       confirmBody="Appointments can be booked in this time again."
                       confirmLabel="Lift"
@@ -208,13 +237,26 @@ export async function SchedulePage({ ctx, searchParams, basePath }: PortalPagePr
               >
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Field label="First day" htmlFor="b-start">
-                    <input id="b-start" name="startDate" type="date" required className={inputClass} />
+                    <input
+                      id="b-start"
+                      name="startDate"
+                      type="date"
+                      required
+                      className={inputClass}
+                    />
                   </Field>
                   <Field label="Last day" htmlFor="b-end" help="Empty = one day.">
                     <input id="b-end" name="endDate" type="date" className={inputClass} />
                   </Field>
                   <Field label="Reason" htmlFor="b-reason">
-                    <input id="b-reason" name="reason" required maxLength={200} placeholder="Slope Day, staff training…" className={inputClass} />
+                    <input
+                      id="b-reason"
+                      name="reason"
+                      required
+                      maxLength={200}
+                      placeholder="Slope Day, staff training…"
+                      className={inputClass}
+                    />
                   </Field>
                 </div>
                 <fieldset className="space-y-2">
@@ -232,7 +274,13 @@ export async function SchedulePage({ ctx, searchParams, basePath }: PortalPagePr
                     htmlFor="b-buildings"
                     help="Leave empty to block every location. Hold Ctrl or ⌘ to choose several."
                   >
-                    <select id="b-buildings" name="buildingIds" multiple size={6} className={`${inputClass} h-auto py-1`}>
+                    <select
+                      id="b-buildings"
+                      name="buildingIds"
+                      multiple
+                      size={6}
+                      className={cn(inputClass, 'h-auto py-1')}
+                    >
                       {places.regions.map((region) => (
                         <optgroup key={region.id} label={region.name}>
                           {places.buildings

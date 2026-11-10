@@ -4,12 +4,14 @@
  * BRSS server actions: what the portal's forms and buttons call.
  *
  * Every action builds the context from the signed-in session (never from what the browser
- * sent), calls one service, and returns { ok, message }. All checking is in the services.
+ * sent), calls one service, and returns { ok, message }. requireStaffPortalContext() checks
+ * that the person may use this business's staff portal and that it is switched on; every
+ * other check is in the services.
  */
 import { redirect } from 'next/navigation';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { act, text } from '@/server/actions';
-import { parseMode, requireBusinessContext } from '@/server/session';
+import { parseMode, requireStaffPortalContext } from '@/server/session';
 import type { ActionResult } from '@/ui/action-form';
 import {
   assignTruck,
@@ -62,7 +64,7 @@ function run(
   mode: string,
   fn: (ctx: BusinessContext) => Promise<string | void>,
 ): Promise<ActionResult> {
-  return act(async () => fn(await requireBusinessContext(slug, parseMode(mode))));
+  return act(async () => fn(await requireStaffPortalContext(slug, parseMode(mode))));
 }
 
 const ticked = (form: FormData, name: string) => form.get(name) === 'on';
@@ -72,8 +74,7 @@ const unpriced = (problems: string[]) =>
   problems.length > 0 ? ` Some charges could not be worked out: ${problems.join(' ')}` : '';
 
 /** Where the staff portal lives in the console. */
-const portalPath = (ctx: BusinessContext) =>
-  `/console/${ctx.business.slug}/${ctx.environment}/app`;
+const portalPath = (ctx: BusinessContext) => `/console/${ctx.business.slug}/${ctx.environment}/app`;
 
 // ---------------------------------------------------------------- orders
 

@@ -95,8 +95,11 @@ export async function OrderPage({ ctx, params, basePath }: PortalPageProps) {
               {customer ? (
                 <>
                   {`${customer.firstName} ${customer.lastName}`.trim() || 'Unnamed customer'}
+                  <span className="block text-xs break-all text-zinc-500">
+                    {customer.email ?? 'No email'}
+                  </span>
                   <span className="block text-xs text-zinc-500">
-                    {[customer.email, customer.phone].filter(Boolean).join(' · ') || 'No contact details'}
+                    {customer.phone ?? 'No phone'}
                   </span>
                 </>
               ) : (
@@ -107,7 +110,9 @@ export async function OrderPage({ ctx, params, basePath }: PortalPageProps) {
               <ServiceList services={order.services} />
             </Fact>
             <Fact label="Campus category">
-              {order.campusCategory ? CAMPUS_LABELS[order.campusCategory] : 'Set by the first appointment'}
+              {order.campusCategory
+                ? CAMPUS_LABELS[order.campusCategory]
+                : 'Set by the first appointment'}
             </Fact>
             <Fact label="NetID">{order.netId ?? '—'}</Fact>
             <Fact label="Placed">{formatDateTime(order.createdAt)}</Fact>
@@ -124,11 +129,20 @@ export async function OrderPage({ ctx, params, basePath }: PortalPageProps) {
             <Fact label="Storage ends">{formatDay(detail.storageExpires)}</Fact>
             {order.services.includes('ship_to_home') || order.shipToAddress1 ? (
               <Fact label="Ship to">
-                {[order.shipToName, order.shipToAddress1, order.shipToAddress2, order.shipToCity, order.shipToState, order.shipToZip]
+                {[
+                  order.shipToName,
+                  order.shipToAddress1,
+                  order.shipToAddress2,
+                  order.shipToCity,
+                  order.shipToState,
+                  order.shipToZip,
+                ]
                   .filter(Boolean)
                   .join(', ') || '—'}
                 <span className="block text-xs text-zinc-500">
-                  {order.shipToZone === null ? 'No shipping zone for this zip' : `Shipping zone ${order.shipToZone}`}
+                  {order.shipToZone === null
+                    ? 'No shipping zone for this zip'
+                    : `Shipping zone ${order.shipToZone}`}
                 </span>
               </Fact>
             ) : null}

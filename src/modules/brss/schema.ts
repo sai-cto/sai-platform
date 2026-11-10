@@ -4,7 +4,13 @@
  */
 import { sql } from 'drizzle-orm';
 import { boolean, date, integer, jsonb, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
-import { appointments, customers, payments, resources, unavailability } from '@/core/db/schema/tenant';
+import {
+  appointments,
+  customers,
+  payments,
+  resources,
+  unavailability,
+} from '@/core/db/schema/tenant';
 import { sameTenant, tenantTable } from '@/core/db/tenant-table';
 
 // ---- reference data (managed in the portal's Pricing, Zones and Operations pages) ----------
@@ -32,8 +38,23 @@ export const brssWarehouses = tenantTable('brss_warehouses', {
   isActive: boolean('is_active').notNull().default(true),
 });
 
-export type ProductKind = 'storage_box' | 'storage_item' | 'flat_rate_box' | 'shipping' | 'supply' | 'packing' | 'insurance' | 'fee';
-export type ProductRole = 'ship_to_home' | 'ship_to_cornell' | 'flat_rate_cornell' | 'flat_rate_third_party' | 'insurance' | 'other_non_boxed' | 'prearrival';
+export type ProductKind =
+  | 'storage_box'
+  | 'storage_item'
+  | 'flat_rate_box'
+  | 'shipping'
+  | 'supply'
+  | 'packing'
+  | 'insurance'
+  | 'fee';
+export type ProductRole =
+  | 'ship_to_home'
+  | 'ship_to_cornell'
+  | 'flat_rate_cornell'
+  | 'flat_rate_third_party'
+  | 'insurance'
+  | 'other_non_boxed'
+  | 'prearrival';
 
 /** The price list. One list: the Salesforce org only ever used its standard price book. */
 export const brssProducts = tenantTable('brss_products', {
@@ -170,11 +191,14 @@ export const brssOrderArticles = tenantTable(
   (t) => [
     sameTenant('brss_order_articles_order_fk', t, t.orderId, brssOrders),
     sameTenant('brss_order_articles_article_fk', t, t.articleId, brssArticles),
-    uniqueIndex('brss_order_articles_pair').on(t.businessId, t.environment, t.orderId, t.articleId).where(sql`${t.archivedAt} is null`),
+    uniqueIndex('brss_order_articles_pair')
+      .on(t.businessId, t.environment, t.orderId, t.articleId)
+      .where(sql`${t.archivedAt} is null`),
   ],
 );
 
-export type ChargeRule = 'storage' | 'ship_to_home' | 'ship_to_cornell_fee' | 'ship_to_cornell' | 'insurance';
+export type ChargeRule =
+  'storage' | 'ship_to_home' | 'ship_to_cornell_fee' | 'ship_to_cornell' | 'insurance';
 
 export const brssOrderItems = tenantTable(
   'brss_order_items',
@@ -237,7 +261,11 @@ export const brssAppointments = tenantTable(
     sameTenant('brss_appointments_order_fk', t, t.orderId, brssOrders),
     sameTenant('brss_appointments_region_fk', t, t.regionId, brssRegions),
     sameTenant('brss_appointments_building_fk', t, t.buildingId, brssBuildings),
-    uniqueIndex('brss_appointments_one_per_appointment').on(t.businessId, t.environment, t.appointmentId),
+    uniqueIndex('brss_appointments_one_per_appointment').on(
+      t.businessId,
+      t.environment,
+      t.appointmentId,
+    ),
   ],
 );
 

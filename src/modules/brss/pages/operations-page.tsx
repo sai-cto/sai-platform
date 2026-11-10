@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import type { PortalPageProps } from '@/core/modules/contract';
 import { can } from '@/core/rbac/permissions';
+import { cn } from '@/ui/cn';
 import { ActionForm } from '@/ui/action-form';
 import { Badge } from '@/ui/badge';
 import { ConfirmButton } from '@/ui/confirm-button';
@@ -42,7 +43,10 @@ export async function OperationsPage({ ctx, basePath }: PortalPageProps) {
 
   return (
     <>
-      <PageHeader title="Operations" description="Where things are kept, who moves them, and where BRSS picks up and delivers." />
+      <PageHeader
+        title="Operations"
+        description="Where things are kept, who moves them, and where BRSS picks up and delivers."
+      />
       <div className="space-y-5">
         <Card title="Warehouses" description="Articles still in BRSS's hands, by warehouse." flush>
           <Table>
@@ -58,15 +62,34 @@ export async function OperationsPage({ ctx, basePath }: PortalPageProps) {
               {places.warehouses.map((warehouse) => (
                 <tr key={warehouse.id}>
                   <Td className="font-medium">
-                    <Link href={`${basePath}/articles?warehouse=${warehouse.id}`} className="underline-offset-2 hover:underline">
+                    <Link
+                      href={`${basePath}/articles?warehouse=${warehouse.id}`}
+                      className="underline-offset-2 hover:underline"
+                    >
                       {warehouse.name}
                     </Link>
                   </Td>
-                  <Td className="text-right tabular-nums">{formatNumber(countFor(warehouse.id))}</Td>
-                  <Td>{warehouse.isActive ? <Badge tone="green">In use</Badge> : <Badge>Not in use</Badge>}</Td>
+                  <Td className="text-right tabular-nums">
+                    {formatNumber(countFor(warehouse.id))}
+                  </Td>
+                  <Td>
+                    {warehouse.isActive ? (
+                      <Badge tone="green">In use</Badge>
+                    ) : (
+                      <Badge>Not in use</Badge>
+                    )}
+                  </Td>
                   <Td>
                     {canCatalog ? (
-                      <ConfirmButton action={setWarehouseActiveAction.bind(null, slug, mode, warehouse.id, !warehouse.isActive)}>
+                      <ConfirmButton
+                        action={setWarehouseActiveAction.bind(
+                          null,
+                          slug,
+                          mode,
+                          warehouse.id,
+                          !warehouse.isActive,
+                        )}
+                      >
                         {warehouse.isActive ? 'Stop using' : 'Use again'}
                       </ConfirmButton>
                     ) : null}
@@ -83,9 +106,19 @@ export async function OperationsPage({ ctx, basePath }: PortalPageProps) {
           </Table>
           {canCatalog ? (
             <Disclosure summary="Add a warehouse">
-              <ActionForm action={createWarehouseAction.bind(null, slug, mode)} submitLabel="Add warehouse" className="flex flex-wrap items-end gap-3 space-y-0">
+              <ActionForm
+                action={createWarehouseAction.bind(null, slug, mode)}
+                submitLabel="Add warehouse"
+                className="flex flex-wrap items-end gap-3 space-y-0"
+              >
                 <Field label="Name" htmlFor="w-name">
-                  <input id="w-name" name="name" required maxLength={80} className={`${inputClass} sm:w-64`} />
+                  <input
+                    id="w-name"
+                    name="name"
+                    required
+                    maxLength={80}
+                    className={cn(inputClass, 'sm:w-64')}
+                  />
                 </Field>
               </ActionForm>
             </Disclosure>
@@ -93,7 +126,11 @@ export async function OperationsPage({ ctx, basePath }: PortalPageProps) {
         </Card>
 
         {seesTrucks ? (
-          <Card title="Trucks and crews" description="A truck's crew is copied onto an appointment when the truck is assigned to it." flush>
+          <Card
+            title="Trucks and crews"
+            description="A truck's crew is copied onto an appointment when the truck is assigned to it."
+            flush
+          >
             {trucks.length === 0 ? (
               <p className="p-4 text-sm text-zinc-500">No trucks yet.</p>
             ) : (
@@ -102,20 +139,40 @@ export async function OperationsPage({ ctx, basePath }: PortalPageProps) {
                   <li key={truck.id} className="space-y-2 px-4 py-3">
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="text-sm font-medium text-zinc-900">{truck.name}</span>
-                      {truck.isActive ? <Badge tone="green">In use</Badge> : <Badge>Not in use</Badge>}
+                      {truck.isActive ? (
+                        <Badge tone="green">In use</Badge>
+                      ) : (
+                        <Badge>Not in use</Badge>
+                      )}
                       {canSchedule ? (
-                        <ConfirmButton action={setTruckActiveAction.bind(null, slug, mode, truck.id, !truck.isActive)}>
+                        <ConfirmButton
+                          action={setTruckActiveAction.bind(
+                            null,
+                            slug,
+                            mode,
+                            truck.id,
+                            !truck.isActive,
+                          )}
+                        >
                           {truck.isActive ? 'Stop using' : 'Use again'}
                         </ConfirmButton>
                       ) : null}
                     </div>
                     <ul className="flex flex-wrap gap-2">
-                      {truck.crew.length === 0 ? <li className="text-sm text-zinc-500">No crew yet</li> : null}
+                      {truck.crew.length === 0 ? (
+                        <li className="text-sm text-zinc-500">No crew yet</li>
+                      ) : null}
                       {truck.crew.map((member) => (
-                        <li key={member.id} className="flex items-center gap-1.5 rounded-md border border-zinc-200 py-0.5 pr-0.5 pl-2 text-sm">
+                        <li
+                          key={member.id}
+                          className="flex items-center gap-1.5 rounded-md border border-zinc-200 py-0.5 pr-0.5 pl-2 text-sm"
+                        >
                           {member.name}
                           {canSchedule ? (
-                            <ConfirmButton action={removeCrewAction.bind(null, slug, mode, member.id)} variant="ghost">
+                            <ConfirmButton
+                              action={removeCrewAction.bind(null, slug, mode, member.id)}
+                              variant="ghost"
+                            >
                               Remove
                             </ConfirmButton>
                           ) : null}
@@ -123,9 +180,19 @@ export async function OperationsPage({ ctx, basePath }: PortalPageProps) {
                       ))}
                     </ul>
                     {canSchedule && truck.isActive ? (
-                      <ActionForm action={addCrewAction.bind(null, slug, mode, truck.id)} submitLabel="Add to crew" className="flex flex-wrap items-end gap-3 space-y-0">
+                      <ActionForm
+                        action={addCrewAction.bind(null, slug, mode, truck.id)}
+                        submitLabel="Add to crew"
+                        className="flex flex-wrap items-end gap-3 space-y-0"
+                      >
                         <Field label="Name" htmlFor={`crew-name-${truck.id}`}>
-                          <input id={`crew-name-${truck.id}`} name="name" required maxLength={120} className={`${inputClass} w-52`} />
+                          <input
+                            id={`crew-name-${truck.id}`}
+                            name="name"
+                            required
+                            maxLength={120}
+                            className={cn(inputClass, 'w-52')}
+                          />
                         </Field>
                       </ActionForm>
                     ) : null}
@@ -135,9 +202,19 @@ export async function OperationsPage({ ctx, basePath }: PortalPageProps) {
             )}
             {canSchedule ? (
               <Disclosure summary="Add a truck">
-                <ActionForm action={createTruckAction.bind(null, slug, mode)} submitLabel="Add truck" className="flex flex-wrap items-end gap-3 space-y-0">
+                <ActionForm
+                  action={createTruckAction.bind(null, slug, mode)}
+                  submitLabel="Add truck"
+                  className="flex flex-wrap items-end gap-3 space-y-0"
+                >
                   <Field label="Name" htmlFor="t-name">
-                    <input id="t-name" name="name" required maxLength={80} className={`${inputClass} sm:w-64`} />
+                    <input
+                      id="t-name"
+                      name="name"
+                      required
+                      maxLength={80}
+                      className={cn(inputClass, 'sm:w-64')}
+                    />
                   </Field>
                 </ActionForm>
               </Disclosure>
@@ -156,7 +233,9 @@ export async function OperationsPage({ ctx, basePath }: PortalPageProps) {
               <details key={region.id} className="group border-b border-zinc-200">
                 <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-2.5 text-sm select-none [&::-webkit-details-marker]:hidden">
                   <span className="font-medium text-zinc-900">
-                    <span className="mr-1.5 inline-block text-zinc-400 transition-transform group-open:rotate-90">›</span>
+                    <span className="mr-1.5 inline-block text-zinc-400 transition-transform group-open:rotate-90">
+                      ›
+                    </span>
                     {region.name}
                   </span>
                   <span className="text-zinc-500">
@@ -174,19 +253,36 @@ export async function OperationsPage({ ctx, basePath }: PortalPageProps) {
                     </thead>
                     <tbody>
                       {buildings.map((building) => {
-                        const other = building.campusCategory === 'on_campus' ? 'off_campus' : 'on_campus';
+                        const other =
+                          building.campusCategory === 'on_campus' ? 'off_campus' : 'on_campus';
                         return (
                           <tr key={building.id}>
                             <Td>{building.name}</Td>
-                            <Td className="whitespace-nowrap">{CAMPUS_LABELS[building.campusCategory]}</Td>
+                            <Td className="whitespace-nowrap">
+                              {CAMPUS_LABELS[building.campusCategory]}
+                            </Td>
                             <Td>
                               {canCatalog ? (
                                 <span className="flex justify-end gap-2">
-                                  <ConfirmButton action={setBuildingCampusAction.bind(null, slug, mode, building.id, other)}>
+                                  <ConfirmButton
+                                    action={setBuildingCampusAction.bind(
+                                      null,
+                                      slug,
+                                      mode,
+                                      building.id,
+                                      other,
+                                    )}
+                                  >
                                     Make {CAMPUS_LABELS[other].toLowerCase()}
                                   </ConfirmButton>
                                   <ConfirmButton
-                                    action={removeCatalogItemAction.bind(null, slug, mode, buildingEntity.key, building.id)}
+                                    action={removeCatalogItemAction.bind(
+                                      null,
+                                      slug,
+                                      mode,
+                                      buildingEntity.key,
+                                      building.id,
+                                    )}
                                     confirmTitle={`Remove ${building.name}?`}
                                     confirmBody="It can no longer be chosen for new appointments. Existing appointments keep it."
                                     confirmLabel="Remove"
@@ -208,7 +304,10 @@ export async function OperationsPage({ ctx, basePath }: PortalPageProps) {
           {canCatalog ? (
             <>
               <Disclosure summary="Add a building">
-                <ActionForm action={createBuildingAction.bind(null, slug, mode)} submitLabel="Add building">
+                <ActionForm
+                  action={createBuildingAction.bind(null, slug, mode)}
+                  submitLabel="Add building"
+                >
                   <div className="grid gap-3 sm:grid-cols-3">
                     <Field label="Region" htmlFor="bd-region">
                       <Select id="bd-region" name="regionId">
@@ -220,7 +319,13 @@ export async function OperationsPage({ ctx, basePath }: PortalPageProps) {
                       </Select>
                     </Field>
                     <Field label="Name" htmlFor="bd-name">
-                      <input id="bd-name" name="name" required maxLength={120} className={inputClass} />
+                      <input
+                        id="bd-name"
+                        name="name"
+                        required
+                        maxLength={120}
+                        className={inputClass}
+                      />
                     </Field>
                     <Field label="Campus category" htmlFor="bd-campus">
                       <Select id="bd-campus" name="campusCategory">
@@ -232,12 +337,30 @@ export async function OperationsPage({ ctx, basePath }: PortalPageProps) {
                 </ActionForm>
               </Disclosure>
               <Disclosure summary="Add a region">
-                <ActionForm action={createRegionAction.bind(null, slug, mode)} submitLabel="Add region" className="flex flex-wrap items-end gap-3 space-y-0">
+                <ActionForm
+                  action={createRegionAction.bind(null, slug, mode)}
+                  submitLabel="Add region"
+                  className="flex flex-wrap items-end gap-3 space-y-0"
+                >
                   <Field label="Name" htmlFor="rg-name">
-                    <input id="rg-name" name="name" required maxLength={80} className={`${inputClass} sm:w-64`} />
+                    <input
+                      id="rg-name"
+                      name="name"
+                      required
+                      maxLength={80}
+                      className={cn(inputClass, 'sm:w-64')}
+                    />
                   </Field>
                   <Field label="Position in lists" htmlFor="rg-order">
-                    <input id="rg-order" name="sortOrder" type="number" min="0" max="999" defaultValue="50" className={`${inputClass} w-24`} />
+                    <input
+                      id="rg-order"
+                      name="sortOrder"
+                      type="number"
+                      min="0"
+                      max="999"
+                      defaultValue="50"
+                      className={cn(inputClass, 'w-24')}
+                    />
                   </Field>
                 </ActionForm>
               </Disclosure>

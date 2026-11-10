@@ -33,7 +33,13 @@ import {
   subtotalCents,
   type PricedLine,
 } from '../rules';
-import { brssArticles, brssOrderArticles, brssOrderItems, brssOrders, brssProducts } from '../schema';
+import {
+  brssArticles,
+  brssOrderArticles,
+  brssOrderItems,
+  brssOrders,
+  brssProducts,
+} from '../schema';
 import { loadSettings } from '../settings';
 import { loadCatalog } from './catalog';
 import { optionalText, parse, requiredId, requiredText, wholeNumber } from './input';
@@ -297,7 +303,8 @@ export async function payOrder(
   const input = parse(paymentInput, raw);
   const discountCents = dollarsToCents(input.discount || '0');
   const tipCents = dollarsToCents(input.tip || '0');
-  if (discountCents === null) throw new ValidationError('Enter the discount in dollars, like 5.00.');
+  if (discountCents === null)
+    throw new ValidationError('Enter the discount in dollars, like 5.00.');
   if (tipCents === null) throw new ValidationError('Enter the tip in dollars, like 5.00.');
   authorize(ctx, P.ordersWrite);
 
@@ -391,7 +398,12 @@ const refundInput = z.object({ amount: z.string(), reason: requiredText('a reaso
  * Gives money back on one of the order's payments. The charges stay marked paid: what a
  * refund should undo on the order is an open question (README), so staff decide by hand.
  */
-export async function refundOrderPayment(ctx: BusinessContext, orderId: string, paymentId: string, raw: unknown) {
+export async function refundOrderPayment(
+  ctx: BusinessContext,
+  orderId: string,
+  paymentId: string,
+  raw: unknown,
+) {
   const input = parse(refundInput, raw);
   const amountCents = dollarsToCents(input.amount);
   if (amountCents === null || amountCents <= 0)

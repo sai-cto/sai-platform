@@ -45,7 +45,13 @@ import { optionalId, optionalText, parse, requiredText } from './input';
 export const ORDERS_PAGE_SIZE = 25;
 
 /** The order in which one article's charges are listed. */
-const CHARGE_ORDER: string[] = ['storage', 'ship_to_home', 'ship_to_cornell_fee', 'ship_to_cornell', 'insurance'];
+const CHARGE_ORDER: string[] = [
+  'storage',
+  'ship_to_home',
+  'ship_to_cornell_fee',
+  'ship_to_cornell',
+  'insurance',
+];
 
 // ---------------------------------------------------------------- the dashboard
 
@@ -82,9 +88,7 @@ function orderConditions(s: Scope, filters: OrderFilters): SQL | undefined {
           s.db
             .select({ id: brssAppointments.orderId })
             .from(brssAppointments)
-            .where(
-              and(s.where(brssAppointments), eq(brssAppointments.regionId, filters.regionId)),
-            ),
+            .where(and(s.where(brssAppointments), eq(brssAppointments.regionId, filters.regionId))),
         )
       : undefined,
     filters.from && isDateText(filters.from)
@@ -495,9 +499,7 @@ export async function updateOrder(ctx: BusinessContext, id: string, raw: unknown
   return withScope(ctx, P.ordersWrite, async (s) => {
     const current = await findOrder(s, id);
     if (current.status === 'closed' || current.status === 'cancelled')
-      throw new ValidationError(
-        `This order is ${current.status}. Reopen it before changing it.`,
-      );
+      throw new ValidationError(`This order is ${current.status}. Reopen it before changing it.`);
     const order = await updateRecord(s, orderEntity, id, {
       ...orderValues(fields, await zoneFor(s, fields.shipToZip)),
       // The campus category is only touched by the Counter tick box.

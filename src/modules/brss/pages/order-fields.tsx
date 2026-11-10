@@ -1,4 +1,5 @@
 /** The fields of an order, shared by "New order" and "Change details". */
+import { cn } from '@/ui/cn';
 import { Field, inputClass } from '@/ui/layout';
 import { ORDER_SERVICES, STORAGE_TERMS } from '../rules';
 import type { brssOrders } from '../schema';
@@ -71,7 +72,11 @@ export function OrderFields({ order }: { order?: Order }) {
       </fieldset>
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Storage term" htmlFor="o-term" help="Needed for a storage order.">
-          <Select id="o-term" name="storageTermMonths" defaultValue={order?.storageTermMonths ?? ''}>
+          <Select
+            id="o-term"
+            name="storageTermMonths"
+            defaultValue={order?.storageTermMonths ?? ''}
+          >
             <option value="">Not a storage order</option>
             {STORAGE_TERMS.map((term) => (
               <option key={term.months} value={term.months}>
@@ -85,7 +90,13 @@ export function OrderFields({ order }: { order?: Order }) {
           </Select>
         </Field>
         <Field label="NetID" htmlFor="o-netid">
-          <input id="o-netid" name="netId" maxLength={100} defaultValue={order?.netId ?? ''} className={inputClass} />
+          <input
+            id="o-netid"
+            name="netId"
+            maxLength={100}
+            defaultValue={order?.netId ?? ''}
+            className={inputClass}
+          />
         </Field>
         <div className="flex items-end pb-1.5">
           <Check
@@ -102,23 +113,60 @@ export function OrderFields({ order }: { order?: Order }) {
         </legend>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Addressed to" htmlFor="o-ship-name">
-            <input id="o-ship-name" name="shipToName" maxLength={120} defaultValue={order?.shipToName ?? ''} className={inputClass} />
+            <input
+              id="o-ship-name"
+              name="shipToName"
+              maxLength={120}
+              defaultValue={order?.shipToName ?? ''}
+              className={inputClass}
+            />
           </Field>
           <Field label="Street address" htmlFor="o-ship-a1">
-            <input id="o-ship-a1" name="shipToAddress1" maxLength={200} defaultValue={order?.shipToAddress1 ?? ''} className={inputClass} />
+            <input
+              id="o-ship-a1"
+              name="shipToAddress1"
+              maxLength={200}
+              defaultValue={order?.shipToAddress1 ?? ''}
+              className={inputClass}
+            />
           </Field>
           <Field label="Apartment, suite (optional)" htmlFor="o-ship-a2">
-            <input id="o-ship-a2" name="shipToAddress2" maxLength={200} defaultValue={order?.shipToAddress2 ?? ''} className={inputClass} />
+            <input
+              id="o-ship-a2"
+              name="shipToAddress2"
+              maxLength={200}
+              defaultValue={order?.shipToAddress2 ?? ''}
+              className={inputClass}
+            />
           </Field>
           <div className="grid grid-cols-3 gap-3">
             <Field label="City" htmlFor="o-ship-city">
-              <input id="o-ship-city" name="shipToCity" maxLength={80} defaultValue={order?.shipToCity ?? ''} className={inputClass} />
+              <input
+                id="o-ship-city"
+                name="shipToCity"
+                maxLength={80}
+                defaultValue={order?.shipToCity ?? ''}
+                className={inputClass}
+              />
             </Field>
             <Field label="State" htmlFor="o-ship-state">
-              <input id="o-ship-state" name="shipToState" maxLength={40} defaultValue={order?.shipToState ?? ''} className={inputClass} />
+              <input
+                id="o-ship-state"
+                name="shipToState"
+                maxLength={40}
+                defaultValue={order?.shipToState ?? ''}
+                className={inputClass}
+              />
             </Field>
             <Field label="Zip" htmlFor="o-ship-zip">
-              <input id="o-ship-zip" name="shipToZip" maxLength={10} inputMode="numeric" defaultValue={order?.shipToZip ?? ''} className={inputClass} />
+              <input
+                id="o-ship-zip"
+                name="shipToZip"
+                maxLength={10}
+                inputMode="numeric"
+                defaultValue={order?.shipToZip ?? ''}
+                className={inputClass}
+              />
             </Field>
           </div>
         </div>
@@ -130,7 +178,7 @@ export function OrderFields({ order }: { order?: Order }) {
           rows={2}
           maxLength={2000}
           defaultValue={order?.notes ?? ''}
-          className={`${inputClass} h-auto py-1.5`}
+          className={cn(inputClass, 'h-auto py-1.5')}
         />
       </Field>
     </>

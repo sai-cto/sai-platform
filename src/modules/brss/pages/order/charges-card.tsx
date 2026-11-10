@@ -93,14 +93,18 @@ export function ChargesCard({
           <tbody>
             {items.map((item) => (
               <tr key={item.id}>
-                <Td>{item.description}</Td>
+                <Td className="min-w-56">{item.description}</Td>
                 <Td className="text-right tabular-nums">{item.quantity}</Td>
                 <Td className="text-right tabular-nums">{formatMoney(item.unitPriceCents)}</Td>
                 <Td className="text-right tabular-nums">
                   {formatMoney(item.unitPriceCents * item.quantity)}
                 </Td>
                 <Td>
-                  {item.status === 'paid' ? <Badge tone="green">Paid</Badge> : <Badge tone="amber">To pay</Badge>}
+                  {item.status === 'paid' ? (
+                    <Badge tone="green">Paid</Badge>
+                  ) : (
+                    <Badge tone="amber">To pay</Badge>
+                  )}
                 </Td>
                 <Td>
                   {canWrite && item.status === 'new' && item.rule === null ? (
@@ -117,28 +121,19 @@ export function ChargesCard({
               </tr>
             ))}
           </tbody>
-          <tfoot>
-            <tr>
-              <Td className="text-right text-zinc-500" >
-                Paid so far (before tax, tip and discount)
-              </Td>
-              <Td />
-              <Td />
-              <Td className="text-right tabular-nums">{formatMoney(paidCents)}</Td>
-              <Td />
-              <Td />
-            </tr>
-            <tr>
-              <Td className="text-right font-medium">Still to pay (before tax)</Td>
-              <Td />
-              <Td />
-              <Td className="text-right font-semibold tabular-nums">{formatMoney(unpaidCents)}</Td>
-              <Td />
-              <Td />
-            </tr>
-          </tfoot>
         </Table>
       )}
+
+      {items.length > 0 ? (
+        <dl className="grid grid-cols-[1fr_auto] gap-x-6 gap-y-1 border-t border-zinc-200 px-4 py-3 text-sm sm:ml-auto sm:max-w-sm">
+          <dt className="text-zinc-600">Paid so far (before tax, tip and discount)</dt>
+          <dd className="text-right tabular-nums">{formatMoney(paidCents)}</dd>
+          <dt className="font-medium text-zinc-900">Still to pay (before tax)</dt>
+          <dd className="text-right font-semibold text-zinc-900 tabular-nums">
+            {formatMoney(unpaidCents)}
+          </dd>
+        </dl>
+      ) : null}
 
       {order.discountCents + order.tipCents + order.taxCents > 0 ? (
         <p className="border-t border-zinc-200 px-4 py-2 text-xs text-zinc-500">
@@ -149,7 +144,10 @@ export function ChargesCard({
 
       {canWrite && extras.length > 0 ? (
         <Disclosure summary="Add supplies, packing or a fee">
-          <ActionForm action={addChargeAction.bind(null, slug, mode, order.id)} submitLabel="Add charge">
+          <ActionForm
+            action={addChargeAction.bind(null, slug, mode, order.id)}
+            submitLabel="Add charge"
+          >
             <div className="grid gap-3 sm:grid-cols-4">
               <Field label="Product" htmlFor="charge-product" className="sm:col-span-2">
                 <Select id="charge-product" name="productId">
@@ -161,14 +159,35 @@ export function ChargesCard({
                 </Select>
               </Field>
               <Field label="Quantity" htmlFor="charge-quantity">
-                <input id="charge-quantity" name="quantity" type="number" min="1" max="999" defaultValue="1" className={inputClass} />
+                <input
+                  id="charge-quantity"
+                  name="quantity"
+                  type="number"
+                  min="1"
+                  max="999"
+                  defaultValue="1"
+                  className={inputClass}
+                />
               </Field>
-              <Field label="Price each (dollars)" htmlFor="charge-price" help="Empty = the list price.">
+              <Field
+                label="Price each (dollars)"
+                htmlFor="charge-price"
+                help="Empty = the list price."
+              >
                 <input id="charge-price" name="price" inputMode="decimal" className={inputClass} />
               </Field>
             </div>
-            <Field label="Description" htmlFor="charge-description" help="Empty = the product's name.">
-              <input id="charge-description" name="description" maxLength={200} className={inputClass} />
+            <Field
+              label="Description"
+              htmlFor="charge-description"
+              help="Empty = the product's name."
+            >
+              <input
+                id="charge-description"
+                name="description"
+                maxLength={200}
+                className={inputClass}
+              />
             </Field>
           </ActionForm>
         </Disclosure>
@@ -178,9 +197,7 @@ export function ChargesCard({
         <div className="border-t border-zinc-200 p-4">
           <h3 className="mb-3 text-sm font-semibold text-zinc-900">Take payment</h3>
           <PaymentForm
-            // A new key after every payment attempt, so the form always starts clean.
-            key={idempotencyKey}
-            action={payOrderAction.bind(null, slug, mode, order.id)}
+action={payOrderAction.bind(null, slug, mode, order.id)}
             unpaidCents={unpaidCents}
             taxPercent={settings.taxPercent}
             maxDiscountCents={maxDiscountCents(
@@ -195,14 +212,17 @@ export function ChargesCard({
       ) : null}
       {active && unpaid.length > 0 && !canPay ? (
         <p className="border-t border-zinc-200 px-4 py-3 text-sm text-zinc-500">
-          Taking payment needs the &quot;Process orders&quot; and &quot;Take payments and issue refunds&quot; permissions.
+          Taking payment needs the &quot;Process orders&quot; and &quot;Take payments and issue
+          refunds&quot; permissions.
         </p>
       ) : null}
 
       <div className="border-t border-zinc-200">
         <h3 className="px-4 pt-3 text-sm font-semibold text-zinc-900">Payments</h3>
         {payments === null ? (
-          <p className="px-4 py-3 text-sm text-zinc-500">You do not have permission to see payments.</p>
+          <p className="px-4 py-3 text-sm text-zinc-500">
+            You do not have permission to see payments.
+          </p>
         ) : payments.length === 0 ? (
           <p className="px-4 py-3 text-sm text-zinc-500">No payments yet.</p>
         ) : (
@@ -247,7 +267,8 @@ export function ChargesCard({
               <ul className="space-y-1 px-4 py-2 text-xs text-zinc-600">
                 {refunds.map((refund) => (
                   <li key={refund.id}>
-                    Refund of {formatMoney(refund.amountCents)} on {formatDateTime(refund.createdAt)}
+                    Refund of {formatMoney(refund.amountCents)} on{' '}
+                    {formatDateTime(refund.createdAt)}
                     {refund.status === 'failed' ? ' (failed)' : ''}: {refund.reason}
                   </li>
                 ))}
@@ -272,10 +293,26 @@ export function ChargesCard({
                             htmlFor={`refund-amount-${payment.id}`}
                             help={`Up to ${formatMoney(payment.amountCents - payment.refundedCents)}.`}
                           >
-                            <input id={`refund-amount-${payment.id}`} name="amount" inputMode="decimal" required className={inputClass} />
+                            <input
+                              id={`refund-amount-${payment.id}`}
+                              name="amount"
+                              inputMode="decimal"
+                              required
+                              className={inputClass}
+                            />
                           </Field>
-                          <Field label="Reason" htmlFor={`refund-reason-${payment.id}`} className="sm:col-span-2">
-                            <input id={`refund-reason-${payment.id}`} name="reason" required maxLength={300} className={inputClass} />
+                          <Field
+                            label="Reason"
+                            htmlFor={`refund-reason-${payment.id}`}
+                            className="sm:col-span-2"
+                          >
+                            <input
+                              id={`refund-reason-${payment.id}`}
+                              name="reason"
+                              required
+                              maxLength={300}
+                              className={inputClass}
+                            />
                           </Field>
                         </div>
                       </ActionForm>

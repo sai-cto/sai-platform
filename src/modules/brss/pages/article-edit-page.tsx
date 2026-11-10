@@ -36,11 +36,23 @@ export async function ArticleEditPage({ ctx, params, basePath }: PortalPageProps
       />
       <Card description="Charges that are not paid yet are worked out again when you save. Paid charges are not changed.">
         <IntakeForm
-          action={updateArticleAction.bind(null, ctx.business.slug, ctx.environment, order.id, article.id)}
+          action={updateArticleAction.bind(
+            null,
+            ctx.business.slug,
+            ctx.environment,
+            order.id,
+            article.id,
+          )}
           types={articleTypeChoices(order.services)}
           products={priceList.products
             .filter((p) => p.isActive && (p.kind === 'storage_item' || p.kind === 'flat_rate_box'))
-            .map((p) => ({ id: p.id, name: p.name, kind: p.kind, role: p.role, unitPriceCents: p.unitPriceCents }))}
+            .map((p) => ({
+              id: p.id,
+              name: p.name,
+              kind: p.kind,
+              role: p.role,
+              unitPriceCents: p.unitPriceCents,
+            }))}
           toCornell={order.services.includes('ship_to_cornell')}
           divisor={settings.dimensionalDivisor}
           maxBillableLb={settings.maxBillableWeightLb}
