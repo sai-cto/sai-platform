@@ -5,6 +5,7 @@
  */
 import type { notifications } from '../db/schema';
 import type { Scope } from '../db/scope';
+import { authorize } from '../rbac/permissions';
 import { notificationEntity } from '../records/core-entities';
 import { createRecord } from '../records/records';
 import type { Row } from '../records/types';
@@ -40,6 +41,8 @@ export async function sendNotification(
   s: Scope,
   input: OutgoingMessage & { subjectType?: string; subjectId?: string },
 ): Promise<Row<typeof notifications>> {
+  // Permission first: nobody without notifications.write can make the platform send anything.
+  authorize(s.ctx, 'notifications.write');
   // The sandbox never sends for real, whatever adapter is configured.
   const channel = s.ctx.environment === 'sandbox' ? consoleEmailChannel : emailChannel;
   const result = await channel.send({

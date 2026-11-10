@@ -8,8 +8,9 @@ import { and, asc, eq, gt, gte, isNull, lt, ne, or, type SQL } from 'drizzle-orm
 import { appointments, unavailability } from '../db/schema';
 import type { Scope } from '../db/scope';
 import { ValidationError } from '../errors';
+import { authorize } from '../rbac/permissions';
 import { appointmentEntity } from '../records/core-entities';
-import { createRecord, updateRecord } from '../records/records';
+import { createRecord, getRecord, updateRecord } from '../records/records';
 import type { NewValues, Row } from '../records/types';
 
 type TimeRange = { startsAt: Date; endsAt: Date };
@@ -32,6 +33,7 @@ export async function findBlocks(
   s: Scope,
   range: TimeRange & { resourceId?: string | null },
 ): Promise<Row<typeof unavailability>[]> {
+  authorize(s.ctx, 'scheduling.read');
   const forResource: SQL | undefined = range.resourceId
     ? or(isNull(unavailability.resourceId), eq(unavailability.resourceId, range.resourceId))
     : isNull(unavailability.resourceId);
@@ -54,6 +56,7 @@ export async function findConflicts(
   s: Scope,
   range: TimeRange & { resourceId: string; excludeAppointmentId?: string },
 ): Promise<Row<typeof appointments>[]> {
+  authorize(s.ctx, 'scheduling.read');
   return s.db
     .select()
     .from(appointments)
@@ -74,6 +77,7 @@ export async function listAppointments(
   s: Scope,
   range: { from: Date; to: Date },
 ): Promise<Row<typeof appointments>[]> {
+  authorize(s.ctx, 'scheduling.read');
   return s.db
     .select()
     .from(appointments)
@@ -110,22 +114,34 @@ export async function bookAppointment(
   values: NewValues<typeof appointments>,
   options: { overrideBlocks?: boolean } = {},
 ): Promise<Row<typeof appointments>> {
+  authorize(s.ctx, 'scheduling.write');
   assertRange(values);
   await assertNotBlocked(s, values, options.overrideBlocks ?? false);
   return createRecord(s, appointmentEntity, values);
 }
 
+/**
+ * Moves an appointment. If no resource is given it stays on its current one, and that
+ * resource's unavailability is checked as well as the business-wide blocks.
+ */
 export async function rescheduleAppointment(
   s: Scope,
   id: string,
   range: TimeRange & { resourceId?: string | null },
   options: { overrideBlocks?: boolean } = {},
 ): Promise<Row<typeof appointments>> {
+  authorize(s.ctx, 'scheduling.write');
   assertRange(range);
-  await assertNotBlocked(s, range, options.overrideBlocks ?? false);
+  const existing = await getRecord(s, appointmentEntity, id);
+  const resourceId = range.resourceId !== undefined ? range.resourceId : existing.resourceId;
+  await assertNotBlocked(
+    s,
+    { startsAt: range.startsAt, endsAt: range.endsAt, resourceId },
+    options.overrideBlocks ?? false,
+  );
   return updateRecord(s, appointmentEntity, id, {
     startsAt: range.startsAt,
     endsAt: range.endsAt,
-    ...(range.resourceId !== undefined ? { resourceId: range.resourceId } : {}),
+    resourceId,
   });
 }

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { and, eq, gte } from 'drizzle-orm';
 import { activityCount, createdCount, fillSeries, lastDays, revenueSeries, revenueSummary } from '@/core/analytics/analytics';
 import { listBusinessActivity } from '@/core/audit/read';
-import { appointments, customers } from '@/core/db/schema';
+import { appointments, customers } from '@/core/db/schema/tenant';
 import { withScope } from '@/core/db/scope';
 import { getModule, findEntity } from '@/core/modules/registry';
 import { isPortalAvailable } from '@/core/modules/config';
@@ -35,7 +35,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ busin
       upcoming: can('scheduling.read')
         ? await s.db.$count(appointments, and(s.where(appointments), gte(appointments.startsAt, new Date()), eq(appointments.status, 'confirmed')))
         : null,
-      workItems: workEntity && can(workEntity.readPermission) ? await createdCount(s, workEntity.table, month) : null,
+      workItems: workEntity && can(workEntity.readPermission) ? await createdCount(s, workEntity, month) : null,
       activity: can('business.activity.read') ? await activityCount(s, week) : null,
       widgets: await Promise.all((mod?.widgets ?? []).filter((w) => can(w.permission)).map(async (w) => ({ key: w.key, label: w.label, ...(await w.load(s)) }))),
       health: mod?.healthChecks ? await mod.healthChecks(s) : [],

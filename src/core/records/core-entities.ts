@@ -15,6 +15,7 @@ import {
   unavailability,
 } from '../db/schema';
 import { ValidationError } from '../errors';
+import { fileStorage } from '../files/storage';
 import type { EntityDef } from '../modules/contract';
 
 const text = (value: unknown) => (value === null || value === undefined ? '' : String(value));
@@ -193,6 +194,8 @@ export const fileEntity: EntityDef<typeof files> = {
   readPermission: 'files.read',
   writePermission: 'files.write',
   titleOf: (row) => text(row.filename),
+  // A permanently deleted file must not leave its bytes on disk.
+  afterPurge: async (row) => fileStorage.delete(text(row.storageKey)),
   listColumns: [
     { key: 'filename', label: 'File' },
     { key: 'contentType', label: 'Type' },

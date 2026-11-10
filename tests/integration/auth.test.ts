@@ -87,6 +87,7 @@ describe('Microsoft and Google adapters: present, not configured', () => {
       'MICROSOFT_TENANT_ID',
       'GOOGLE_CLIENT_ID',
       'GOOGLE_CLIENT_SECRET',
+      'GOOGLE_WORKSPACE_DOMAIN',
     ])
       delete process.env[name];
     expect(OAUTH_PROVIDERS.map((p) => p.id)).toEqual(['microsoft', 'google']);
@@ -102,7 +103,8 @@ describe('Microsoft and Google adapters: present, not configured', () => {
       GOOGLE_CLIENT_SECRET: 'test-client-secret',
       MICROSOFT_CLIENT_ID: 'test-client-id',
       MICROSOFT_CLIENT_SECRET: 'test-client-secret',
-      MICROSOFT_TENANT_ID: 'test-tenant',
+      MICROSOFT_TENANT_ID: '11111111-2222-4333-8444-555555555555',
+      GOOGLE_WORKSPACE_DOMAIN: 'sai.example',
     });
     const google = getOAuthProvider('google')!;
     const url = google.createAuthorizationUrl(

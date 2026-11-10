@@ -4,6 +4,7 @@ import { logActivity } from '../audit/log';
 import { getDb } from '../db/client';
 import { businesses, featureFlags } from '../db/schema';
 import { ValidationError } from '../errors';
+import { isUuid } from '../ids';
 import { authorize } from '../rbac/permissions';
 import type { PlatformContext } from '../tenancy/context';
 
@@ -62,6 +63,8 @@ export async function setFlag(
       'Flag keys use lowercase letters, numbers, dots, dashes and underscores.',
     );
   }
+  if (input.businessId !== null && !isUuid(input.businessId))
+    throw new ValidationError('Unknown business.');
   await getDb().transaction(async (tx) => {
     const scopeFilter = input.businessId
       ? eq(featureFlags.businessId, input.businessId)
@@ -86,21 +89,19 @@ export async function setFlag(
         })
         .where(eq(featureFlags.id, existing.id));
     } else {
-      await tx
-        .insert(featureFlags)
-        .values({
-          key,
-          businessId: input.businessId,
-          enabled: input.enabled,
-          description: input.description ?? '',
-        });
+      await tx.insert(featureFlags).values({
+        key,
+        businessId: input.businessId,
+        enabled: input.enabled,
+        description: input.description ?? '',
+      });
     }
     await logActivity(tx, ctx, {
       action: 'settings_change',
       entityType: 'feature_flag',
       entityId: key,
       summary: `Turned flag "${key}" ${input.enabled ? 'on' : 'off'}${input.businessId ? ' for one business' : ' for all businesses'}`,
-      before: existing ? { enabled: existing.enabled } : null,
+      before: existing ? { enabled: existing.enabled, businessId: input.businessId } : null,
       after: { enabled: input.enabled, businessId: input.businessId },
     });
   });

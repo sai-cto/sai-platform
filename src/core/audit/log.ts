@@ -30,6 +30,14 @@ export type ActivityEntry = {
   after?: Record<string, unknown> | null;
 };
 
+/**
+ * People, module settings and portal switches are the same in live and test mode, so a
+ * change to them is always filed under the LIVE log, whichever mode the person was in.
+ */
+export function asLive<T extends AnyContext>(ctx: T): T {
+  return ctx.kind === 'business' ? { ...ctx, environment: 'live' } : ctx;
+}
+
 type ActorInfo = { actorUserId: string | null; actorName: string; actorRole: string };
 
 /** Log something done inside a context (a business, or the platform). */

@@ -1,6 +1,6 @@
 /** A business's module configuration: settings and portal toggles (the Settings tab). */
 import { eq } from 'drizzle-orm';
-import { logActivity } from '../audit/log';
+import { asLive, logActivity } from '../audit/log';
 import { getDb } from '../db/client';
 import { businessModules } from '../db/schema';
 import { NotFoundError, ValidationError } from '../errors';
@@ -70,7 +70,7 @@ export async function updateModuleSettings(
       .update(businessModules)
       .set({ settings: parsed.data, updatedAt: new Date() })
       .where(eq(businessModules.businessId, ctx.business.id));
-    await logActivity(tx, ctx, {
+    await logActivity(tx, asLive(ctx), {
       action: 'settings_change',
       entityType: 'module.settings',
       entityId: row.moduleKey,
@@ -107,7 +107,7 @@ export async function setPortalEnabled(
       .update(businessModules)
       .set({ [column]: enabled, updatedAt: new Date() })
       .where(eq(businessModules.businessId, ctx.business.id));
-    await logActivity(tx, ctx, {
+    await logActivity(tx, asLive(ctx), {
       action: 'settings_change',
       entityType: 'module.portal',
       entityId: `${row.moduleKey}.${portal}`,

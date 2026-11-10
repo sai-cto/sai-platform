@@ -78,6 +78,26 @@ safest reversible option. They are collected in the first table so they are easy
 | P1-11 | Every tenant table must be registered as an entity; a test fails otherwise. | Guarantees the isolation and audit tests cover every table, including future modules'. |
 | P1-12 | The Phase 0 plan file was removed once its content moved into ARCHITECTURE, DECISIONS and PERMISSIONS. | One source of truth. It remains in git history (`docs/PLAN.md`). |
 
+## Phase 1 review gate (independent reviewer, 10 Nov 2026)
+
+The reviewer found no cross-business access reachable by a user, and 3 high / 11 medium issues
+in the data layer. All were fixed; each fix has a test in `tests/integration/hardening.test.ts`
+or `tenant-isolation.test.ts`.
+
+| # | Decision | Why |
+|---|---|---|
+| G1-1 | Links between tenant tables are composite foreign keys (`sameTenant()`): business + environment + id. They never cascade. | A plain foreign key let a row point at another business's or the other environment's row, and a cascading one let a sandbox reset or a purge delete rows that were never archived. |
+| G1-2 | A function with an effect outside the database checks permission before that effect. Scope-taking read helpers check their own permission. | An executive could make the payment provider issue a refund and only then be refused. |
+| G1-3 | One payment per idempotency key is guaranteed by a unique index, and simultaneous requests wait for each other. Refunds lock the payment row. | Three simultaneous requests charged three times; three simultaneous refunds refunded three times. |
+| G1-4 | "A business keeps one usable admin" counts only admins whose account is active, locks while counting, and is enforced on account deactivation too. | Deactivating the only admin's account, or two admins removing each other at once, left a business with none. |
+| G1-5 | People, module-settings and portal changes are always logged under **live**, whichever mode the person was in. | They are not per-environment; filed under the sandbox they vanished from the live log. |
+| G1-6 | A refund goes through the provider that took the payment, or is refused. | Otherwise a Stripe payment could be "refunded" by the mock with no money returned. |
+| G1-7 | Purging a file, or resetting a sandbox, deletes the stored bytes as well as the rows. | "Permanently deleted" must include the file itself. |
+| G1-8 | Microsoft sign-in requires SAI's own directory id (a GUID) and checks every token came from it. Google sign-in requires `GOOGLE_WORKSPACE_DOMAIN` and only accepts that Workspace's verified accounts. Linking a provider to an account is logged. | An unverified or outside account must never match the CTO's email. |
+| G1-9 | The app's database role lost DELETE on users, businesses, memberships, sessions, settings and identities. | Nothing in the app deletes those; remove what is not needed. |
+| G1-10 | **NEEDS JAI REVIEW.** Row-level security stays on tenant tables only. Platform tables are protected by the core's own checks plus a lint rule that stops routes and modules importing them. Code running inside the server could still change its own scope; row-level security is a safeguard against mistakes, not against hostile code. | Putting row-level security on users/memberships/sessions would force every sign-in and permission lookup through a scope and add a lot of moving parts. The reviewer rated this medium and not reachable by a user. Say so if you want the stricter version. |
+| G1-11 | **NEEDS JAI REVIEW.** Known small gaps accepted for now: no idle timeout on sessions (they end after 12 hours); expired session rows are not cleaned up; if a transaction fails after a file was written, the file's bytes can be left on disk (the row is not). | None affects correctness or separation; each needs a scheduled job or more machinery than Phase 1 justifies. Listed in HANDOFF. |
+
 ## BRSS business questions (B1–B12)
 
 The CTO asked Claude to choose the most conservative reasonable answer to each and flag it.

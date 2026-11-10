@@ -109,7 +109,7 @@ describe('record functions: one log entry per change, for every core entity', ()
     expect((await logFor('core.customer', row.id)).map((l) => l.action)).toEqual(['create']);
   });
 
-  it('archive / restore / purge are logged for every registered entity of every business', async () => {
+  it('archive and restore are logged for every registered entity of every business', async () => {
     // Runs over the registry, so a new module's entities are covered automatically.
     for (const b of SEED_BUSINESSES) {
       const ctx = await ctxFor(USERS.superAdmin, b.slug, 'sandbox');
@@ -212,7 +212,7 @@ describe('platform and people changes are logged', () => {
       entries.every((l) => l.businessId === ctx.business.id && l.actorUserId === ctx.actor.id),
     ).toBe(true);
     expect(entries[1].after).toEqual({ grants: ['customers.read'] });
-    expect(entries[3].after).toEqual({ isActive: false });
+    expect(entries[3].after).toEqual({ isActive: false, grants: [] });
   });
 
   it('feature flags, retention and sandbox reset', async () => {

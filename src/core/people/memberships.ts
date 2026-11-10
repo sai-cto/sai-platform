@@ -8,9 +8,9 @@
  *  - someone with a platform role cannot also be a member;
  *  - staff permissions can only be chosen from the "grantable" actions in the matrix.
  */
-import { and, asc, count, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { logActivity } from '../audit/log';
+import { asLive, logActivity } from '../audit/log';
 import { getDb, type Tx } from '../db/client';
 import { membershipPermissions, memberships, users } from '../db/schema';
 import { NotFoundError, ValidationError } from '../errors';
@@ -18,7 +18,9 @@ import { getModule } from '../modules/registry';
 import { authorize, grantableActions } from '../rbac/permissions';
 import { BUSINESS_ROLES, type BusinessRole } from '../rbac/roles';
 import type { BusinessContext } from '../tenancy/context';
+import { lockAndCountAdmins } from './admins';
 import { findOrCreateUser, newUserSchema } from './users';
+import { isUuid } from '../ids';
 
 /** Core permissions a new staff member starts with, on top of their module's defaults. */
 export const DEFAULT_STAFF_GRANTS = ['customers.read', 'scheduling.read'];
@@ -68,7 +70,7 @@ export async function listMembers(ctx: BusinessContext): Promise<Member[]> {
 
 /** Loads a membership ONLY if it belongs to the context's business. */
 async function loadMembership(tx: Tx, ctx: BusinessContext, membershipId: string) {
-  if (!/^[0-9a-f-]{36}$/i.test(membershipId)) throw new NotFoundError();
+  if (!isUuid(membershipId)) throw new NotFoundError();
   const [row] = await tx
     .select({ membership: memberships, user: users })
     .from(memberships)
@@ -79,18 +81,12 @@ async function loadMembership(tx: Tx, ctx: BusinessContext, membershipId: string
   return row;
 }
 
-async function activeAdminCount(tx: Tx, businessId: string): Promise<number> {
-  const [row] = await tx
-    .select({ n: count() })
-    .from(memberships)
-    .where(
-      and(
-        eq(memberships.businessId, businessId),
-        eq(memberships.role, 'business_admin'),
-        eq(memberships.isActive, true),
-      ),
-    );
-  return row.n;
+async function currentGrants(tx: Tx, membershipId: string): Promise<string[]> {
+  const rows = await tx
+    .select({ key: membershipPermissions.permissionKey })
+    .from(membershipPermissions)
+    .where(eq(membershipPermissions.membershipId, membershipId));
+  return rows.map((r) => r.key).sort();
 }
 
 function defaultGrants(ctx: BusinessContext): string[] {
@@ -154,7 +150,7 @@ export async function addMember(ctx: BusinessContext, raw: unknown): Promise<str
     const grants = input.role === 'business_staff' ? defaultGrants(ctx) : [];
     await replaceGrants(tx, membershipId, grants);
     if (created) {
-      await logActivity(tx, ctx, {
+      await logActivity(tx, asLive(ctx), {
         action: 'create',
         entityType: 'user',
         entityId: user.id,
@@ -162,7 +158,7 @@ export async function addMember(ctx: BusinessContext, raw: unknown): Promise<str
         after: { name: user.name, email: user.email },
       });
     }
-    await logActivity(tx, ctx, {
+    await logActivity(tx, asLive(ctx), {
       action: 'permission_change',
       entityType: 'membership',
       entityId: membershipId,
@@ -187,24 +183,25 @@ export async function changeMemberRole(
     if (
       membership.role === 'business_admin' &&
       membership.isActive &&
-      (await activeAdminCount(tx, ctx.business.id)) <= 1
+      (await lockAndCountAdmins(tx, ctx.business.id)) <= 1
     ) {
       throw new ValidationError(
         'This is the last admin of this business. Make someone else an admin first.',
       );
     }
+    const previousGrants = await currentGrants(tx, membershipId);
     await tx
       .update(memberships)
       .set({ role, updatedAt: new Date() })
       .where(eq(memberships.id, membershipId));
     const grants = role === 'business_staff' ? defaultGrants(ctx) : [];
     await replaceGrants(tx, membershipId, grants);
-    await logActivity(tx, ctx, {
+    await logActivity(tx, asLive(ctx), {
       action: 'permission_change',
       entityType: 'membership',
       entityId: membershipId,
       summary: `Changed ${user.name} from ${membership.role} to ${role} in ${ctx.business.name}`,
-      before: { role: membership.role },
+      before: { role: membership.role, grants: previousGrants },
       after: { role, grants },
     });
   });
@@ -218,22 +215,23 @@ export async function removeMember(ctx: BusinessContext, membershipId: string): 
     if (!membership.isActive) return;
     if (
       membership.role === 'business_admin' &&
-      (await activeAdminCount(tx, ctx.business.id)) <= 1
+      (await lockAndCountAdmins(tx, ctx.business.id)) <= 1
     ) {
       throw new ValidationError('This is the last admin of this business and cannot be removed.');
     }
+    const previousGrants = await currentGrants(tx, membershipId);
     await tx
       .update(memberships)
       .set({ isActive: false, updatedAt: new Date() })
       .where(eq(memberships.id, membershipId));
     await replaceGrants(tx, membershipId, []);
-    await logActivity(tx, ctx, {
+    await logActivity(tx, asLive(ctx), {
       action: 'permission_change',
       entityType: 'membership',
       entityId: membershipId,
       summary: `Removed ${user.name} (${membership.role}) from ${ctx.business.name}`,
-      before: { role: membership.role, isActive: true },
-      after: { isActive: false },
+      before: { role: membership.role, isActive: true, grants: previousGrants },
+      after: { isActive: false, grants: [] },
     });
   });
 }
@@ -265,7 +263,7 @@ export async function setMemberPermissions(
     const before = current.map((c) => c.key).sort();
     if (JSON.stringify(before) === JSON.stringify(wanted)) return;
     await replaceGrants(tx, membershipId, wanted);
-    await logActivity(tx, ctx, {
+    await logActivity(tx, asLive(ctx), {
       action: 'permission_change',
       entityType: 'membership',
       entityId: membershipId,

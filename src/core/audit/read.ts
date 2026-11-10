@@ -3,6 +3,7 @@ import { and, desc, eq, gte, ilike, lt, or, type SQL } from 'drizzle-orm';
 import { activityLog } from '../db/schema';
 import { withPlatformScope, withScope } from '../db/scope';
 import type { BusinessContext, PlatformContext } from '../tenancy/context';
+import { isUuid } from '../ids';
 
 export type ActivityFilters = {
   action?: string;
@@ -25,7 +26,7 @@ function conditions(filters: ActivityFilters): (SQL | undefined)[] {
     filters.action ? eq(activityLog.action, filters.action) : undefined,
     filters.entityType ? eq(activityLog.entityType, filters.entityType) : undefined,
     filters.entityId ? eq(activityLog.entityId, filters.entityId) : undefined,
-    filters.actorUserId && /^[0-9a-f-]{36}$/i.test(filters.actorUserId)
+    filters.actorUserId && isUuid(filters.actorUserId)
       ? eq(activityLog.actorUserId, filters.actorUserId)
       : undefined,
     filters.from ? gte(activityLog.occurredAt, filters.from) : undefined,
@@ -71,7 +72,7 @@ export function listPlatformActivity(
 ): Promise<{ rows: ActivityRow[]; total: number }> {
   return withPlatformScope(ctx, 'platform.activity.read', async (s) => {
     const where = and(
-      filters.businessId && /^[0-9a-f-]{36}$/i.test(filters.businessId)
+      filters.businessId && isUuid(filters.businessId)
         ? eq(activityLog.businessId, filters.businessId)
         : undefined,
       ...conditions(filters),

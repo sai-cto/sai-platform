@@ -15,6 +15,8 @@ See `docs/PROGRESS.md` for the live status and acceptance criteria.
 | Day-before reminder emails | Need a scheduler. Out of scope until hosting is decided. | Add a scheduled job runner when the platform is hosted. |
 | Customer and field portals | Hosting routes exist and answer "not found". No module defines one. | Add `portals.customer` / `portals.field` to a module manifest and switch the toggle on. How customers sign in is undecided. |
 | Email is not sent | The only notification adapter prints to the server console. | Add a real `NotificationChannel` and call `setEmailChannel()`. |
+| Session housekeeping | Sessions end after 12 hours; there is no idle timeout and expired rows are never deleted. | A small scheduled clean-up job once hosting exists. |
+| Orphaned file bytes | If a transaction fails after a file was written, the bytes can stay on disk with no row. | A periodic sweep comparing the storage folder with the `files` table. |
 | Files are on local disk | `FILE_STORAGE_DIR`. | Add a `FileStorage` adapter for whatever storage hosting provides. |
 
 ## Upgrading notes

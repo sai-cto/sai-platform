@@ -11,7 +11,6 @@ import {
 } from '@/core/analytics/analytics';
 import { listBusinessActivity, listPlatformActivity } from '@/core/audit/read';
 import { createCustomer, listCustomers, updateCustomer } from '@/core/customers/customers';
-import { customers } from '@/core/db/schema';
 import { withPlatformScope, withScope } from '@/core/db/scope';
 import { ForbiddenError, ValidationError } from '@/core/errors';
 import { isFlagEnabled, setFlag } from '@/core/flags/flags';
@@ -378,7 +377,7 @@ describe('analytics', () => {
     expect(series.at(-1)!.value).toBeGreaterThanOrEqual(10_000);
     expect(
       await withScope(ctx, 'customers.read', (s) =>
-        createdCount(s, customers, lastDays(1, new Date(Date.now() + 60_000))),
+        createdCount(s, customerEntity, lastDays(1, new Date(Date.now() + 60_000))),
       ),
     ).toBeGreaterThanOrEqual(12);
   });

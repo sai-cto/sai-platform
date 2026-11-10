@@ -15,6 +15,7 @@ import { googleProvider } from './providers/google';
 import { microsoftProvider } from './providers/microsoft';
 import type { ExternalIdentity, OAuthProvider } from './providers/types';
 import { createSession, revokeSession, type NewSession } from './session';
+import { isUuid } from '../ids';
 
 export const OAUTH_PROVIDERS: OAuthProvider[] = [microsoftProvider, googleProvider];
 
@@ -80,9 +81,27 @@ async function startSession(userId: string, provider: string): Promise<NewSessio
     });
 }
 
+/** Logs a sign-in attempt that failed before any account was identified. */
+export async function recordFailedSignIn(provider: string, reason: string): Promise<void> {
+  await getDb().transaction((tx) =>
+    logAuthEvent(
+      tx,
+      { id: null, name: 'Unknown', role: 'none' },
+      {
+        action: 'login_failed',
+        entityType: 'user',
+        summary: `Sign-in refused (${provider}): ${reason}`,
+      },
+    ),
+  );
+}
+
 export async function loginWithDev(userId: string): Promise<NewSession> {
   if (!isDevLoginEnabled()) throw new ForbiddenError('auth.dev_login', 'Dev login is disabled.');
-  if (!/^[0-9a-f-]{36}$/i.test(userId)) throw new UnauthenticatedError();
+  if (!isUuid(userId)) {
+    await recordFailedSignIn('dev', 'malformed user id');
+    throw new UnauthenticatedError();
+  }
   return startSession(userId, 'dev');
 }
 
@@ -125,10 +144,26 @@ export async function loginWithIdentity(identity: ExternalIdentity): Promise<New
     .where(eq(users.email, identity.email.toLowerCase()))
     .limit(1);
   if (!user || !user.isActive) return refuse('no active account with that email');
-  await db
-    .insert(authIdentities)
-    .values({ userId: user.id, provider: identity.provider, providerSubject: identity.subject })
-    .onConflictDoNothing();
+  // First sign-in with this provider: remember the link, and log that it was made.
+  await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(authIdentities)
+      .values({ userId: user.id, provider: identity.provider, providerSubject: identity.subject })
+      .onConflictDoNothing()
+      .returning({ id: authIdentities.id });
+    if (inserted.length === 0) return;
+    await logAuthEvent(
+      tx,
+      { id: user.id, name: user.name, role: user.platformRole ?? 'business' },
+      {
+        action: 'permission_change',
+        entityType: 'user',
+        entityId: user.id,
+        summary: `Linked ${identity.provider} sign-in to ${user.name}`,
+        after: { provider: identity.provider },
+      },
+    );
+  });
   return startSession(user.id, identity.provider);
 }
 
