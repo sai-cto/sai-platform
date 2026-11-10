@@ -41,10 +41,10 @@ export function BusinessHeader({
       <div className="mx-auto max-w-6xl px-4 pt-4 lg:px-6">
         <div className="flex flex-wrap items-center gap-3">
           <Monogram code={business.code} color={business.accentColor} size="lg" />
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-48">
             <div className="truncate text-base font-semibold tracking-tight text-zinc-900">{business.name}</div>
             <div className="truncate text-xs text-zinc-500">
-              {business.description} · You are: {roleLabel}
+              <span className="hidden sm:inline">{business.description} · </span>You are: {roleLabel}
             </div>
           </div>
           {canUseSandbox ? (

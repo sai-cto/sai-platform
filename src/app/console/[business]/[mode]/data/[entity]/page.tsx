@@ -7,6 +7,7 @@ import { isPurgeEligible, listRecords, purgeEligibleAt } from '@/core/records/re
 import { getRetentionDays } from '@/core/settings/platform';
 import { Badge } from '@/ui/badge';
 import { buttonClass } from '@/ui/button';
+import { cn } from '@/ui/cn';
 import { ConfirmButton } from '@/ui/confirm-button';
 import { formatDate, formatValue } from '@/ui/format';
 import { Card, EmptyState, PageHeader, Table, Td, Th, inputClass } from '@/ui/layout';
@@ -53,11 +54,11 @@ export default async function EntityPage({ params, searchParams }: { params: Pro
         actions={canExport ? <a href={`${base}/export${query({})}`} className={buttonClass()}>Export CSV</a> : null}
       />
       <Card flush>
-        <form method="get" className="flex flex-wrap items-end gap-2 border-b border-zinc-200 p-3">
+        <form method="get" className="flex flex-wrap items-center gap-2 border-b border-zinc-200 p-3">
           <label className="sr-only" htmlFor="q">Search</label>
-          <input id="q" name="q" defaultValue={search.q ?? ''} placeholder={`Search ${entity.labelPlural.toLowerCase()}`} className={`${inputClass} max-w-xs flex-1`} />
+          <input id="q" name="q" defaultValue={search.q ?? ''} placeholder={`Search ${entity.labelPlural.toLowerCase()}`} className={cn(inputClass, 'sm:w-72')} />
           <label className="sr-only" htmlFor="show">Show</label>
-          <select id="show" name="show" defaultValue={search.show ?? ''} className={`${inputClass} w-36`}>
+          <select id="show" name="show" defaultValue={search.show ?? ''} className={cn(inputClass, 'sm:w-44')}>
             <option value="">Active</option>
             <option value="archived">Archived</option>
             <option value="all">Active + archived</option>

@@ -36,7 +36,7 @@ export function TrendChart({ data, format, label, height = 200 }: { data: TrendP
             labelFormatter={(bucket) => shortDate(String(bucket))}
             contentStyle={{ borderRadius: 6, border: `1px solid ${GRID}`, fontSize: 12, padding: '6px 8px' }}
           />
-          <Area type="monotone" dataKey="value" stroke={SERIES} strokeWidth={2} fill={SERIES} fillOpacity={0.08} dot={false} activeDot={{ r: 4, stroke: '#fff', strokeWidth: 2 }} isAnimationActive={false} />
+          <Area type="linear" dataKey="value" stroke={SERIES} strokeWidth={2} fill={SERIES} fillOpacity={0.08} dot={false} activeDot={{ r: 4, stroke: '#fff', strokeWidth: 2 }} isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
     </div>
