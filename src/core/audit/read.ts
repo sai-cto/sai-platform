@@ -4,6 +4,7 @@ import { activityLog } from '../db/schema';
 import { withPlatformScope, withScope } from '../db/scope';
 import type { BusinessContext, PlatformContext } from '../tenancy/context';
 import { isUuid } from '../ids';
+import { staffActivityFilter } from './visibility';
 
 export type ActivityFilters = {
   action?: string;
@@ -51,6 +52,7 @@ export function listBusinessActivity(
     const where = and(
       eq(activityLog.businessId, ctx.business.id),
       eq(activityLog.environment, ctx.environment),
+      staffActivityFilter(ctx),
       ...conditions(filters),
     );
     const { limit, offset } = page(filters);

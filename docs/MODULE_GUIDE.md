@@ -125,6 +125,15 @@ Most are enforced by the type checker, ESLint or a test, and say so when broken.
 | Effects outside the database (payments, email, files) go through the core services | Review |
 | Fake data only in `seed.ts` | Review |
 | Do not name another business anywhere in the module | Review |
+| A route's `component` is a plain server-side function (no `'use client'`, no React hooks) | Review |
+
+**About route pages.** The platform calls a route's `component` itself, as an ordinary (usually
+`async`) function, so that a page which finds nothing — or is refused by the core — becomes a
+normal "not found" page. That only works for a server component. If a page needs something
+interactive (a form that reacts as you type), put that part in its own `'use client'` file and
+render it *from* the page; do not register the client component as the route. Errors thrown by
+components *nested inside* a page are not turned into "not found", so do the loading (and so the
+permission checks) at the top of the page function.
 
 ## Turning on a customer or field portal later
 

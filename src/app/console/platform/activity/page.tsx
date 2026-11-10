@@ -8,7 +8,6 @@ import {
   ActivityFilters,
   activityHref,
   parseActivitySearch,
-  type ActivitySearch,
 } from '../../_components/activity-filters';
 import { ActivityTable } from '../../_components/activity-table';
 
@@ -17,11 +16,11 @@ export const metadata: Metadata = { title: 'Activity log' };
 export default async function PlatformActivityPage({
   searchParams,
 }: {
-  searchParams: Promise<ActivitySearch>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const search = await searchParams;
+  const raw = await searchParams;
   const ctx = await requirePlatformContext();
-  const { page, filters } = parseActivitySearch(search);
+  const { search, page, filters } = parseActivitySearch(raw);
   const { rows, total } = await guarded(() =>
     listPlatformActivity(ctx, { ...filters, businessId: search.business || undefined }),
   );

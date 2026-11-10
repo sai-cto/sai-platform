@@ -16,7 +16,9 @@ const BUSINESS_PATHS = [
   '/sandbox/app',
   '/live/data',
   '/live/data/core.customer',
+  '/sandbox/data',
   '/sandbox/data/core.customer',
+  '/sandbox/data/core.customer/{id}',
   '/live/data/core.customer/{id}',
   '/live/data/core.customer/export',
   '/sandbox/data/core.customer/export',
@@ -37,6 +39,8 @@ const PLATFORM_PATHS = [
   '/console/platform/imports/new',
   '/console/platform/health',
   '/console/platform/settings',
+  '/console/platform/users/00000000-0000-4000-8000-000000000000',
+  '/console/platform/imports/hhmc/00000000-0000-4000-8000-000000000000',
 ];
 
 for (const [label, email, own] of [
@@ -87,6 +91,10 @@ test('BRSS admin CAN open their own business, so the 404s above are not a blanke
   expect(csv.status()).toBe(200);
   expect(csv.headers()['content-type']).toContain('text/csv');
   expect(await csv.text()).toContain('First name');
+  expect(csv.headers()['x-export-rows']).toMatch(/^\d+ of \d+$/);
+  // The export is in the activity log.
+  await page.goto('/console/brss/live/activity?action=export');
+  await expect(page.getByText(/Exported \d+ customers to CSV/).first()).toBeVisible();
 });
 
 test('customer and field portals are "not found" even for a super admin until a module builds one', async ({ page }) => {

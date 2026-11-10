@@ -76,6 +76,7 @@ export async function sandboxSummary(ctx: BusinessContext): Promise<SandboxSumma
   return withScope(sandboxCtx, 'business.sandbox.use', async (s) => {
     const counts = [];
     for (const entity of entitiesFor(ctx.business.moduleKey)) {
+      if (!ctx.permissions.has(entity.readPermission)) continue;
       counts.push({
         entityKey: entity.key,
         label: entity.labelPlural,

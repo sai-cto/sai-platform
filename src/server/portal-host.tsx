@@ -3,6 +3,7 @@
  * through here, so they share one login, one context and one data layer.
  */
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
 import type { PortalDef, PortalPageProps } from '@/core/modules/contract';
 import { matchRoute } from '@/core/modules/portal';
@@ -38,6 +39,14 @@ export async function PortalHost({
     return !route || ctx.permissions.has(route.permission);
   });
 
+  // Module pages are async server components, i.e. plain async functions. Calling the page
+  // here (instead of leaving it for React to render later) means a page that finds nothing,
+  // or is refused by the core, becomes a normal "not found" instead of a server error.
+  const props: PortalPageProps = { ctx, params: match.params, searchParams: flatSearch, basePath };
+  const content = await guarded(async () =>
+    (Page as (p: PortalPageProps) => ReactNode | Promise<ReactNode>)(props),
+  );
+
   return (
     <div>
       {nav.length > 1 ? (
@@ -66,9 +75,7 @@ export async function PortalHost({
           })}
         </nav>
       ) : null}
-      {await guarded(async () => (
-        <Page ctx={ctx} params={match.params} searchParams={flatSearch} basePath={basePath} />
-      ))}
+      {content}
     </div>
   );
 }

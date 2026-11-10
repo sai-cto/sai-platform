@@ -7,7 +7,6 @@ import {
   ActivityFilters,
   activityHref,
   parseActivitySearch,
-  type ActivitySearch,
 } from '../../../_components/activity-filters';
 import { ActivityTable } from '../../../_components/activity-table';
 
@@ -18,12 +17,12 @@ export default async function BusinessActivityPage({
   searchParams,
 }: {
   params: Promise<{ business: string; mode: string }>;
-  searchParams: Promise<ActivitySearch>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { business, mode } = await params;
-  const search = await searchParams;
+  const raw = await searchParams;
   const ctx = await requireBusinessContext(business, parseMode(mode));
-  const { page, filters } = parseActivitySearch(search);
+  const { search, page, filters } = parseActivitySearch(raw, ctx.business.timeZone);
   const { rows, total } = await guarded(() => listBusinessActivity(ctx, filters));
   const base = `/console/${ctx.business.slug}/${ctx.environment}/activity`;
   return (
