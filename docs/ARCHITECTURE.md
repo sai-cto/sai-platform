@@ -166,5 +166,6 @@ The staff portal is embedded in the console. Customer and field portals get host
 4. Never hardcode a business (name, slug, colour) in a component. Businesses are data.
 5. Never put a secret in the repository or the database. Secrets live in `.env.local`.
 6. Never change the permission matrix or role list without the CTO's sign-off.
-7. In a function with an effect outside the database (payment, email, file), check the permission first.
-8. Every new rule gets a test. Run `npm run check` before committing.
+7. In a function with an effect outside the database (payment, email, file), check the permission and every link first, and use `afterCommit()` / `onRollback()` for clean-up that must follow the transaction.
+8. For records with business rules (payments, refunds, appointments), call the service (`takePayment`, `refundPayment`, `bookAppointment`), not `createRecord` directly.
+9. Every new rule gets a test. Run `npm run check` before committing.

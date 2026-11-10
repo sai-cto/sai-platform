@@ -65,6 +65,14 @@ export async function setFlag(
   }
   if (input.businessId !== null && !isUuid(input.businessId))
     throw new ValidationError('Unknown business.');
+  if (input.businessId !== null) {
+    const [business] = await getDb()
+      .select({ id: businesses.id })
+      .from(businesses)
+      .where(eq(businesses.id, input.businessId))
+      .limit(1);
+    if (!business) throw new ValidationError('Unknown business.');
+  }
   await getDb().transaction(async (tx) => {
     const scopeFilter = input.businessId
       ? eq(featureFlags.businessId, input.businessId)
@@ -96,13 +104,18 @@ export async function setFlag(
         description: input.description ?? '',
       });
     }
-    await logActivity(tx, ctx, {
-      action: 'settings_change',
-      entityType: 'feature_flag',
-      entityId: key,
-      summary: `Turned flag "${key}" ${input.enabled ? 'on' : 'off'}${input.businessId ? ' for one business' : ' for all businesses'}`,
-      before: existing ? { enabled: existing.enabled, businessId: input.businessId } : null,
-      after: { enabled: input.enabled, businessId: input.businessId },
-    });
+    await logActivity(
+      tx,
+      ctx,
+      {
+        action: 'settings_change',
+        entityType: 'feature_flag',
+        entityId: key,
+        summary: `Turned flag "${key}" ${input.enabled ? 'on' : 'off'}${input.businessId ? ' for one business' : ' for all businesses'}`,
+        before: existing ? { enabled: existing.enabled, businessId: input.businessId } : null,
+        after: { enabled: input.enabled, businessId: input.businessId },
+      },
+      input.businessId,
+    );
   });
 }

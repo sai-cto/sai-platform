@@ -19,9 +19,10 @@ import {
   setMemberPermissions,
 } from '@/core/people/memberships';
 import { createUser, listUsers, setPlatformRole, setUserActive } from '@/core/people/users';
+import { entitiesFor } from '@/core/modules/registry';
 import { CORE_ACTIONS } from '@/core/rbac/actions';
 import { businessActions, platformActions } from '@/core/rbac/permissions';
-import { CORE_ENTITIES, customerEntity } from '@/core/records/core-entities';
+import { customerEntity } from '@/core/records/core-entities';
 import {
   archiveRecord,
   createRecord,
@@ -53,7 +54,8 @@ describe('executive: read-only everywhere', () => {
   it('every record write function refuses, for every entity, in every business', async () => {
     for (const b of SEED_BUSINESSES) {
       const ctx = await ctxFor(USERS.executive, b.slug);
-      for (const entity of CORE_ENTITIES) {
+      // entitiesFor() = the core's entities plus this business's module's, so a new module is covered.
+      for (const entity of entitiesFor(b.slug)) {
         const id = await arrange(b.slug, 'live', (s) => ensureRow(s, entity));
         await withScope(ctx, 'business.overview.read', async (s) => {
           await forbidden(createRecord(s, entity, {} as never));

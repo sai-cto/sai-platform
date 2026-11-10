@@ -12,8 +12,9 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { activityLog } from '../db/schema';
 import { logActivity } from '../audit/log';
-import { txOf, withScope, type Scope } from '../db/scope';
-import { fileStorage, storagePrefix } from '../files/storage';
+import { files } from '../db/schema';
+import { afterCommit, txOf, withScope, type Scope } from '../db/scope';
+import { fileStorage, ownsStorageKey } from '../files/storage';
 import { entitiesFor, getModule } from '../modules/registry';
 import { authorize } from '../rbac/permissions';
 import type { BusinessContext } from '../tenancy/context';
@@ -30,6 +31,18 @@ export async function resetSandbox(ctx: BusinessContext): Promise<void> {
   authorize(ctx, 'business.sandbox.reset');
   const sandboxCtx: BusinessContext = { ...ctx, environment: 'sandbox' };
   await withScope(sandboxCtx, 'business.sandbox.reset', async (s) => {
+    // Remember which stored files belong to the rows about to go, so exactly those bytes are
+    // removed once the reset has committed (files the fresh seed creates are left alone).
+    const oldFiles = await s.db
+      .select({ key: files.storageKey })
+      .from(files)
+      .where(s.where(files, 'include'));
+    afterCommit(s, async () => {
+      for (const file of oldFiles) {
+        if (ownsStorageKey(ctx.business.id, 'sandbox', file.key))
+          await fileStorage.delete(file.key);
+      }
+    });
     // Children before parents: entities are declared parents-first, so delete in reverse.
     for (const entity of [...entitiesFor(ctx.business.moduleKey)].reverse()) {
       await txOf(s)
@@ -49,8 +62,6 @@ export async function resetSandbox(ctx: BusinessContext): Promise<void> {
       summary: `Reset the ${ctx.business.name} sandbox to fresh fake data`,
     });
   });
-  // The rows are gone (the transaction committed), so remove the sandbox's stored files too.
-  await fileStorage.deletePrefix(storagePrefix(ctx.business.id, 'sandbox'));
 }
 
 export type SandboxSummary = {

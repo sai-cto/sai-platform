@@ -15,7 +15,7 @@ import {
   unavailability,
 } from '../db/schema';
 import { ValidationError } from '../errors';
-import { fileStorage } from '../files/storage';
+import { fileStorage, ownsStorageKey } from '../files/storage';
 import type { EntityDef } from '../modules/contract';
 
 const text = (value: unknown) => (value === null || value === undefined ? '' : String(value));
@@ -194,8 +194,13 @@ export const fileEntity: EntityDef<typeof files> = {
   readPermission: 'files.read',
   writePermission: 'files.write',
   titleOf: (row) => text(row.filename),
-  // A permanently deleted file must not leave its bytes on disk.
-  afterPurge: async (row) => fileStorage.delete(text(row.storageKey)),
+  // A permanently deleted file must not leave its bytes on disk. Only ever delete bytes
+  // inside the row's own business/environment folder, whatever the row's key says.
+  afterPurge: async (row) => {
+    const key = text(row.storageKey);
+    if (ownsStorageKey(text(row.businessId), row.environment as 'live' | 'sandbox', key))
+      await fileStorage.delete(key);
+  },
   listColumns: [
     { key: 'filename', label: 'File' },
     { key: 'contentType', label: 'Type' },

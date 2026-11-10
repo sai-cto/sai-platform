@@ -34,6 +34,14 @@ export async function findBlocks(
   range: TimeRange & { resourceId?: string | null },
 ): Promise<Row<typeof unavailability>[]> {
   authorize(s.ctx, 'scheduling.read');
+  return blocksFor(s, range);
+}
+
+/** The lookup itself, also used when booking (which needs scheduling.write, not .read). */
+async function blocksFor(
+  s: Scope,
+  range: TimeRange & { resourceId?: string | null },
+): Promise<Row<typeof unavailability>[]> {
   const forResource: SQL | undefined = range.resourceId
     ? or(isNull(unavailability.resourceId), eq(unavailability.resourceId, range.resourceId))
     : isNull(unavailability.resourceId);
@@ -97,7 +105,7 @@ async function assertNotBlocked(
   override: boolean,
 ): Promise<void> {
   if (override) return;
-  const blocks = await findBlocks(s, range);
+  const blocks = await blocksFor(s, range);
   if (blocks.length > 0) {
     throw new ValidationError(
       `That time is blocked: ${blocks[0].reason || 'unavailable'}. Choose another time.`,

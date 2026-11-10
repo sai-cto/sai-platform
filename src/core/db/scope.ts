@@ -18,6 +18,9 @@ import type { TenantTable } from '../records/types';
 import { getDb, type Tx } from './client';
 
 const TX = Symbol('sai.tx');
+const HOOKS = Symbol('sai.hooks');
+
+type Hooks = { committed: (() => Promise<void>)[]; rolledBack: (() => Promise<void>)[] };
 
 /** Query handle given to callers. It can read; it cannot insert, update or delete. */
 export type ReadDb = Pick<Tx, 'select' | 'selectDistinct' | '$count'>;
@@ -33,6 +36,7 @@ export type Scope = {
    */
   where: (table: TenantTable, archived?: ArchivedFilter) => SQL;
   [TX]: Tx;
+  [HOOKS]: Hooks;
 };
 
 export type PlatformScope = {
@@ -68,25 +72,62 @@ export function tenantFilter(
   return and(...parts) as SQL;
 }
 
+/**
+ * For things OUTSIDE the database that must follow the transaction's fate (file bytes).
+ *   afterCommit: runs only once the transaction has really committed (e.g. delete the bytes
+ *                of a permanently deleted file — never before, or a rollback would keep the
+ *                row and lose the file).
+ *   onRollback:  runs only if the transaction fails (e.g. remove bytes written for a row
+ *                that was never saved).
+ */
+export function afterCommit(scope: Scope, fn: () => Promise<void>): void {
+  scope[HOOKS].committed.push(fn);
+}
+
+export function onRollback(scope: Scope, fn: () => Promise<void>): void {
+  scope[HOOKS].rolledBack.push(fn);
+}
+
+async function runHooks(hooks: (() => Promise<void>)[]): Promise<void> {
+  for (const hook of hooks) {
+    try {
+      await hook();
+    } catch (error) {
+      // The database work is already decided; a failed clean-up must not change the outcome.
+      console.error('Clean-up after a transaction failed:', error);
+    }
+  }
+}
+
 export async function withScope<T>(
   ctx: BusinessContext,
   permission: string,
   fn: (scope: Scope) => Promise<T>,
 ): Promise<T> {
   authorize(ctx, permission);
-  return getDb().transaction(async (tx) => {
-    await tx.execute(sql`select
-      set_config('app.scope', 'business', true),
-      set_config('app.business_id', ${ctx.business.id}, true),
-      set_config('app.environment', ${ctx.environment}, true)`);
-    const scope: Scope = {
-      ctx,
-      db: readOnly(tx),
-      where: (table, archived) => tenantFilter(ctx, table, archived),
-      [TX]: tx,
-    };
-    return fn(scope);
-  });
+  const hooks: Hooks = { committed: [], rolledBack: [] };
+  let result: T;
+  try {
+    result = await getDb().transaction(async (tx) => {
+      await tx.execute(sql`select
+        set_config('app.scope', 'business', true),
+        set_config('app.business_id', ${ctx.business.id}, true),
+        set_config('app.environment', ${ctx.environment}, true)`);
+      const scope: Scope = {
+        ctx,
+        db: readOnly(tx),
+        where: (table, archived) => tenantFilter(ctx, table, archived),
+        [TX]: tx,
+        [HOOKS]: hooks,
+      };
+      return fn(scope);
+    });
+  } catch (error) {
+    await runHooks(hooks.rolledBack);
+    throw error;
+  }
+  await runHooks(hooks.committed);
+  return result;
 }
 
 export async function withPlatformScope<T>(
