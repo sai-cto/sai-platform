@@ -154,7 +154,10 @@ permission checks) at the top of the page function.
    the staff portal.
 2. The tech team switches the toggle on in the business's Settings tab.
 
-That is all the platform needs; the hosting routes already exist. What is **not** decided is how
+That is all the platform needs; the hosting routes already exist. One thing to add when the
+first such portal is built: its server actions need their own version of
+`requireStaffPortalContext()` in `src/server/session.ts` (that one checks the *staff* portal's
+switch and the staff "open the portal" permission). What is **not** decided is how
 customers sign in (see `docs/HANDOFF.md`). Until it is, those portals use the console's login.
 
 ## Common mistakes
@@ -167,7 +170,9 @@ customers sign in (see `docs/HANDOFF.md`). Until it is, those portals use the co
   business admin switches it on in People and access.
 - **The sandbox reset fails.** An entity is listed before the entity it depends on.
 - **"Cannot read properties of undefined" as soon as the app or a test starts.** A file in the
-  module uses something imported from the core at the top level of the file (outside any
-  function), for example `const schema = someCoreSchema.extend(...)`. The core and the modules
-  import each other, so at that moment the core value may not exist yet. Use core values
-  inside functions only.
+  module uses a *value* from one of the core's services at the top level of the file (outside
+  any function), for example `const schema = someCoreSchema.extend(...)`. The core and the
+  modules import each other, so at that moment the value may not exist yet. Calling the
+  building blocks at the top level is fine and expected (`tenantTable()`, `sameTenant()`,
+  `defineModule()`, zod's `z.object()`); everything from a core *service* (people, payments,
+  scheduling, …) should be used inside functions only.
