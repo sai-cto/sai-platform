@@ -156,9 +156,9 @@ npm run test:e2e          37 passed
 npm run check
   tsc --noEmit            clean
   eslint                  clean
-  vitest run              Test Files 10 passed (10) · Tests 335 passed (335)
-  secret scan             clean
-npm run test:e2e          39 passed
+  vitest run              Test Files 10 passed (10) · Tests 340 passed (340)
+  secret scan             clean (378 files)
+npm run test:e2e          41 passed
 git diff phase-2-console..phase-3-scaffolds --stat -- src/core src/app
                           only comment wording in two core files (example names made generic)
 ```
