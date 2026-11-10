@@ -47,6 +47,8 @@ export const payments = tenantTable(
     cardBrand: text('card_brand'),
     cardLast4: text('card_last4'),
     failureReason: text('failure_reason'),
+    /** Running total of money sent back. Kept on the payment so it survives archiving or deleting refund rows. */
+    refundedCents: integer('refunded_cents').notNull().default(0),
     description: text('description').notNull().default(''),
     /** What this payment is for, e.g. subjectType "brss.order". */
     subjectType: text('subject_type'),
@@ -132,14 +134,19 @@ export const notifications = tenantTable('notifications', {
 });
 
 /** Metadata for a stored file. The bytes live in the storage adapter. */
-export const files = tenantTable('files', {
-  storageKey: text('storage_key').notNull(),
-  filename: text('filename').notNull(),
-  contentType: text('content_type').notNull(),
-  sizeBytes: integer('size_bytes').notNull(),
-  subjectType: text('subject_type'),
-  subjectId: uuid('subject_id'),
-});
+export const files = tenantTable(
+  'files',
+  {
+    storageKey: text('storage_key').notNull(),
+    filename: text('filename').notNull(),
+    contentType: text('content_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    subjectType: text('subject_type'),
+    subjectId: uuid('subject_id'),
+  },
+  // Two rows can never claim the same stored bytes.
+  (t) => [uniqueIndex('files_storage_key').on(t.businessId, t.environment, t.storageKey)],
+);
 
 /** One row per CSV import run. */
 export const importJobs = tenantTable(

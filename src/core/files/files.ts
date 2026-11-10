@@ -7,6 +7,7 @@ import path from 'node:path';
 import type { files } from '../db/schema';
 import { onRollback, type Scope } from '../db/scope';
 import { NotFoundError, ValidationError } from '../errors';
+import { isUuid } from '../ids';
 import { authorize } from '../rbac/permissions';
 import { fileEntity } from '../records/core-entities';
 import { createRecord, getRecord } from '../records/records';
@@ -30,6 +31,10 @@ export async function saveFile(
   if (input.bytes.byteLength === 0) throw new ValidationError('The file is empty.');
   if (input.bytes.byteLength > MAX_FILE_BYTES)
     throw new ValidationError('Files can be at most 10 MB.');
+  // Checked here because the database would refuse it only after the bytes were written.
+  if (input.subjectId !== undefined && !isUuid(input.subjectId)) {
+    throw new ValidationError('A linked record does not exist in this business.');
+  }
   const safeName =
     path
       .basename(input.filename)
@@ -38,16 +43,23 @@ export async function saveFile(
   // The business and environment are part of the path, so files are separated on disk too.
   const storageKey = `${storagePrefix(s.ctx.business.id, s.ctx.environment)}/${crypto.randomUUID()}-${safeName}`;
   await fileStorage.put(storageKey, input.bytes);
-  // If the transaction this is part of fails, the row is never saved: remove the bytes too.
+  // Two safety nets so bytes are not left behind without a row:
+  //  - if the whole transaction later fails, onRollback removes them;
+  //  - if only this insert fails (and the caller carries on), the catch below removes them.
   onRollback(s, () => fileStorage.delete(storageKey));
-  return createRecord(s, fileEntity, {
-    storageKey,
-    filename: safeName,
-    contentType: input.contentType || 'application/octet-stream',
-    sizeBytes: input.bytes.byteLength,
-    subjectType: input.subjectType ?? null,
-    subjectId: input.subjectId ?? null,
-  });
+  try {
+    return await createRecord(s, fileEntity, {
+      storageKey,
+      filename: safeName,
+      contentType: input.contentType || 'application/octet-stream',
+      sizeBytes: input.bytes.byteLength,
+      subjectType: input.subjectType ?? null,
+      subjectId: input.subjectId ?? null,
+    });
+  } catch (error) {
+    await fileStorage.delete(storageKey);
+    throw error;
+  }
 }
 
 /** Reads a file. The row is looked up inside the scope first, so another business's file is "not found". */

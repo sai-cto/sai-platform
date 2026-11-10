@@ -149,6 +149,13 @@ export async function updateRecord<T extends TenantTable>(
 ): Promise<Row<T>> {
   authorize(s.ctx, entity.writePermission);
   const before = await findInScope(s, entity.table, id, 'exclude');
+  const locked = (entity.immutableFields ?? []).filter(
+    (field) => field in (patch as AnyRow) && !same(before[field], (patch as AnyRow)[field]),
+  );
+  if (locked.length > 0)
+    throw new ValidationError(
+      `These fields cannot be changed after creation: ${locked.join(', ')}.`,
+    );
   const changes = Object.fromEntries(
     Object.entries(withoutStandard(patch as AnyRow)).filter(
       ([key, value]) => !same(before[key], value),

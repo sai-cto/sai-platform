@@ -16,6 +16,7 @@ See `docs/PROGRESS.md` for the live status and acceptance criteria.
 | Customer and field portals | Hosting routes exist and answer "not found". No module defines one. | Add `portals.customer` / `portals.field` to a module manifest and switch the toggle on. How customers sign in is undecided. |
 | Email is not sent | The only notification adapter prints to the server console. | Add a real `NotificationChannel` and call `setEmailChannel()`. |
 | Session housekeeping | Sessions end after 12 hours; there is no idle timeout and expired rows are never deleted. | A small scheduled clean-up job once hosting exists. |
+| Orphaned file bytes | Bytes are removed when a save fails or rolls back, but a crash between writing a file and committing its row could still leave bytes on disk with no row. | A periodic sweep comparing the storage folder with the `files` table. |
 | Files are on local disk | `FILE_STORAGE_DIR`. | Add a `FileStorage` adapter for whatever storage hosting provides. |
 
 ## Upgrading notes

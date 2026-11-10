@@ -49,6 +49,8 @@ export type EntityDef<T extends TenantTable = TenantTable> = {
   listColumns: ListColumn[];
   /** Property names searched by the Data tab's search box. */
   searchColumns: string[];
+  /** Fields that are set when the record is created and can never be changed afterwards. */
+  immutableFields?: string[];
   /**
    * Clean-up outside the database after a row is permanently deleted (for example removing
    * a stored file's bytes). Most entities do not need this.
