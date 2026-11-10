@@ -1,0 +1,13 @@
+import { defineConfig } from 'drizzle-kit';
+import { loadEnv } from './scripts/lib/env';
+
+loadEnv();
+
+// Tables live next to the code that owns them: the core's in src/core/db/schema,
+// each module's in src/modules/<key>/schema.ts. Both are picked up automatically.
+export default defineConfig({
+  dialect: 'postgresql',
+  schema: ['./src/core/db/schema/*.ts', './src/modules/*/schema.ts'],
+  out: './db/migrations',
+  dbCredentials: { url: process.env.DATABASE_OWNER_URL ?? '' },
+});

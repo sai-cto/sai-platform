@@ -1,0 +1,85 @@
+# Decisions
+
+Every decision that shaped the platform, each with a short why. Newest phases at the bottom.
+
+Items marked **NEEDS JAI REVIEW** were decided by Claude while working autonomously, choosing the
+safest reversible option. They are collected in the first table so they are easy to find.
+
+## Awaiting the CTO's review
+
+| # | Decision | Chosen because | How to change it |
+|---|---|---|---|
+| R-1 | A business admin can add a person who has no account yet; the account is created on the spot (name + email). | Otherwise every new hire needs the tech team. The account can do nothing outside that business. | `addMember()` in `src/core/people/memberships.ts` |
+| R-2 | New staff start with `customers.read` and `scheduling.read` plus their module's defaults. | Staff with nothing granted cannot do any work; these two are read-only. | `DEFAULT_STAFF_GRANTS` in the same file |
+| R-3 | Sessions last 12 hours, then you sign in again. | A working day. Shorter annoys; longer leaves shared computers signed in. | `SESSION_HOURS` in `src/core/auth/session.ts` |
+| R-4 | Changing someone's platform role, or deactivating them, signs them out everywhere at once. | A demoted person should not keep their old access until their session expires. | `setPlatformRole()` / `setUserActive()` |
+| R-5 | A record that other records still refer to cannot be permanently deleted until those are deleted first (no cascading purge). | Permanent delete is irreversible; refusing is safer than silently deleting dependants. | `purgeRecord()` in `src/core/records/records.ts` |
+| R-6 | Microsoft / Google sign-in never creates an account. It only signs in someone who already has one, matched by a provider-verified email. | Prevents anyone with a company email getting in before they are given a role. | `loginWithIdentity()` in `src/core/auth/login.ts` |
+| R-7 | Tech can deactivate ordinary accounts, but only a super admin can deactivate (or reactivate) an account holding a platform role. | Follows "only super admin grants platform roles": switching the account off is removing the role in effect. | `setUserActive()` |
+| R-8 | Next.js "Cache Components" is switched off; every page renders per request. | Every console page depends on who is signed in. Per-request rendering is the simplest model for students. Next.js says the feature becomes mandatory in the next major version: see HANDOFF. | `next.config.ts` |
+
+## Locked by the brief (not Claude's to change)
+
+- One platform, one module per business, one login.
+- Five roles: `super_admin`, `tech`, `executive`, `business_admin`, `business_staff`.
+- Three portal types per module: staff, customer, field. Only staff portals are built now.
+- Delete means archive. Permanent delete: super admin only, past a configurable retention window (default 30 days).
+- Everything is logged to an append-only activity log.
+- Sign-in sits behind a provider-agnostic layer with a dev-only login; Microsoft and Google adapters exist but are not configured.
+- Runs locally with one command. No hosting, no paid services, no real data or credentials.
+- Businesses are seeded as data and never hardcoded in components.
+
+## Approved at Checkpoint 1 (10 Nov 2026)
+
+| # | Decision | Why |
+|---|---|---|
+| A1 | Push phase branches (`phase-N-…`) at each step; merge into `main` with a merge commit when a phase passes its gates. | Work must survive the temporary cloud session. Phase names were chosen over the session's auto-generated branch name. |
+| A2 | The repository is private. | So BRSS business rules and citations into the private Salesforce repo can be documented. |
+| A3 | Dependencies beyond the default stack: Radix UI + lucide icons (shadcn style), `cmdk`, `recharts`, `arctic`, `stripe` (test mode, no keys). Nothing else non-trivial may be added. | Each replaces security- or accessibility-sensitive code we would otherwise write by hand. |
+| A4 | Row-level security in Postgres as a third enforcement layer. | The team turns over yearly; a forgotten filter must fail closed. |
+| A5 | A person has a platform role OR business memberships, never both. | Avoids an executive (read-only) who can also edit one business. |
+| A6 | `tech` can read and write live and sandbox data in every business; cannot purge; cannot change platform settings. | "Builds and tests in every module." |
+| A7 | Tech creates users and assigns business roles. Only super admin grants the three platform roles. A business admin manages admins and staff of their own business; the last admin cannot be removed. | Matches "manages their own staff's access" without locking a business out. |
+| A8 | Executives see the executive dashboard and every business's Overview, Data and Activity log, read-only, with no export. | "Read-only, cross-business overview and analytics." |
+| A9 | Business admins can view module settings; only tech and super admin change them. Business admins can export their own data; every export is logged. | "Tech … manages module settings." |
+| A10 | A permanent delete leaves a tombstone in the log (type, id, label, who, when), not the record's contents. Earlier entries about the record are kept. | Otherwise "permanently deleted" data would live on in the log. |
+| A11 | Sandbox data is always generated fake data, never a copy of live. Tech, super admin and that business's admin may reset it. | No customer data in a place meant for experiments. |
+| A12 | Importing into live is for tech and super admin only, and only after the same file and mapping succeeded in the sandbox. | "Import into sandbox first." |
+
+## Stack
+
+| Choice | Why |
+|---|---|
+| TypeScript (strict), Next.js 16 App Router, React 19 | The brief's default. Server components and server actions: no separate API project. |
+| PostgreSQL 17 in Docker Compose | The brief's default; every student gets the same database with one command. |
+| Drizzle ORM 0.45 + drizzle-kit, `postgres` driver | Tables are plain TypeScript inside each module's folder; `tenantTable()` shares the standard columns and security policies, which Prisma's schema language cannot do. The stable 0.45 line is used, not the 1.0 release candidate. |
+| Tailwind CSS 4 | The brief's default. |
+| Vitest against a real Postgres test database | Tenant-isolation tests are only meaningful against the real database. |
+| Playwright | The brief's default; also used for screenshots. |
+| Zod | One schema validates a form, a server action and an import row. |
+| npm | Ships with Node. |
+| No auth framework | Sessions are ~80 lines we own (`src/core/auth/session.ts`), so sign-ins go straight into our activity log and changing identity provider touches one folder. |
+| System fonts | No font download from a third party at build time. |
+
+## Phase 1 — shared core
+
+| # | Decision | Why |
+|---|---|---|
+| P1-1 | Business slugs are the lowercase short codes (`hhmc`, `sare`, `brss`, `corn`, `cfr`, `tut`, `cbb`, `brm`, `cp`), and a module's key equals its business's slug. | One identifier per business in URLs, folders and data. |
+| P1-2 | `.env.example` holds names only; `npm run setup` generates `.env.local` with random local database passwords. | The brief requires names only; nothing resembling a password is committed. |
+| P1-3 | Two database roles: `sai_owner` runs migrations, `sai_app` runs the app and cannot bypass row-level security. | Row-level security does not apply to a table's owner. |
+| P1-4 | The live/sandbox mode is part of the URL (`/console/brss/sandbox/…`), not a cookie. | Two browser tabs can never disagree about which data is on screen. |
+| P1-5 | A business the user cannot open returns "not found", never "forbidden". | Does not reveal which businesses exist. |
+| P1-6 | The query handle given to modules is read-only by type; writes exist only as the five record functions. | Makes "every mutation is logged" a property of the structure. |
+| P1-7 | A failed card attempt is stored as a `failed` payment row. | Leaves a trace for staff; nothing is marked paid. |
+| P1-8 | The payment provider is called first, then the payment row is written in the caller's transaction, with an idempotency key. | Replaces the Salesforce "save, then charge in a second request" flow (known-issues KI-3). |
+| P1-9 | Cross-business analytics read live data only. | Sandbox experiments must never appear on the executive dashboard. |
+| P1-10 | `seedRecords()` (bulk insert without per-row log entries) works only in the sandbox or for the seed script's system actor. | A reset would otherwise write hundreds of log rows; the lock keeps it from ever writing live data for a real person. |
+| P1-11 | Every tenant table must be registered as an entity; a test fails otherwise. | Guarantees the isolation and audit tests cover every table, including future modules'. |
+| P1-12 | The Phase 0 plan file was removed once its content moved into ARCHITECTURE, DECISIONS and PERMISSIONS. | One source of truth. It remains in git history (`docs/PLAN.md`). |
+
+## BRSS business questions (B1–B12)
+
+The CTO asked Claude to choose the most conservative reasonable answer to each and flag it.
+They are recorded with the BRSS module in Phase 4; until then see section 8B of the Phase 0
+plan in git history (`git show 5e76467:docs/PLAN.md`).
