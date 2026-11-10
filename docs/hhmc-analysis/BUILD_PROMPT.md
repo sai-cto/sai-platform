@@ -15,8 +15,8 @@ The HHMC requirements are now agreed. The agreed source is `docs/hhmc-analysis/m
 - update the "Do NOT build HHMC" line in `docs/BRIEF.md` and record this in `docs/DECISIONS.md`
 
 ## Start here
-1. Read `docs/PROGRESS.md`, `docs/BRIEF.md`, `docs/ARCHITECTURE.md`, `docs/MODULE_GUIDE.md` and `docs/DECISIONS.md`, then all of `docs/hhmc-analysis/movegistics-reference.md`. Also read the Next.js guides AGENTS.md points to before writing any code.
-2. `git fetch origin && git checkout phase-5-hhmc`. If `phase-4-brss` is not yet merged into `main`, STOP and ask whether to rebase this branch onto `phase-4-brss` or wait. Both branches generate migrations, and parallel migration journals conflict.
+1. `git fetch origin && git checkout phase-5-hhmc`. If `phase-4-brss` is not yet merged into `main`, STOP and ask whether to rebase this branch onto `phase-4-brss` or wait. Both branches generate migrations, and parallel migration journals conflict.
+2. Read `docs/PROGRESS.md`, `docs/BRIEF.md`, `docs/ARCHITECTURE.md`, `docs/MODULE_GUIDE.md` and `docs/DECISIONS.md`, then all of `docs/hhmc-analysis/movegistics-reference.md`. Also read the Next.js guides AGENTS.md points to before writing any code.
 3. `npm install && npm run setup` (in a cloud container, start `dockerd` first). Then `npm run check` and `npm run test:e2e` must be green before you change anything.
 4. Follow the repo's loop: plan → build → verify → review gate → UI gate → record → **stop before merge**. Write the plan to `docs/hhmc-analysis/PLAN.md`, commit it, and continue without waiting unless it hits a "stop and ask" item below.
 
