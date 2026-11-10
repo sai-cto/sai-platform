@@ -1,0 +1,45 @@
+# Secrets and local environment — never commit. Only .env.example is tracked.
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+out/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Test output
+playwright-report/
+test-results/
+
+# Local database files and dumps
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.sql.gz
+pgdata/
+.pgdata/
+.data/
+
+# Local file storage used in development
+storage/
+uploads/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
