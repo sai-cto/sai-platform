@@ -1,0 +1,8 @@
+.next
+node_modules
+db/migrations
+docs/brss-analysis
+docs/PERMISSIONS.md
+package-lock.json
+AGENTS.md
+tests
