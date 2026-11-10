@@ -159,8 +159,9 @@ npm run check
   vitest run              Test Files 10 passed (10) · Tests 340 passed (340)
   secret scan             clean (378 files)
 npm run test:e2e          41 passed
-git diff phase-2-console..phase-3-scaffolds --stat -- src/core src/app
-                          only comment wording in two core files (example names made generic)
+registering the nine modules changed no code under src/core or src/app (comment wording only);
+letting modules have server actions needed one move: the request glue went from src/app/_lib
+to src/server (44 files under src/app changed their import line, nothing else)
 ```
 
 UI gate: 38 screenshots in `docs/screenshots/phase-3/` (each business's App tab as super admin;

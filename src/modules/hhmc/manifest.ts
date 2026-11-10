@@ -4,6 +4,6 @@ import { scaffoldModule } from '../_shared/scaffold';
 export const hhmcModule = scaffoldModule({
   key: 'hhmc',
   name: 'Hired Hands Moving Company',
-  description: 'Student moving company. Replaces Movegistics.',
+  description: 'Student moving company.',
   plannedScope: ['Pending requirements'],
 });

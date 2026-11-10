@@ -2,6 +2,7 @@
  * Read access to the list of modules. This is the one place the core looks at src/modules:
  * it imports the list, never an individual module.
  */
+import { getTableName } from 'drizzle-orm';
 import { MODULES } from '@/modules/registry';
 import type { EntityDef, ModuleManifest } from './contract';
 import { CORE_ACTIONS } from '../rbac/actions';
@@ -47,6 +48,10 @@ export function validateRegistry(): string[] {
       if (!e.key.startsWith(`${mod.key}.`))
         problems.push(`Entity "${e.key}" must start with "${mod.key}.".`);
       if (entityKeys.has(e.key)) problems.push(`Entity "${e.key}" is defined twice.`);
+      if (!getTableName(e.table).startsWith(`${mod.key}_`))
+        problems.push(
+          `Table "${getTableName(e.table)}" of entity "${e.key}" must start with "${mod.key}_".`,
+        );
       entityKeys.add(e.key);
       for (const permission of [e.readPermission, e.writePermission]) {
         if (!known(permission))

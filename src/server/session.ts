@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { SESSION_COOKIE, findSessionUserId } from '@/core/auth/session';
 import { ForbiddenError, NotFoundError, UnauthenticatedError } from '@/core/errors';
+import { isPortalAvailable } from '@/core/modules/config';
 import {
   buildBusinessContext,
   buildPlatformContext,
@@ -57,6 +58,22 @@ export async function requireBusinessContext(
     if (error instanceof NotFoundError || error instanceof ForbiddenError) notFound();
     throw error;
   }
+}
+
+/**
+ * The context for a server action of a module's STAFF PORTAL. It is requireBusinessContext()
+ * plus the two checks the App tab makes before it shows a page: the person may open the staff
+ * portal, and the portal is switched on for this business. So switching a portal off in
+ * Settings stops its buttons and forms as well as hiding its screens.
+ */
+export async function requireStaffPortalContext(
+  slug: string,
+  environment: Environment = 'live',
+): Promise<BusinessContext> {
+  const ctx = await requireBusinessContext(slug, environment);
+  if (!ctx.permissions.has('business.app.use')) notFound();
+  if (!(await isPortalAvailable(ctx.business.id, 'staff'))) notFound();
+  return ctx;
 }
 
 /** Runs page code and turns "not found" / "forbidden" from the core into a 404 page. */

@@ -1,25 +1,30 @@
-import { getModule } from '@/core/modules/registry';
-import type { PortalPageProps } from '@/core/modules/contract';
 import { Badge } from '@/ui/badge';
 import { Card } from '@/ui/layout';
 
+export type ScaffoldInfo = { name: string; description: string; plannedScope: string[] };
+
 /**
  * The staff portal of a module that has been registered but not built yet. It shows what
- * the module is for and what is planned, straight from the module's manifest.
+ * the module is for and what is planned, as written in its manifest.
  */
-export function NotBuiltYet({ ctx }: PortalPageProps) {
-  const mod = ctx.business.moduleKey ? getModule(ctx.business.moduleKey) : undefined;
-  const planned = mod?.plannedScope ?? [];
+export function notBuiltYetPage(info: ScaffoldInfo) {
+  return function NotBuiltYet() {
+    return <NotBuiltYetCard info={info} />;
+  };
+}
+
+function NotBuiltYetCard({ info }: { info: ScaffoldInfo }) {
+  const planned = info.plannedScope;
   return (
     <div className="mx-auto max-w-2xl py-6">
       <Card>
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-base font-semibold text-zinc-900">
-            {mod?.name ?? ctx.business.name}
+            {info.name}
           </h1>
           <Badge>Not built yet</Badge>
         </div>
-        <p className="mt-2 text-sm text-zinc-700">{mod?.description ?? ctx.business.description}</p>
+        <p className="mt-2 text-sm text-zinc-700">{info.description}</p>
 
         <h2 className="mt-5 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
           Planned scope

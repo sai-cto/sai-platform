@@ -52,10 +52,14 @@ review.
 
 1. **Pick the key.** Lowercase letters only, the same as the business's slug (`tut`, `brss`).
 2. **Add the business** to `src/seed/businesses.ts` if it is not there (name, slug, short code,
-   accent colour, description). Businesses are data.
-3. **Copy the template:** `cp -r src/modules/_template src/modules/<key>` and replace every
-   `template` with your key (file contents, table names, permission keys, entity keys).
-4. **Register it:** add one import and one entry in `src/modules/registry.ts`.
+   accent colour, description), and add a test login for its admin in `src/seed/users.ts`
+   (copy an existing `<slug>.admin@sai.example` entry). Businesses are data.
+3. **Copy the template:** `cp -r src/modules/_template/. src/modules/<key>/` and replace every
+   `template` with your key (file contents, table names, permission keys, entity keys). Then
+   set the module's real `name`, `description` and `plannedScope` in `manifest.ts`, remove the
+   "TEMPLATE —" notes at the top of each file, and rewrite `README.md` for your module.
+4. **Register it:** add one import and one entry in `src/modules/registry.ts`, in the same
+   position as the business has in `src/seed/businesses.ts` (a test compares the two lists).
 5. **Define the tables** in `schema.ts`. Use `tenantTable()`; link tenant tables with
    `sameTenant()`; prefix table names with the key.
 6. **Create the migration:** `npm run db:generate`, read the generated SQL in `db/migrations/`,
@@ -68,7 +72,8 @@ review.
 9. **Write pages** in `pages/` and list them in `portals.staff.routes`. Each route names the
    permission needed to open it. Forms and buttons call **server actions** in `actions.ts`
    (see below).
-10. **Write `seed.ts`** with fake data for every table.
+10. **Write `seed.ts`** with fake data for every table: at least two rows per table (the
+    automatic tests archive one row and compare it with another).
 11. **Fill in** `widgets`, `workItem`, `settings` as needed.
 12. **Regenerate the permissions doc:** `npm run docs:permissions`.
 13. **Run everything:** `npm run check` and `npm run test:e2e`. The registry-driven tests now
@@ -76,15 +81,20 @@ review.
     logging, executive read-only, sandbox reset.
 14. **Add tests for your own rules** in `tests/integration/<key>.test.ts`, and write the rules
     down in the module's `README.md`.
-15. **Look at it:** `npm run db:reset && npm run dev`, sign in as the business's admin, open the
-    App tab, try test mode.
+15. **Look at it:** `npm run db:reset && npm run dev`, sign in as the business's admin (the
+    login you added in step 2, or the tech user), open the App tab, try test mode.
 
 ## Checklist: turning a scaffold into a real module
 
 Scaffolded modules (`status: 'scaffold'`) call `scaffoldModule()` and show a "not built yet"
-page. To build one, do steps 3–15 above inside its existing folder, replacing the
-`scaffoldModule(...)` call with `defineModule({ ... })`. Keep the export name, so
-`registry.ts` does not change.
+page. To build one, do steps 3–15 above inside its existing folder. The copy command in step 3
+overwrites the scaffold's `manifest.ts` and `README.md` with the template's; that is intended:
+you are replacing the `scaffoldModule(...)` call with a full `defineModule({ ... })`. Keep the
+export name the scaffold had (for example `tutModule`), so `registry.ts` does not change.
+
+Two businesses are held back on purpose: a test (`tests/integration/modules.test.ts`, "…are
+scaffolds whose scope is pending requirements") fails if anything is built in their folders.
+Remove a business from that test only when the CTO says its requirements are agreed.
 
 ## Server actions in a module
 
@@ -94,20 +104,23 @@ A page shows data; a server action changes it. Put a module's actions in
 ```ts
 export async function createItemAction(slug: string, mode: string, _previous: ActionResult | null, formData: FormData): Promise<ActionResult> {
   return act(async () => {
-    const ctx = await requireBusinessContext(slug, parseMode(mode));   // who is asking, for which business, live or test
+    const ctx = await requireStaffPortalContext(slug, parseMode(mode)); // who is asking, for which business, live or test
     await createItem(ctx, { name: text(formData, 'name') });           // the service checks permission and writes the log
     return 'Added.';
   });
 }
 ```
 
-- `requireBusinessContext` and `parseMode` come from `@/server/session`; `act` and `text` from
-  `@/server/actions`.
+- `requireStaffPortalContext` and `parseMode` come from `@/server/session`; `act` and `text`
+  from `@/server/actions`.
+- `requireStaffPortalContext` checks who is signed in, that they belong to this business, that
+  they may open the staff portal, and that the portal is switched on. (Switching a portal off
+  in Settings therefore stops its actions too, not only its screens.)
 - The page binds the business and mode: `createItemAction.bind(null, ctx.business.slug, ctx.environment)`
   and passes the result to `<ActionForm>` or `<ConfirmButton>` (from `@/ui`).
 - **Everything an action receives is untrusted**, including the slug and ids: anyone signed in
-  can call it with any values. Never skip `requireBusinessContext`, and let the service decide
-  what is allowed.
+  can call it with any values. Never skip `requireStaffPortalContext`, and let the service
+  decide what is allowed.
 
 ## Rules a module must follow
 
@@ -115,10 +128,10 @@ Most are enforced by the type checker, ESLint or a test, and say so when broken.
 
 | Rule | Enforced by |
 |---|---|
-| Tables are created with `tenantTable()` | Test: every table with a `business_id` has row-level security |
+| Tables are created with `tenantTable()` | Test: every table outside the platform schema has the business columns and row-level security |
 | Links between tenant tables use `sameTenant()` | Test: every such foreign key includes business and environment |
 | Every table is registered as an entity | Test |
-| Permission, entity and table names start with the module key | `validateRegistry()` (test + System health) |
+| Permission keys, entity keys and table names start with the module key | `validateRegistry()` (test + System health) |
 | No direct database access; no `txOf`; no platform tables | ESLint |
 | Never import from `src/app` | ESLint |
 | Writes go through the record functions | The query handle a module receives cannot write |
@@ -153,3 +166,8 @@ customers sign in (see `docs/HANDOFF.md`). Until it is, those portals use the co
 - **A staff member cannot open a page.** The route's permission is not granted to them; a
   business admin switches it on in People and access.
 - **The sandbox reset fails.** An entity is listed before the entity it depends on.
+- **"Cannot read properties of undefined" as soon as the app or a test starts.** A file in the
+  module uses something imported from the core at the top level of the file (outside any
+  function), for example `const schema = someCoreSchema.extend(...)`. The core and the modules
+  import each other, so at that moment the core value may not exist yet. Use core values
+  inside functions only.

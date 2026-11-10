@@ -1,4 +1,4 @@
-import { and, desc, eq, getTableName, gte } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableName, gte, ne } from 'drizzle-orm';
 import postgres from 'postgres';
 import { getDb } from '@/core/db/client';
 import {
@@ -181,20 +181,22 @@ export const FIXTURES: Record<string, Fixture> = {
 
 /**
  * Makes sure one row of the entity exists in the scope and returns its id.
- * Core entities are created from FIXTURES. Module entities must come from the module's
- * seedDemoData — if this throws for your new entity, add fake rows for it there.
+ * Core entities are created from FIXTURES (a fresh row every call). Module entities come
+ * from the module's seedDemoData — if this throws for your new entity, add fake rows for it
+ * there (at least two per table). Pass `not` to get a different row from one you already hold.
  */
-export async function ensureRow(s: Scope, entity: EntityDef): Promise<string> {
+export async function ensureRow(s: Scope, entity: EntityDef, not?: string): Promise<string> {
   const fixture = FIXTURES[entity.key];
   if (fixture) return String((await createRecord(s, entity, (await fixture(s)) as never)).id);
   const [existing] = await s.db
     .select({ id: entity.table.id })
     .from(entity.table)
-    .where(s.where(entity.table))
+    .where(and(s.where(entity.table), not ? ne(entity.table.id, not) : undefined))
+    .orderBy(asc(entity.table.id))
     .limit(1);
   if (!existing)
     throw new Error(
-      `No rows for entity "${entity.key}" in ${s.ctx.business.slug}/${s.ctx.environment}. Add fake rows in the module's seedDemoData.`,
+      `Not enough rows for entity "${entity.key}" in ${s.ctx.business.slug}/${s.ctx.environment}. Add fake rows in the module's seedDemoData (at least two).`,
     );
   return String(existing.id);
 }

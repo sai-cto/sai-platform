@@ -1,6 +1,6 @@
 /** The console as each role sees it, and its main workflows end to end. */
 import { expect, test, type Page } from '@playwright/test';
-import { SEED, asOwner, loginAs, tabLabels } from './helpers';
+import { SEED, asOwner, businessCount, loginAs, tabLabels } from './helpers';
 
 const ALL_TABS = ['Overview', 'App', 'People and access', 'Data', 'Activity log', 'Settings', 'Test mode'];
 const PLATFORM_LINKS = ['Users and roles', 'Module registry', 'Feature flags', 'Activity log', 'Data imports', 'System health', 'Platform settings'];
@@ -239,7 +239,7 @@ test('Platform section: users, roles, flags and settings follow the role rules',
   await page.goto('/console/platform/health');
   await expect(page.getByText('Database reachable')).toBeVisible();
   await page.goto('/console/platform/modules');
-  await expect(page.getByRole('row')).toHaveCount(10); // header + 9 businesses
+  await expect(page.getByRole('row')).toHaveCount((await businessCount()) + 1); // header + one row per business
 });
 
 test('import: CSV → map → check → sandbox → live', async ({ page }) => {
@@ -326,7 +326,7 @@ test('executive view: nine businesses, all-SAI totals, nothing to edit', async (
   await page.goto('/console/executive');
   await expect(page.getByRole('heading', { name: 'Executive view' })).toBeVisible();
   const table = page.getByRole('table');
-  await expect(table.locator('tbody tr')).toHaveCount(9);
+  await expect(table.locator('tbody tr')).toHaveCount(await businessCount());
   await expect(table.locator('tfoot')).toContainText('All SAI');
   await expect(page.getByText(/All-SAI revenue · last 30 days/)).toBeVisible();
   await page.getByRole('group', { name: 'Period' }).getByRole('link', { name: '90 days' }).click();

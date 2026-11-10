@@ -17,6 +17,7 @@ import { exportCell, exportRecords, safeCell } from '@/core/records/export';
 import { sandboxSummary } from '@/core/sandbox/sandbox';
 import { addMember, listMembers, removeMember, setMemberPermissions } from '@/core/people/memberships';
 import { buildBusinessContext } from '@/core/tenancy/context';
+import { SEED_BUSINESSES } from '@/seed/businesses';
 import { USERS, ctxFor, platformCtxFor } from './helpers';
 
 const csv = (text: string) => new TextEncoder().encode(text);
@@ -197,7 +198,7 @@ describe('executive dashboard', () => {
   it('has a row per business, totals that add up, and only live data', async () => {
     const exec = await platformCtxFor(USERS.executive);
     const before = await executiveDashboard(exec, 30);
-    expect(before.rows).toHaveLength(9);
+    expect(before.rows).toHaveLength(SEED_BUSINESSES.length);
     expect(before.totals.revenueCents).toBe(before.rows.reduce((sum, r) => sum + r.revenueCents, 0));
     expect(before.totalTrend.reduce((sum, p) => sum + p.value, 0)).toBeGreaterThan(0);
 
@@ -219,9 +220,9 @@ describe('executive dashboard', () => {
 });
 
 describe('registry report, health and small helpers', () => {
-  it('the module registry report lists all nine businesses', async () => {
+  it('the module registry report lists every seeded business', async () => {
     const report = await moduleRegistryReport(await platformCtxFor(USERS.tech));
-    expect(report.installed.map((r) => r.code)).toEqual(['HHMC', 'SARE', 'BRSS', 'CORN', 'CFR', 'TUT', 'CBB', 'BRM', 'CP']);
+    expect(report.installed.map((r) => r.code)).toEqual(SEED_BUSINESSES.map((b) => b.code));
     await expect(moduleRegistryReport(await platformCtxFor(USERS.executive))).rejects.toBeInstanceOf(ForbiddenError);
   });
 

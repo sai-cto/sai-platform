@@ -1,5 +1,5 @@
 import { defineModule, type ModuleManifest } from '@/core/modules/contract';
-import { NotBuiltYet } from './not-built-yet';
+import { notBuiltYetPage } from './not-built-yet';
 
 /**
  * A module that is registered but not built yet. It has no tables, permissions or screens of
@@ -29,7 +29,7 @@ export function scaffoldModule(input: {
             path: '',
             title: 'Not built yet',
             permission: 'business.app.use',
-            component: NotBuiltYet,
+            component: notBuiltYetPage(input),
           },
         ],
       },
