@@ -140,6 +140,17 @@ or `tenant-isolation.test.ts`.
 | Big Red Mailroom | `#B3322A` brick red | `#7A5230` | shifted to brick brown |
 | Campus Promotions | `#111111` black | `#3A3F6B` | dark indigo, to separate it from The Cornellian |
 
+## Phase 3 — module scaffolds
+
+| # | Decision | Why |
+|---|---|---|
+| P3-1 | A scaffold is one call, `scaffoldModule({ key, name, description, plannedScope })`, in the module's `manifest.ts`, plus a README. All nine share one "not built yet" page (`src/modules/_shared/`). | Nine copies of the same placeholder would be nine things to keep in step. |
+| P3-2 | The shared scaffold helper and page live under `src/modules/_shared/`, not in the core. | Registering the nine modules then changed nothing in `src/core/` or `src/app/`, which is the claim the module guide makes. |
+| P3-3 | HHMC and Real Estate list their planned scope as "Pending requirements" and contain nothing else (a test checks their folders hold only a manifest and a README). | The brief forbids building their features; their requirements are still being gathered. |
+| P3-4 | `src/modules/_template/` is a small working module to copy from. It is type-checked and linted but not registered, and the migration generator skips folders starting with `_`. | A template that is compiled cannot drift from the contract; one that is migrated would create a junk table. |
+| P3-5 | A test fails if any file in `src/core`, `src/app` or `src/ui` names a business (slug, short code or name). | "Never hardcode businesses" becomes checkable, and so does "a tenth module needs no core change". |
+| P3-6 | BRSS is registered as a scaffold in this phase with the Phase 4 scope listed; Phase 4 replaces it with the real module. | So Phase 3 can be reviewed on its own. |
+
 ## BRSS business questions (B1–B12)
 
 The CTO asked Claude to choose the most conservative reasonable answer to each and flag it.

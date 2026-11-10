@@ -27,7 +27,8 @@ App tab says "No app yet". The BRSS staff portal is Phase 4.
 
 - **Phase 1 — shared core.** ✅ Done. Passed the independent review gate after four rounds (see below) and merged to `main`.
 - **Phase 2 — SAI Console**, on branch `phase-2-console`: built; UI gate done (110 screenshots); independent review gate running.
-- Next: **Phase 3 — module scaffolds**, on branch `phase-3-scaffolds`.
+- **Phase 3 — module scaffolds**, on branch `phase-3-scaffolds` (built on top of Phase 2): built and verified; review gate follows Phase 2's.
+- Next: **Phase 4 — BRSS proof module**, on branch `phase-4-brss`.
 
 ## Acceptance criteria (final)
 
@@ -38,7 +39,7 @@ App tab says "No app yet". The BRSS staff portal is Phase 4.
 | ✅ | Logging in as each seed role shows exactly the sidebar, data and actions that role allows _(`tests/e2e/console.spec.ts`, `tests/e2e/isolation.spec.ts`, screenshots per role)_ |
 | ✅ | Archive → restore works; permanent delete only for super_admin and only past retention; every action appears in the activity log _(data layer and end-to-end through the screens)_ |
 | ✅ | Test mode clearly separates sandbox data from live data, with a persistent visual indicator _(striped banner + yellow frame on every sandbox page; `/sandbox/` in the address)_ |
-| ❌ | All 9 modules are registered; adding a 10th by following `MODULE_GUIDE.md` requires no core changes _(Phase 3)_ |
+| ✅ | All 9 modules are registered; adding a 10th by following `MODULE_GUIDE.md` requires no core changes _(registering the nine changed no file in `src/core` or `src/app`; a test fails if either names a business)_ |
 | ❌ | The BRSS staff portal covers the listed workflows end to end on seed data, with ported rules documented and source-cited _(Phase 4)_ |
 | ✅ | Typecheck, lint, unit and end-to-end tests all pass; the secret scan is clean _(as of the last verification below)_ |
 
@@ -49,7 +50,7 @@ App tab says "No app yet". The BRSS staff portal is Phase 4.
 | 0 — Plan | ✅ merged to `main` (Checkpoint 1 approved 10 Nov 2026) |
 | 1 — Shared core | ✅ merged to `main` |
 | 2 — SAI Console | 🔨 in progress |
-| 3 — Module scaffolds | ⏳ |
+| 3 — Module scaffolds | 🔨 built, review gate pending |
 | 4 — BRSS proof module | ⏳ |
 
 ## Last verification
@@ -123,3 +124,20 @@ Found and fixed while looking: the Next.js dev badge covering the user menu; fiv
 red monograms (colours adjusted, DECISIONS P2-1); a search form that stacked on desktop; the
 business name being cut off on a phone; the Overview scrolling sideways on a phone once there was
 recent activity; badges wrapping inside table cells; and a chart bug that dropped today's bar.
+
+### Phase 3 — module scaffolds (10 Nov 2026)
+
+```
+npm run check
+  tsc --noEmit            clean
+  eslint                  clean
+  vitest run              Test Files 10 passed (10) · Tests 335 passed (335)
+  secret scan             clean
+npm run test:e2e          39 passed
+git diff phase-2-console..phase-3-scaffolds --stat -- src/core src/app
+                          only comment wording in two core files (example names made generic)
+```
+
+UI gate: 38 screenshots in `docs/screenshots/phase-3/` (each business's App tab as super admin;
+the same page as a business admin in live and test mode, as staff, and as staff with nothing
+granted; the executive gets "not found" for the App tab; module registry; system health).

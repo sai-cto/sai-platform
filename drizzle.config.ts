@@ -7,7 +7,9 @@ loadEnv();
 // each module's in src/modules/<key>/schema.ts. Both are picked up automatically.
 export default defineConfig({
   dialect: 'postgresql',
-  schema: ['./src/core/db/schema/*.ts', './src/modules/*/schema.ts'],
+  // Module folders start with a lowercase letter; folders starting with "_" (the template,
+  // shared helpers) are skipped.
+  schema: ['./src/core/db/schema/*.ts', './src/modules/[a-z]*/schema.ts'],
   out: './db/migrations',
   dbCredentials: { url: process.env.DATABASE_OWNER_URL ?? '' },
 });
