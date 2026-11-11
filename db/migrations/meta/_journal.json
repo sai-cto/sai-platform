@@ -64,6 +64,13 @@
       "when": 1794423053780,
       "tag": "0008_hhmc_builder_import",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794425283782,
+      "tag": "0009_hhmc_cornellian_per_hour",
+      "breakpoints": true
     }
   ]
 }

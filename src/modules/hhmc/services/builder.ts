@@ -2,11 +2,11 @@
  * THE ESTIMATE BUILDER (managers' written requirements, Nov 2026, "Estimate"):
  *
  *   labor        load / drive / unload as 3 lines, or 1 line, at the crew's hourly rate
- *                ("N Men" line item), minus the Cornellian discount ($20/hr, a setting)
- *   truck        customer's own truck → none (labor only)
- *                local (< long-distance miles, a setting)  → "<size>' Truck Local" × days
- *                long distance (≥ that)                    → "<size>' Truck Long Distance – Day" × days
- *                                                            + "… – Mileage" × miles
+ *                ("N Men" line item); a Cornellian gets a rate $20/hr lower (a setting)
+ *   truck        customer's own truck → none (labor only); one set of fees per truck
+ *                local (up to the long-distance miles)      → "<size>' Truck Local" × days
+ *                long distance (over that)                 → "<size>' Truck Long Distance - Day" × days
+ *                                                            + "… - Mileage" × miles
  *   materials    any catalog items (dollies, blankets, wrap, boxes) with a quantity
  *   packing help "Packing Labor" × hours
  *   valuation    "Basic Coverage ($0.60/lb per article)" at $0
@@ -28,7 +28,7 @@ import { ACCESS_FLAGS, hhmcCatalogItems, type AccessFlag } from '../schema';
 import { loadSettings, type HhmcSettings } from '../settings';
 import { optionalText, parse } from './input';
 import { routeBetween } from './maps';
-import { mulDivRound, parseQty, type SectionKey } from './pricing';
+import { parseQty, type SectionKey } from './pricing';
 import { editableQuote, quoteLines } from './quote';
 
 export const TRUCK_SIZES = ['16', '22', '26'] as const;
@@ -47,6 +47,8 @@ export type BuilderInput = {
   cornellian: boolean;
   ownTruck: boolean;
   truckSize: TruckSize;
+  /** How many of our trucks (each pays its own day fee and mileage). */
+  truckCount: number;
   truckDaysHundredths: number;
   /** Road miles × 10, or null when unknown. */
   distanceTenths: number | null;
@@ -73,8 +75,19 @@ export type BuildResult = {
   warnings: string[];
 };
 
+/** Line-item names compared loosely: case, dashes (- – —), quotes (' ’ ′) and spaces don't matter. */
+export function sameName(a: string, b: string): boolean {
+  const norm = (v: string) => v.toLowerCase().replace(/[\u2010-\u2015\u2212]/g, '-').replace(/[\u2018\u2019\u2032`]/g, "'").replace(/\s+/g, ' ').trim();
+  return norm(a) === norm(b);
+}
+
+/** Is this a truck line the builder prices (local day fee, long-distance day fee or mileage)? */
+export function isTruckLine(name: string): boolean {
+  return /\btruck\b.*\b(local|long distance)\b/i.test(name);
+}
+
 function find(catalog: CatalogRow[], name: string): CatalogRow {
-  const row = catalog.find((c) => c.isActive && c.name.trim().toLowerCase() === name.toLowerCase());
+  const row = catalog.find((c) => c.isActive && sameName(c.name, name));
   if (!row) throw new ValidationError(`The line item "${name}" is missing or switched off. Add it in Settings › Line items.`);
   return row;
 }
@@ -104,15 +117,17 @@ export function buildLines(
   const lines: BuiltLine[] = [];
   const labor = find(catalog, `${input.crewSize} Men`);
   const cornellianCentsPerHour = Math.round(settings.cornellianDiscountPerHour * 100);
+  // Cornellian = a lower hourly rate (not a fixed-amount discount), so changing the hours later
+  // keeps it right and a quote-wide % discount still applies on top.
+  const cornellian = input.cornellian && cornellianCentsPerHour > 0;
+  const laborRate = cornellian ? Math.max(labor.rateCents - cornellianCentsPerHour, 0) : labor.rateCents;
   const laborLine = (label: string | null, hundredths: number) => {
     if (hundredths <= 0) return;
-    const discount = input.cornellian && cornellianCentsPerHour > 0 ? mulDivRound(hundredths, cornellianCentsPerHour, 100) : 0;
     lines.push(
       line(labor, hundredths, {
         name: label ? `${labor.name} – ${label}` : labor.name,
-        discountType: discount > 0 ? 'amount' : null,
-        discountValue: discount > 0 ? discount : null,
-        description: discount > 0 ? `Cornellian discount: $${settings.cornellianDiscountPerHour}/hr` : null,
+        rateCents: laborRate,
+        description: cornellian ? `Cornellian rate: $${settings.cornellianDiscountPerHour}/hr off $${(labor.rateCents / 100).toFixed(2)}/hr` : null,
       }),
     );
   };
@@ -127,17 +142,19 @@ export function buildLines(
 
   let truckPricing: BuildResult['truckPricing'] = 'own_truck';
   if (!input.ownTruck) {
-    const longDistance = input.distanceTenths !== null && input.distanceTenths >= Math.round(settings.longDistanceMiles * 10);
+    const longDistance = input.distanceTenths !== null && input.distanceTenths > Math.round(settings.longDistanceMiles * 10);
     if (input.distanceTenths === null) warnings.push('No mileage yet: priced as a local move. Enter the miles to check.');
     const days = input.truckDaysHundredths > 0 ? input.truckDaysHundredths : 100;
+    const trucks = Math.max(1, Math.floor(input.truckCount));
+    const each = trucks > 1 ? `${trucks} trucks` : null;
     if (longDistance) {
       truckPricing = 'long_distance';
-      lines.push(line(find(catalog, `${input.truckSize}' Truck Long Distance – Day`), days));
-      // Miles in hundredths: tenths × 10.
-      lines.push(line(find(catalog, `${input.truckSize}' Truck Long Distance – Mileage`), input.distanceTenths! * 10));
+      lines.push(line(find(catalog, `${input.truckSize}' Truck Long Distance - Day`), days * trucks, { description: each }));
+      // Miles in hundredths: tenths × 10; every truck drives the distance.
+      lines.push(line(find(catalog, `${input.truckSize}' Truck Long Distance - Mileage`), input.distanceTenths! * 10 * trucks, { description: each }));
     } else {
       truckPricing = 'local';
-      lines.push(line(find(catalog, `${input.truckSize}' Truck Local`), days));
+      lines.push(line(find(catalog, `${input.truckSize}' Truck Local`), days * trucks, { description: each }));
     }
   }
 
@@ -149,7 +166,8 @@ export function buildLines(
   }
   if (input.packingHundredths > 0) lines.push(line(find(catalog, 'Packing Labor'), input.packingHundredths));
   if (input.valuation) {
-    const v = catalog.find((c) => c.isActive && c.section === 'valuation');
+    const valuations = catalog.filter((c) => c.isActive && c.section === 'valuation');
+    const v = valuations.find((c) => /basic|0\.60/i.test(c.name)) ?? valuations[0];
     if (v) lines.push(line(v, 100));
     else warnings.push('No valuation line item is set up, so none was added.');
   }
@@ -183,6 +201,7 @@ const builderForm = z.object({
   cornellian: z.boolean().default(false),
   ownTruck: z.boolean().default(false),
   truckSize: z.enum(TRUCK_SIZES).default('16'),
+  truckCount: z.coerce.number().int().min(1).max(10).default(1),
   truckDays: hours('Truck days'),
   miles: z.string().trim().default(''),
   driveMinutes: z.string().trim().default(''),
@@ -241,6 +260,7 @@ export async function applyBuilder(ctx: BusinessContext, jobId: string, raw: unk
         cornellian: f.cornellian,
         ownTruck: f.ownTruck,
         truckSize: f.truckSize,
+        truckCount: f.truckCount,
         truckDaysHundredths: f.truckDays,
         distanceTenths,
         materials,
@@ -251,14 +271,17 @@ export async function applyBuilder(ctx: BusinessContext, jobId: string, raw: unk
       settings,
     );
     const existing = await quoteLines(s, quote.id);
-    if (f.replace) for (const l of existing) await archiveRecord(s, quoteLineEntity, l.id);
-    let order = f.replace ? 0 : existing.length;
+    // The builder prices the truck, so a truck line already on the quote (e.g. the default
+    // "16' Truck Local" every new local work request starts with) is replaced, never doubled.
+    const remove = f.replace ? existing : existing.filter((l) => isTruckLine(l.name));
+    for (const l of remove) await archiveRecord(s, quoteLineEntity, l.id);
+    let order = existing.length - remove.length;
     for (const l of result.lines) await createRecord(s, quoteLineEntity, { ...l, quoteId: quote.id, sortOrder: order++ });
     await updateRecord(s, jobEntity, job.id, {
       crewSize: f.crewSize,
       cornellian: f.cornellian,
       ownTruck: f.ownTruck,
-      trucks: f.ownTruck ? 0 : Math.max(job.trucks, 1),
+      trucks: f.ownTruck ? 0 : f.truckCount,
       distanceTenths,
       driveMinutes,
       distanceSource: distanceTenths === null ? null : job.distanceSource === 'maps' && job.distanceTenths === distanceTenths ? 'maps' : 'manual',
@@ -271,14 +294,18 @@ export async function applyBuilder(ctx: BusinessContext, jobId: string, raw: unk
   });
 }
 
-/** Fills the job's mileage and drive time from the maps adapter (only when a key is set). */
+/** Fills the job's mileage and drive time from the maps adapter (only when a key is set). The
+ *  outside call happens between two short transactions, never inside one. */
 export async function lookupMileage(ctx: BusinessContext, jobId: string) {
+  const { originAddress, destinationAddress } = await withScope(ctx, P.jobsWrite, async (s) => (await editableQuote(s, jobId)).job);
+  if (!originAddress || !destinationAddress) throw new ValidationError('Enter both addresses on the job first.');
+  const route = await routeBetween(originAddress, destinationAddress);
+  if (route === 'not_configured') throw new ValidationError('Automatic mileage is not set up yet (no maps key). Enter the miles by hand.');
+  if (!route) throw new ValidationError('The maps service could not find a driving route between those addresses. Check them, or enter the miles by hand.');
   return withScope(ctx, P.jobsWrite, async (s) => {
     const { job } = await editableQuote(s, jobId);
-    if (!job.originAddress || !job.destinationAddress) throw new ValidationError('Enter both addresses on the job first.');
-    const route = await routeBetween(job.originAddress, job.destinationAddress);
-    if (route === 'not_configured') throw new ValidationError('Automatic mileage is not set up yet (no maps key). Enter the miles by hand.');
-    if (!route) throw new ValidationError('The maps service could not find a driving route between those addresses. Check them, or enter the miles by hand.');
+    if (job.originAddress !== originAddress || job.destinationAddress !== destinationAddress)
+      throw new ValidationError('The addresses changed while looking up the mileage. Try again.');
     await updateRecord(s, jobEntity, job.id, { distanceTenths: route.distanceTenths, driveMinutes: route.driveMinutes, distanceSource: 'maps' });
     return route;
   });

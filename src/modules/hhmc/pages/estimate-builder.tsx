@@ -86,7 +86,7 @@ export function EstimateBuilder({
           <Field label="Unload (h)" htmlFor="b-unload"><input id="b-unload" name="unloadHours" inputMode="decimal" className={inputClass} placeholder="e.g. 1.5" /></Field>
           <Field label="Or total (h)" htmlFor="b-total" help="Used when 'One total' is chosen."><input id="b-total" name="totalHours" inputMode="decimal" className={inputClass} /></Field>
           <div className="flex items-end pb-2 sm:col-span-2">
-            <Check name="cornellian" defaultChecked={job.cornellian} label={`Cornellian: $${cornellianPerHour}/hr off labor`} />
+            <Check name="cornellian" defaultChecked={job.cornellian} label={`Cornellian: movers' rate $${cornellianPerHour}/hr lower`} />
           </div>
         </fieldset>
 
@@ -100,7 +100,8 @@ export function EstimateBuilder({
               {TRUCK_SIZES.map((t) => <option key={t} value={t}>{`${t}' truck`}</option>)}
             </Select>
           </Field>
-          <Field label="Truck days" htmlFor="b-days"><input id="b-days" name="truckDays" inputMode="decimal" defaultValue="1" className={inputClass} /></Field>
+          <Field label="Trucks" htmlFor="b-trucks"><input id="b-trucks" name="truckCount" type="number" min={1} max={10} defaultValue={Math.max(job.trucks, 1)} className={inputClass} /></Field>
+          <Field label="Days" htmlFor="b-days"><input id="b-days" name="truckDays" inputMode="decimal" defaultValue="1" className={inputClass} /></Field>
           <Field label="Miles" htmlFor="b-miles" help={`${longDistanceMiles}+ miles = long-distance rate (day fee + per mile).`}>
             <input id="b-miles" name="miles" inputMode="decimal" defaultValue={miles} className={inputClass} />
           </Field>
@@ -146,7 +147,7 @@ export function EstimateBuilder({
             </div>
           ))}
         </fieldset>
-        {hasLines ? <Check name="replace" label="Replace the lines already on the quote" /> : null}
+        {hasLines ? <Check name="replace" label="Replace all lines already on the quote (a truck line already there is always replaced)" /> : null}
       </ActionForm>
     </div>
   );

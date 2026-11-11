@@ -55,7 +55,9 @@ export async function listContacts(ctx: BusinessContext, options: { q?: string; 
       .orderBy(desc(sql`coalesce(${jobs.lastMove}, '0001-01-01')`), asc(customers.lastName), asc(customers.firstName))
       .limit(CONTACTS_PAGE_SIZE)
       .offset((page - 1) * CONTACTS_PAGE_SIZE);
-    return { rows: rows.map((r) => ({ ...r, jobs: Number(r.jobs ?? 0) })), total: Number(total) };
+    // Work-request numbers only for people who may see work requests.
+    const seesJobs = can(ctx, P.jobsRead);
+    return { rows: rows.map((r) => ({ ...r, jobs: seesJobs ? Number(r.jobs ?? 0) : null, lastMove: seesJobs ? r.lastMove : null })), total: Number(total) };
   });
 }
 
@@ -110,14 +112,14 @@ export async function listEstimates(ctx: BusinessContext, options: { status?: Es
     const base = s.db
       .select({ estimate: hhmcEstimates, job: hhmcJobs, customer: customers })
       .from(hhmcEstimates)
-      .innerJoin(hhmcJobs, and(eq(hhmcJobs.id, hhmcEstimates.jobId), s.where(hhmcJobs)))
-      .innerJoin(customers, and(eq(customers.id, hhmcJobs.customerId), s.where(customers)))
+      .innerJoin(hhmcJobs, and(eq(hhmcJobs.id, hhmcEstimates.jobId), s.where(hhmcJobs, 'include')))
+      .innerJoin(customers, and(eq(customers.id, hhmcJobs.customerId), s.where(customers, 'include')))
       .where(filter);
     const [{ total }] = await s.db
       .select({ total: count() })
       .from(hhmcEstimates)
-      .innerJoin(hhmcJobs, and(eq(hhmcJobs.id, hhmcEstimates.jobId), s.where(hhmcJobs)))
-      .innerJoin(customers, and(eq(customers.id, hhmcJobs.customerId), s.where(customers)))
+      .innerJoin(hhmcJobs, and(eq(hhmcJobs.id, hhmcEstimates.jobId), s.where(hhmcJobs, 'include')))
+      .innerJoin(customers, and(eq(customers.id, hhmcJobs.customerId), s.where(customers, 'include')))
       .where(filter);
     const rows = await base.orderBy(desc(hhmcEstimates.sentAt), desc(hhmcEstimates.version)).limit(ESTIMATES_PAGE_SIZE).offset((page - 1) * ESTIMATES_PAGE_SIZE);
     return { rows, total: Number(total) };

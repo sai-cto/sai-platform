@@ -49,7 +49,7 @@ export async function ContactsPage({ ctx, searchParams, basePath }: PortalPagePr
                 <tr key={customer.id} className="hover:bg-zinc-50">
                   <Td><Link className="font-medium hover:underline" href={`${base}/${customer.id}`}>{customerName(customer)}</Link></Td>
                   <Td><span className="block break-all">{customer.email ?? '—'}</span><span className="block text-xs text-zinc-500">{customer.phone ?? ''}</span></Td>
-                  <Td className="tabular-nums">{jobs}</Td>
+                  <Td className="tabular-nums">{jobs ?? '—'}</Td>
                   <Td className="whitespace-nowrap">{lastMove ? formatDay(lastMove) : '—'}</Td>
                   <Td className="text-right">
                     {canNew ? <Link className="text-xs whitespace-nowrap underline" href={`${basePath}/jobs/new?customer=${customer.id}`}>New estimate / work request</Link> : null}
@@ -80,7 +80,7 @@ export async function ContactPage({ ctx, params, basePath }: PortalPageProps) {
           <dl className="grid grid-cols-2 gap-x-6 gap-y-3 p-4 md:grid-cols-4">
             <Fact label="Email">{customer.email ?? '—'}</Fact>
             <Fact label="Phone">{customer.phone ?? '—'}</Fact>
-            <Fact label="Work requests">{String(jobs?.length ?? 0)}</Fact>
+            {jobs ? <Fact label="Work requests">{String(jobs.length)}</Fact> : null}
             {invoices ? <Fact label="Still to pay">{formatMoney(open)}</Fact> : null}
             {customer.notes ? <Fact label="Notes">{customer.notes}</Fact> : null}
             <Fact label="Contact since">{formatDateTime(customer.createdAt)}</Fact>

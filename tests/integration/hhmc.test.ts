@@ -29,6 +29,7 @@ import { createInvoice, openInvoiceByLink, payInvoiceByLink, recordInvoicePaymen
 import { addNote, cancelJob, createJob, markLost, moveStage, reopenJob, setAutomationOptIn } from '@/modules/hhmc/services/jobs';
 import { convertLead, conversionPreview, createLead, disqualifyLead, startNoContactEmails } from '@/modules/hhmc/services/leads';
 import { addQuoteLine, quoteSummary, setQuoteOptions } from '@/modules/hhmc/services/quote';
+import { applyBuilder } from '@/modules/hhmc/services/builder';
 import { USERS, ctxFor, logFor, systemContext } from './helpers';
 
 let counter = 0;
@@ -359,7 +360,7 @@ describe('leads', () => {
     expect(two.customerId).toBe(one.customerId);
     expect(two.reusedCustomer).toBe(true);
 
-    const namesake = await newLead(ctx, { firstName: first.firstName, lastName: first.lastName, email: `other.${tag()}@example.com`, phone: '607-555-9999' });
+    const namesake = await newLead(ctx, { firstName: first.firstName, lastName: first.lastName, email: `other.${tag()}@example.com`, phone: '607-555-0177' });
     const preview = await conversionPreview(ctx, namesake.id);
     expect(preview.match).toBeNull();
     expect(preview.duplicates.map((d) => d.id)).toContain(one.customerId);
@@ -779,5 +780,20 @@ describe('H4: the card fee is charged on card payments only', () => {
     const { recordDeposit } = await import('@/modules/hhmc/services/estimates');
     const cash = await recordDeposit(ctx, est.id, { method: 'cash', attemptKey: `c${tag()}x` });
     expect(cash.ok && cash.payment.amountCents).toBe(est.depositCents); // no fee on cash
+  });
+});
+
+describe('estimate builder on a real work request', () => {
+  it('a new local work request starts with the default truck line; building never doubles the truck', async () => {
+    const ctx = await admin();
+    const lead = await newLead(ctx);
+    const { customerId } = await convertLead(ctx, lead.id, {});
+    const job = await createJob(ctx, { customerId, serviceType: 'local', jobType: 'Local Full Service Move', crewSize: '2', trucks: '1' });
+    const before = await withScope(ctx, P.jobsRead, (s) => quoteSummary(s, job.id));
+    expect(before.lines.filter((l) => /truck/i.test(l.name))).toHaveLength(1);
+    await applyBuilder(ctx, job.id, { crewSize: '2', hoursMode: 'split', loadHours: '2', driveHours: '0.5', unloadHours: '1.5', truckSize: '16', truckCount: '1', truckDays: '1', miles: '12', valuation: false, replace: false, materials: {} });
+    const after = await withScope(ctx, P.jobsRead, (s) => quoteSummary(s, job.id));
+    expect(after.lines.filter((l) => /truck/i.test(l.name)).map((l) => l.name)).toEqual(["16' Truck Local"]);
+    expect(after.totals.subtotalCents).toBe(4 * 19500 + 19500);
   });
 });

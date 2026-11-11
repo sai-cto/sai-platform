@@ -18,7 +18,7 @@ import { CORE, P } from '../permissions';
 import type { AutomationTrigger } from '../schema';
 import { CATEGORIES, UNITS } from '../services/settings';
 import { settingsPage } from '../services/views';
-import { loadSettings } from '../settings';
+import { brandOf, loadSettings } from '../settings';
 import { Disclosure } from './disclosure';
 import { areaClass } from './jobs';
 import { Check, Select } from './parts';
@@ -61,6 +61,7 @@ export async function SettingsPage({ ctx, searchParams, basePath }: PortalPagePr
   const area: Area = AREAS.find((a) => a.key === searchParams.area)?.key ?? 'items';
   const consoleSettings = can(ctx, 'business.settings.read') ? <Link className="underline" href={`/console/${slug}/settings`}>Settings tab</Link> : 'Settings tab (tech team)';
   const templateFor = (key: string) => data.templates.find((t) => t.key === key);
+  const brand = brandOf(settings, ctx.business.name);
 
   return (
     <>
@@ -81,7 +82,7 @@ export async function SettingsPage({ ctx, searchParams, basePath }: PortalPagePr
       {area === 'items' ? (
         <div className="space-y-5">
           <p className="text-sm text-zinc-600">
-            The ready-made lines you pick on an estimate, grouped by cost category. The estimate builder uses the &quot;N Men&quot;, truck (&quot;16&apos; Truck Local&quot;, &quot;… Long Distance – Day&quot; / &quot;– Mileage&quot;) and &quot;Packing Labor&quot; items by name. Long distance starts at {settings.longDistanceMiles} miles; the Cornellian discount is ${settings.cornellianDiscountPerHour}/hr ({consoleSettings}).
+            The ready-made lines you pick on an estimate, grouped by cost category. The estimate builder uses the &quot;N Men&quot;, truck (&quot;16&apos; Truck Local&quot;, &quot;… Long Distance - Day&quot; / &quot;- Mileage&quot;) and &quot;Packing Labor&quot; items by name. Long distance starts at {settings.longDistanceMiles} miles; the Cornellian discount is ${settings.cornellianDiscountPerHour}/hr ({consoleSettings}).
           </p>
           {canWrite ? (
             <Card title="Add a line item">
@@ -200,10 +201,10 @@ export async function SettingsPage({ ctx, searchParams, basePath }: PortalPagePr
         <div className="space-y-5">
           <Card title="Branding on estimates and invoices" description={<>Changed in the console&apos;s {consoleSettings}.</>}>
             <div className="overflow-hidden rounded-md border border-zinc-200 text-sm">
-              <div className="px-4 py-3 text-white" style={{ backgroundColor: settings.brandColor }}>{settings.brandHeaderText || ctx.business.name}</div>
+              <div className="px-4 py-3 text-white" style={{ backgroundColor: brand.color }}>{brand.header}</div>
               <div className="space-y-1 px-4 py-3 text-zinc-600">
-                <p>{[settings.companyAddress, settings.companyPhone, settings.companyEmail, settings.companyWebsite].filter(Boolean).join(' · ') || 'No company details yet.'}</p>
-                <p className="text-xs">{settings.brandFooterText}</p>
+                <p>{brand.contact || 'No company details yet.'}</p>
+                <p className="text-xs">{brand.footer}</p>
               </div>
             </div>
           </Card>

@@ -205,13 +205,13 @@ export async function seedDemoData(s: Scope): Promise<void> {
       const truck = item("16' Truck Local");
       lines.push({ section: truck.section, name: truck.name, unit: truck.unit, catalogItemId: truck.id, qtyHundredths: 100, rateCents: truck.rateCents });
     } else {
-      const day = item("16' Truck Long Distance – Day");
-      const miles = item("16' Truck Long Distance – Mileage");
+      const day = item("16' Truck Long Distance - Day");
+      const miles = item("16' Truck Long Distance - Mileage");
       lines.push({ section: day.section, name: day.name, unit: day.unit, catalogItemId: day.id, qtyHundredths: 100, rateCents: day.rateCents });
       lines.push({ section: miles.section, name: miles.name, unit: miles.unit, catalogItemId: miles.id, qtyHundredths: (120 + i * 17) * 100, rateCents: miles.rateCents });
     }
     if (i % 4 === 1) {
-      const box = item('Medium Box');
+      const box = item('Medium Moving Box');
       lines.push({ section: box.section, name: box.name, unit: box.unit, catalogItemId: box.id, qtyHundredths: 1000, rateCents: box.rateCents });
     }
     return lines;

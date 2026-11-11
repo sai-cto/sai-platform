@@ -166,8 +166,8 @@ export async function calendarBetween(
       const rows = await s.db
         .select({ day: DAY_COLUMNS, job: JOB_COLUMNS, customer: CUSTOMER_COLUMNS })
         .from(hhmcJobDays)
-        .innerJoin(hhmcJobs, eq(hhmcJobs.id, hhmcJobDays.jobId))
-        .innerJoin(customers, eq(customers.id, hhmcJobs.customerId))
+        .innerJoin(hhmcJobs, and(eq(hhmcJobs.id, hhmcJobDays.jobId), s.where(hhmcJobs, 'include')))
+        .innerJoin(customers, and(eq(customers.id, hhmcJobs.customerId), s.where(customers, 'include')))
         .where(
           and(
             s.where(hhmcJobDays),
@@ -206,7 +206,7 @@ export async function calendarBetween(
           estimate: { id: hhmcEstimates.id, status: hhmcEstimates.status, expiresAt: hhmcEstimates.expiresAt },
         })
         .from(hhmcJobs)
-        .innerJoin(customers, eq(customers.id, hhmcJobs.customerId))
+        .innerJoin(customers, and(eq(customers.id, hhmcJobs.customerId), s.where(customers, 'include')))
         // The job's live estimate (at most one: a unique index). Void ones are never shown.
         .leftJoin(
           hhmcEstimates,
@@ -245,8 +245,8 @@ export async function calendarBetween(
       const rows = await s.db
         .select({ invoice: INVOICE_COLUMNS, job: JOB_COLUMNS, customer: CUSTOMER_COLUMNS })
         .from(hhmcInvoices)
-        .innerJoin(hhmcJobs, eq(hhmcJobs.id, hhmcInvoices.jobId))
-        .innerJoin(customers, eq(customers.id, hhmcInvoices.customerId))
+        .innerJoin(hhmcJobs, and(eq(hhmcJobs.id, hhmcInvoices.jobId), s.where(hhmcJobs, 'include')))
+        .innerJoin(customers, and(eq(customers.id, hhmcInvoices.customerId), s.where(customers, 'include')))
         .where(
           and(
             s.where(hhmcInvoices),

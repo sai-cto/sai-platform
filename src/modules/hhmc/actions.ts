@@ -271,6 +271,7 @@ export async function buildQuoteAction(slug: string, mode: string, jobId: string
       cornellian: ticked(form, 'cornellian'),
       ownTruck: ticked(form, 'ownTruck'),
       truckSize: text(form, 'truckSize') || '16',
+      truckCount: text(form, 'truckCount') || '1',
       truckDays: text(form, 'truckDays'),
       miles: text(form, 'miles'),
       driveMinutes: text(form, 'driveMinutes'),
