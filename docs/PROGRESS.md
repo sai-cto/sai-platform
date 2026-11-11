@@ -314,3 +314,31 @@ Review gate (fresh independent reviewer):
 `demo:prepare` was also run by hand against a scratch database: refused while it held an
 unrelated table (which survived, even with reset on), refused mismatched URLs, marked and seeded
 an empty database, and a reset wiped and re-seeded it.
+
+## Phase 5, part 3: the real-data pilot with Microsoft sign-in (11 Nov 2026)
+
+The CTO asked for Microsoft-only sign-in and real HHMC data, and chose "real data, staged" and
+"decide hosting later". Pilot mode (`PILOT_MODE=true`, DECISIONS P5-31 … P5-38): Microsoft
+sign-in only, live data never wiped, practice data only in Test mode, no customer email, no
+card payments in Live, a PILOT bar for staff. `docs/DEPLOY-DEMO.md` is now the pilot guide
+(Neon + Vercel + Microsoft Entra, 12 steps); the go-live list is in HANDOFF.
+
+Verified: `npm run check` (487 tests, 6 new in `tests/integration/pilot.test.ts`), `npm run
+test:e2e` (50), `npm run test:e2e:demo` (3). `demo:prepare` in pilot mode was run by hand on a
+scratch database: marked and seeded an empty one (0 live jobs, 17 test-mode jobs, no fake
+users), refused a reset, and the demo refused the pilot's database. The Microsoft start route
+redirects to `login.microsoftonline.com/<tenant>/…` with the right redirect URI. Microsoft
+sign-in itself has not been tried against a real directory yet.
+
+UI gate: `docs/screenshots/phase-5b/pilot-0*` (sign-in, job, invoice, customer page at 1440 and
+375): the bar is on staff pages and not on the customer's; Live offers check and cash only.
+
+Review gate (fresh independent reviewer):
+
+| Round | Result | What happened next |
+|---|---|---|
+| 1 | 0 high · 3 medium · 7 minor | Fixed (P5-32, P5-38): staff got every permission on real data; each deploy overwrote roles; a pilot address in a local `.env` could be seeded with fake users or signed into with the dev login. Minors fixed except "notifications stored as sent" and BRSS card option in Live (refused by the core anyway). |
+| 2 | **Nothing above minor**. Gate passed. | Fixed: test env restore, upper-case `LOCALHOST`, staff wording, decision order. Not changed: a redirect loop only possible when self-hosted behind a proxy that hides the public host. |
+
+An e2e run once failed 17 tests because a pilot preview server shared the `.next` folder; after
+clearing it the suite passed 50/50.

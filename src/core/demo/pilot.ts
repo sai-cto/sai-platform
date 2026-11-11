@@ -45,7 +45,7 @@ export function parsePilotAccounts(raw: string | undefined): { accounts: PilotAc
 export function isLocalDatabaseUrl(url: string | undefined): boolean {
   if (!url) return false;
   try {
-    const host = new URL(url).hostname;
+    const host = new URL(url).hostname.toLowerCase();
     return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
   } catch {
     return false;
