@@ -308,3 +308,9 @@ Review gate (fresh independent reviewer):
 | Round | Result | What happened next |
 |---|---|---|
 | 1 | 0 critical · 1 high · 4 medium · 7 minor | All fixed (DECISIONS P5-27 … P5-29). High: archiving a draft invoice's line from the Data tab left its total stale (a customer could be overcharged). |
+| 2 | 0 critical · 0 high · 2 medium · 6 minor | All fixed (P5-29, P5-30). Medium: removing a demo account would have failed the next deploy (the app role may not delete sessions: revoked instead); the "empty database" check only looked for one table (now: no tables anywhere, or the database's own demo mark). |
+| 3 | **Nothing above minor** (5 minor). Gate passed. | All five fixed (stricter emptiness check, quoting, the owner role refused as the app's connection, test and doc wording). |
+
+`demo:prepare` was also run by hand against a scratch database: refused while it held an
+unrelated table (which survived, even with reset on), refused mismatched URLs, marked and seeded
+an empty database, and a reset wiped and re-seeded it.

@@ -59,7 +59,8 @@ gm@hhmc.example|Pat Rivera|gm|Rb3n-Vz8q-Lc6y-Pd1t;sam@hhmc.example|Sam Lee|staff
 
 5. **Add the settings.** On the same screen open **Environment Variables**. Add each row below:
    type the name, paste the value, click **Add**. (Leave the environment ticks as they are:
-   only the **Production** site ever uses the database; previews of other code don't.)
+   only the **Production** site ever uses the database. If Vercel ever shows you a "preview"
+   deploy of other code, an error page there is expected and harmless.)
 
    | Name | Value |
    |---|---|

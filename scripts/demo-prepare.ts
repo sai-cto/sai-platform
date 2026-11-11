@@ -41,10 +41,13 @@ async function main() {
   if ((process.env.DEMO_ACCESS_PASSWORD ?? '').length < 12)
     throw new Error('DEMO_ACCESS_PASSWORD must be set (at least 12 characters). See docs/DEPLOY-DEMO.md.');
 
-  // The app's connection (DATABASE_URL, when given) must be the SAME database as the owner's.
+  // The app's connection (DATABASE_URL, when given) must be the SAME database as the owner's,
+  // and must NOT be the owner role (which would bypass row-level security).
   if (process.env.DATABASE_URL) {
     const a = new URL(process.env.DATABASE_URL);
     const b = new URL(ownerUrl);
+    if (a.username === b.username)
+      throw new Error('DATABASE_URL uses the owner role: the app must connect as the restricted role sai_app.');
     if (a.hostname.replace('-pooler.', '.') !== b.hostname.replace('-pooler.', '.') || a.port !== b.port || a.pathname !== b.pathname)
       throw new Error('DATABASE_URL and DATABASE_OWNER_URL point at different databases. Refusing to continue.');
   }
@@ -54,10 +57,13 @@ async function main() {
     // is a comment on the database itself, so it survives a wipe that is interrupted halfway.
     const [db] = await sql`select shobj_description(oid, 'pg_database') as note from pg_database where datname = current_database()`;
     if (db?.note !== DEMO_MARK) {
-      const [tables] = await sql`select count(*)::int as n from pg_tables where schemaname in ('public', 'drizzle')`;
+      // Any table, view or sequence in any schema except Postgres' own means "not empty".
+      const [tables] = await sql`select count(*)::int as n from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where c.relkind in ('r', 'p', 'v', 'm', 'S', 'f') and n.nspname not in ('pg_catalog', 'information_schema') and n.nspname not like 'pg_toast%'`;
       if (tables.n > 0)
         throw new Error('This database is not empty and is not marked as the demo database. Refusing to touch it. Use a new, empty database for the demo.');
-      await sql.unsafe(`comment on database "${(await sql`select current_database() as d`)[0].d.replace(/"/g, '')}" is '${DEMO_MARK}'`);
+      const name = String((await sql`select current_database() as d`)[0].d);
+      await sql.unsafe(`comment on database "${name.replace(/"/g, '""')}" is '${DEMO_MARK}'`);
       console.log('  Marked this empty database as the demo database.');
     }
     const [role] = await sql`select 1 from pg_roles where rolname = 'sai_app'`;

@@ -194,11 +194,13 @@ export async function ensureRow(s: Scope, entity: EntityDef, not?: string): Prom
     .where(and(s.where(entity.table), not ? ne(entity.table.id, not) : undefined))
     .orderBy(asc(entity.table.id))
     .limit(200);
-  // Prefer a row the module allows to be archived (tests archive the row they get).
+  // Prefer a row the module allows to be archived and restored (tests do both).
   let existing = candidates[0] as { id: unknown } | undefined;
-  if (entity.archiveGuard) {
+  if (entity.archiveGuard || entity.restoreGuard) {
     for (const row of candidates) {
-      if (!(await entity.archiveGuard(s, row as Record<string, unknown>))) {
+      const r = row as Record<string, unknown>;
+      // A row that can be archived AND brought back (tests archive, then restore).
+      if (!(await entity.archiveGuard?.(s, r)) && !(await entity.restoreGuard?.(s, r))) {
         existing = row as { id: unknown };
         break;
       }
