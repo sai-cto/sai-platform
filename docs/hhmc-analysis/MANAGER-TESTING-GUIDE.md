@@ -64,8 +64,8 @@ Please keep Movegistics running alongside for now: this pilot doesn't replace it
   which HHMC actually charges.
 - **Emails** the system would have sent are listed under the **Data** tab → Notifications.
 - **Adding a colleague** (general manager): **People and access** → **Add person**, with their
-  SAI Microsoft email. New staff can't book moves or send invoices until you switch those on
-  for them there.
+  SAI Microsoft email. New staff can't book moves, send invoices or record invoice payments
+  until you switch those on for them there.
 
 ## Found a problem or have an idea?
 

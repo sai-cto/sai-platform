@@ -14,7 +14,10 @@ import { upsertPilotAccounts } from '@/seed/demo-accounts';
 import { USERS, ctxFor } from './helpers';
 
 const saved = { ...process.env };
+const LOCAL_DATABASE_URL = process.env.DATABASE_URL;
+
 afterEach(() => {
+  process.env.DATABASE_URL = LOCAL_DATABASE_URL;
   for (const key of ['PILOT_MODE', 'AUTH_DEV_LOGIN', 'APP_URL', 'VERCEL_PROJECT_PRODUCTION_URL'])
     if (saved[key] === undefined) delete process.env[key];
     else process.env[key] = saved[key];
@@ -70,10 +73,8 @@ describe('pilot safety', () => {
     process.env.PILOT_MODE = 'true';
     expect(isDevLoginEnabled()).toBe(false);
     delete process.env.PILOT_MODE;
-    const local = process.env.DATABASE_URL;
     process.env.DATABASE_URL = 'postgres://u:p@ep-x.us-east-1.aws.neon.tech/neondb';
     expect(isDevLoginEnabled()).toBe(false);
-    process.env.DATABASE_URL = local;
   });
 
   it('live card payments are refused before anything is recorded; cash works; test mode keeps test cards', async () => {
