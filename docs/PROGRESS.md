@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: Phase 5 (HHMC module) built and verified; review gate passed (3 rounds), UI gate done (70 screenshots). Stopped before merge: `phase-4-brss` must be merged first._
+_Last updated: Phases 4 and 5 merged into `main` (11 Nov 2026). The HHMC test site is ready to deploy (`docs/DEPLOY-DEMO.md`); waiting for the CTO to deploy it._
 
 ## In plain English
 
@@ -47,8 +47,8 @@ without a BRSS manager (`src/modules/brss/README.md`, "Decisions waiting for the
 - **Phase 1 — shared core.** ✅ Done. Passed the independent review gate after four rounds (see below) and merged to `main`.
 - **Phase 2 — SAI Console.** ✅ Done. UI gate done (110 screenshots); passed the independent review gate after three rounds (see below) and merged to `main`.
 - **Phase 3 — module scaffolds.** ✅ Done. UI gate done (38 screenshots); passed the independent review gate after two rounds (see below) and merged to `main`.
-- **Phase 4 — BRSS proof module**, on branch `phase-4-brss`: built; UI gate done (86 screenshots); independent review gate running.
-- **Phase 5 — HHMC module**, on branch `claude/practical-brahmagupta-1o62aq` (based on `phase-4-brss`): built, verified, review and UI gates passed. **Not merged**: merge `phase-4-brss` first.
+- **Phase 4 — BRSS proof module.** ✅ Merged to `main` (its own review gate had not finished; see DECISIONS R-22).
+- **Phase 5 — HHMC module and test site.** ✅ Merged to `main`. Next: the CTO deploys the test site, then a live smoke test.
 
 ## Acceptance criteria (final)
 
@@ -71,8 +71,8 @@ without a BRSS manager (`src/modules/brss/README.md`, "Decisions waiting for the
 | 1 — Shared core | ✅ merged to `main` |
 | 2 — SAI Console | ✅ merged to `main` |
 | 3 — Module scaffolds | ✅ merged to `main` |
-| 4 — BRSS proof module | 🔨 built, review gate running |
-| 5 — HHMC module | ✅ built, gates passed; **waiting for the CTO to merge** (after `phase-4-brss`) |
+| 4 — BRSS proof module | ✅ merged to `main` |
+| 5 — HHMC module + test site | ✅ merged to `main`; test site waiting to be deployed |
 
 ## Last verification
 
