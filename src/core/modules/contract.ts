@@ -111,6 +111,20 @@ export type SettingField = {
   help?: string;
 };
 
+/**
+ * A kind of customer link (src/core/links): a signed, expiring link about one record that
+ * someone without an account can open, e.g. "review and sign this estimate".
+ */
+export type LinkPurposeDef = {
+  /** Must start with "<module key>.". */
+  key: string;
+  /**
+   * Exactly what the link may do. Module permissions, plus at most the core permissions in
+   * LINK_ALLOWED_CORE_PERMISSIONS (src/core/links/links.ts). Checked by validateRegistry().
+   */
+  permissions: string[];
+};
+
 export type ModuleManifest = {
   /** Must equal the slug of the business this module serves (the name used in its URLs). */
   key: string;
@@ -130,6 +144,8 @@ export type ModuleManifest = {
     /** Absent = this module has no field (mobile crew) portal yet. */
     field?: PortalDef;
   };
+  /** Customer links this module hands out. Served at /l/<token>/… from portals.customer. */
+  linkPurposes?: LinkPurposeDef[];
   widgets: WidgetDef[];
   /** The module's main unit of work, counted on the executive dashboard (for example "Orders"). */
   workItem?: {

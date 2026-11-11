@@ -6,6 +6,7 @@ import { getTableName } from 'drizzle-orm';
 import { MODULES } from '@/modules/registry';
 import type { EntityDef, ModuleManifest } from './contract';
 import { CORE_ACTIONS } from '../rbac/actions';
+import { LINK_ALLOWED_CORE_PERMISSIONS } from '../links/allowed';
 import { CORE_ENTITIES } from '../records/core-entities';
 
 export function getModules(): ModuleManifest[] {
@@ -73,6 +74,21 @@ export function validateRegistry(): string[] {
         problems.push(
           `Widget "${widget.key}" in ${mod.key} uses unknown permission "${widget.permission}".`,
         );
+    }
+    // Customer links: a purpose may hold only its module's permissions and a short list of
+    // core ones (never people, settings, data export or deletion).
+    const linkCore = new Set<string>(LINK_ALLOWED_CORE_PERMISSIONS);
+    for (const purpose of mod.linkPurposes ?? []) {
+      if (!purpose.key.startsWith(`${mod.key}.`))
+        problems.push(`Link purpose "${purpose.key}" must start with "${mod.key}.".`);
+      if (!mod.portals.customer)
+        problems.push(`Module ${mod.key} has link purposes but no customer portal to show them.`);
+      for (const permission of purpose.permissions) {
+        if (!permissionKeys.has(permission) && !linkCore.has(permission))
+          problems.push(
+            `Link purpose "${purpose.key}" may not hold "${permission}" (only ${mod.key} permissions and ${[...linkCore].join(', ')}).`,
+          );
+      }
     }
     if (mod.workItem && !mod.entities.some((e) => e.key === mod.workItem?.entityKey)) {
       problems.push(

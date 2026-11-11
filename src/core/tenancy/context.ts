@@ -50,10 +50,13 @@ export type PlatformContext = {
 export type BusinessContext = {
   kind: 'business';
   actor: Actor;
-  role: Role;
+  /** "customer_link": someone without an account, holding a customer link (src/core/links). */
+  role: Role | 'customer_link';
   business: BusinessRef;
   environment: Environment;
   permissions: ReadonlySet<string>;
+  /** Present only for a customer link: the one record the link is about. */
+  link?: { purpose: string; subjectId: string; expiresAt: Date };
 };
 
 export type AnyContext = PlatformContext | BusinessContext;

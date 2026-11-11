@@ -18,7 +18,8 @@ export async function seedRecords<T extends TenantTable>(
   rows: SeedRow<T>[],
 ): Promise<Row<T>[]> {
   authorize(s.ctx, entity.writePermission);
-  const isSystem = s.ctx.actor.id === null;
+  // A customer link also has no user id; it is never the system.
+  const isSystem = s.ctx.actor.id === null && !s.ctx.link && s.ctx.role !== 'customer_link';
   if (s.ctx.environment !== 'sandbox' && !isSystem) {
     throw new Error('seedRecords() can only write sandbox data (or run from the seed script).');
   }

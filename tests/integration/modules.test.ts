@@ -38,8 +38,9 @@ describe('the registered modules', () => {
     for (const entity of mod.entities) expect(entitiesFor(slug)).toContain(entity);
   });
 
-  it('HHMC and Real Estate are scaffolds whose scope is "pending requirements" — nothing is built for them', () => {
-    for (const slug of ['hhmc', 'sare']) {
+  // HHMC left this list in Phase 5: the CTO agreed its requirements (docs/DECISIONS.md, P5-0).
+  it('Real Estate is a scaffold whose scope is "pending requirements" — nothing is built for it', () => {
+    for (const slug of ['sare']) {
       const mod = getModule(slug)!;
       expect(mod.status).toBe('scaffold');
       expect(mod.plannedScope).toEqual(['Pending requirements']);

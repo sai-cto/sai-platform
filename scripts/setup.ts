@@ -21,7 +21,14 @@ function step(message: string) {
 
 function createEnvFile() {
   if (fs.existsSync(ENV_FILE)) {
-    console.log('  .env.local already exists, leaving it alone.');
+    // Added after the first release: give an older .env.local the secrets it is missing.
+    const existing = fs.readFileSync(ENV_FILE, 'utf8');
+    if (!/^LINK_SIGNING_SECRET=.+$/m.test(existing)) {
+      fs.appendFileSync(ENV_FILE, `\nLINK_SIGNING_SECRET=${crypto.randomBytes(32).toString('hex')}\n`);
+      console.log('  .env.local already exists; added a generated LINK_SIGNING_SECRET.');
+    } else {
+      console.log('  .env.local already exists, leaving it alone.');
+    }
     return;
   }
   const port = '5433';
@@ -41,6 +48,7 @@ function createEnvFile() {
     AUTH_DEV_LOGIN: 'true',
     FILE_STORAGE_DIR: './storage',
     PAYMENT_PROVIDER: 'mock',
+    LINK_SIGNING_SECRET: crypto.randomBytes(32).toString('hex'),
   };
   const template = fs.readFileSync(path.join(ROOT, '.env.example'), 'utf8');
   const filled = template

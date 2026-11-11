@@ -10,12 +10,14 @@ export type PlatformRole = (typeof PLATFORM_ROLES)[number];
 export type BusinessRole = (typeof BUSINESS_ROLES)[number];
 export type Role = (typeof ROLES)[number];
 
-export const ROLE_LABELS: Record<Role, string> = {
+/** Labels, plus the one non-role a context can carry: a customer holding a link (src/core/links). */
+export const ROLE_LABELS: Record<Role | 'customer_link', string> = {
   super_admin: 'Super admin',
   tech: 'Tech team',
   executive: 'Executive',
   business_admin: 'Business admin',
   business_staff: 'Business staff',
+  customer_link: 'Customer (link)',
 };
 
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
