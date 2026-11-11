@@ -140,10 +140,12 @@ test('test mode: a persistent indicator, and sandbox data that is separate from 
 
   // Archiving a sandbox customer does not touch live.
   const liveBefore = await asOwner(async (sql) => Number((await sql`select count(*)::int as n from customers c join businesses b on b.id = c.business_id where b.slug = 'brss' and c.environment = 'live' and c.archived_at is null`)[0].n));
+  const sandboxCustomers = () => asOwner(async (sql) => Number((await sql`select count(*)::int as n from customers c join businesses b on b.id = c.business_id where b.slug = 'brss' and c.environment = 'sandbox' and c.archived_at is null`)[0].n));
+  const before = await sandboxCustomers();
   await page.goto('/console/brss/sandbox/data/core.customer');
   await page.getByRole('button', { name: 'Archive' }).first().click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Archive' }).click();
-  await expect(page.getByText('1–11 of 11')).toBeVisible();
+  await expect(page.getByText(`1–${before - 1} of ${before - 1}`)).toBeVisible();
   const liveAfter = await asOwner(async (sql) => Number((await sql`select count(*)::int as n from customers c join businesses b on b.id = c.business_id where b.slug = 'brss' and c.environment = 'live' and c.archived_at is null`)[0].n));
   expect(liveAfter).toBe(liveBefore);
 
@@ -152,8 +154,10 @@ test('test mode: a persistent indicator, and sandbox data that is separate from 
   await page.getByRole('button', { name: 'Reset sandbox' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Reset sandbox' }).click();
   await expect(page.getByText(/Last reset .* by Blake BRSS-Admin/)).toBeVisible();
+  // The fresh sandbox has the full set of fake customers again (as many as live started with).
+  expect(await sandboxCustomers()).toBe(before);
   await page.goto('/console/brss/sandbox/data/core.customer');
-  await expect(page.getByText('1–12 of 12')).toBeVisible();
+  await expect(page.getByText(`1–${before} of ${before}`)).toBeVisible();
 
   // Back to live: the indicator is gone.
   await page.getByRole('group', { name: 'Data mode' }).getByRole('link', { name: 'Live' }).click();

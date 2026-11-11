@@ -47,6 +47,12 @@ export async function PortalHost({
     (Page as (p: PortalPageProps) => ReactNode | Promise<ReactNode>)(props),
   );
 
+  // Which nav item is "here": the one whose path starts the current path. A page that belongs
+  // to no item (for example a detail page) lights up the portal's home item.
+  const matches = (item: { path: string }) =>
+    item.path !== '' && (current === item.path || current.startsWith(`${item.path}/`));
+  const activePath = nav.find(matches)?.path ?? '';
+
   return (
     <div>
       {nav.length > 1 ? (
@@ -55,10 +61,7 @@ export async function PortalHost({
           className="mb-4 flex gap-1 overflow-x-auto rounded-lg border border-zinc-200 bg-zinc-50 p-1"
         >
           {nav.map((item) => {
-            const active =
-              item.path === ''
-                ? current === ''
-                : current === item.path || current.startsWith(`${item.path}/`);
+            const active = item.path === activePath;
             return (
               <Link
                 key={item.path}

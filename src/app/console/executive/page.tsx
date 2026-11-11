@@ -125,16 +125,25 @@ export default async function ExecutivePage({
                 <Td className="text-right tabular-nums">{formatMoneyShort(r.revenueCents)}</Td>
                 <Td className="text-right tabular-nums">{formatNumber(r.payments)}</Td>
                 <Td className="text-right tabular-nums">
-                  {r.workItems === null ? (
-                    <span
-                      className="text-zinc-400"
-                      title="This business's module does not count work items yet"
-                    >
-                      —
-                    </span>
-                  ) : (
-                    formatNumber(r.workItems)
-                  )}
+                  <span data-testid="work-items">
+                    {r.workItems === null ? (
+                      <span
+                        className="text-zinc-400"
+                        title="This business's module does not count work items yet"
+                      >
+                        —
+                      </span>
+                    ) : (
+                      <>
+                        {formatNumber(r.workItems)}
+                        {r.workItemLabel ? (
+                          <span className="ml-1 text-xs text-zinc-500">
+                            {r.workItemLabel.toLowerCase()}
+                          </span>
+                        ) : null}
+                      </>
+                    )}
+                  </span>
                 </Td>
                 <Td className="text-right tabular-nums">{formatNumber(r.activity)}</Td>
                 <Td>

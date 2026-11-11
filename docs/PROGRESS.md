@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: Phase 3 (module scaffolds) passed its review gate and is merged to `main`; Phase 4 (BRSS) is being built._
+_Last updated: Phase 4 (BRSS staff portal) built, verified and looked at as every role; independent review gate running._
 
 ## In plain English
 
@@ -24,14 +24,23 @@ All nine businesses are registered as modules. Until a business's own staff port
 its App tab shows a tidy "not built yet" page with its planned scope; everything else in the
 console already works for it.
 
-**What is not there yet:** the BRSS staff portal (Phase 4, being built now).
+**The first real business app is BRSS's staff portal** (Big Red Shipping & Storage → App):
+an orders dashboard, an order page (customer, articles with status and warehouse location,
+charges, payments, appointments), article intake, the schedule with unavailability, warehouses
+and trucks, the price list with storage terms, and zip zones. It follows the rules found in the
+old Salesforce system; each rule is listed with its Salesforce source in
+`src/modules/brss/RULES.md`. Screenshots: `docs/screenshots/phase-4/`.
+
+**What is not real yet:** BRSS's prices, zones and rates are invented, no card company or email
+service is connected, and twelve questions about how BRSS works were answered conservatively
+without a BRSS manager (`src/modules/brss/README.md`, "Decisions waiting for the CTO").
 
 ## Current phase and task
 
 - **Phase 1 — shared core.** ✅ Done. Passed the independent review gate after four rounds (see below) and merged to `main`.
 - **Phase 2 — SAI Console.** ✅ Done. UI gate done (110 screenshots); passed the independent review gate after three rounds (see below) and merged to `main`.
 - **Phase 3 — module scaffolds.** ✅ Done. UI gate done (38 screenshots); passed the independent review gate after two rounds (see below) and merged to `main`.
-- Now: **Phase 4 — BRSS proof module**, on branch `phase-4-brss` (in progress).
+- **Phase 4 — BRSS proof module**, on branch `phase-4-brss`: built; UI gate done (86 screenshots); independent review gate running.
 
 ## Acceptance criteria (final)
 
@@ -43,7 +52,7 @@ console already works for it.
 | ✅ | Archive → restore works; permanent delete only for super_admin and only past retention; every action appears in the activity log _(data layer and end-to-end through the screens)_ |
 | ✅ | Test mode clearly separates sandbox data from live data, with a persistent visual indicator _(striped banner + yellow frame on every sandbox page; `/sandbox/` in the address)_ |
 | ✅ | All 9 modules are registered; adding a 10th by following `MODULE_GUIDE.md` requires no core changes _(registering the nine changed no code in `src/core` or `src/app`; the Phase 3 reviewer added a made-up tenth module by following the guide, with no core changes and every check green)_ |
-| ❌ | The BRSS staff portal covers the listed workflows end to end on seed data, with ported rules documented and source-cited _(Phase 4)_ |
+| ✅ | The BRSS staff portal covers the listed workflows end to end on seed data, with ported rules documented and source-cited _(`tests/e2e/brss.spec.ts` walks an order from creation to closing in a browser; `src/modules/brss/RULES.md` cites 84 rules; review gate still running)_ |
 | ✅ | Typecheck, lint, unit and end-to-end tests all pass; the secret scan is clean _(as of the last verification below)_ |
 
 ## Phase checklist
@@ -54,7 +63,7 @@ console already works for it.
 | 1 — Shared core | ✅ merged to `main` |
 | 2 — SAI Console | ✅ merged to `main` |
 | 3 — Module scaffolds | ✅ merged to `main` |
-| 4 — BRSS proof module | ⏳ |
+| 4 — BRSS proof module | 🔨 built, review gate running |
 
 ## Last verification
 
@@ -183,3 +192,31 @@ tested the acceptance criterion directly: it invented a tenth business and follo
 Left as a known minor item: the "no business is named in the core" test is a text search; a
 future business whose short code is also an ordinary word in the code (for example `CSV`) would
 trip it and need the test adjusted.
+
+### Phase 4 — BRSS proof module (10 Nov 2026)
+
+```
+npm run check
+  tsc --noEmit            clean
+  eslint                  clean
+  vitest run              Test Files 12 passed (12) · Tests 422 passed (422)
+  secret scan             clean
+npm run test:e2e          47 passed (auth 11 · brss 6 · console 12 · isolation 12 · modules 6)
+```
+
+UI gate: signed in as BRSS admin, BRSS staff, a new hire with nothing granted, the executive,
+the super admin, the tech user and another business's admin, and opened every BRSS screen at
+1440px and 375px: 86 screenshots in `docs/screenshots/phase-4/`. Found and fixed while looking
+and while driving the screens from the browser tests:
+
+- a refused form lost everything that had been typed into it (fixed for every form in the console);
+- the "Clear" link on a filter bar left the old values in the fields;
+- a section that opened itself (for example "Take in an article" on an empty order) snapped shut
+  after the first save, hiding the "Added" message;
+- price fields on the Pricing page were squeezed to a sliver;
+- charges were listed in a random order; long charge names wrapped badly on a phone;
+- too many black buttons on the schedule; duplicate fake crew names.
+
+One thing to know when running the app locally: starting a second `npm run dev` (or the browser
+tests) before an earlier dev server has fully stopped can make pages reload in a loop. Stop the
+old one first (`pkill -f next-server`).

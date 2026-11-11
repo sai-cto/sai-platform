@@ -1,4 +1,4 @@
-/** Phase 3: every business has a registered module with a clean "not built yet" staff portal. */
+/** Every business has a registered module: a real staff portal, or a clean "not built yet" page. */
 import { expect, test } from '@playwright/test';
 import { SEED, asOwner, businessCount, loginAs } from './helpers';
 
@@ -8,8 +8,10 @@ test('every business shows its module in the App tab', async ({ page }) => {
   await loginAs(page, SEED.superAdmin);
   for (const b of businesses) {
     await page.goto(`/console/${b.slug}/live/app`);
-    await expect(page.getByRole('heading', { name: b.name, level: 1 })).toBeVisible();
-    await expect(page.getByText('Planned scope')).toBeVisible();
+    // A module that is not built yet shows its placeholder; a built one shows its own sections.
+    const placeholder = page.getByRole('heading', { name: b.name, level: 1 });
+    const sections = page.getByRole('navigation', { name: 'App sections' });
+    await expect(placeholder.or(sections)).toBeVisible();
     await expect(page.getByText('No app yet')).toHaveCount(0);
   }
 });

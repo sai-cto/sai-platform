@@ -10,6 +10,7 @@ them contains a business's name.
 
 - The contract: `ModuleManifest` in `src/core/modules/contract.ts`.
 - A working example to copy: `src/modules/_template/` (type-checked, not registered).
+- A complete real module to learn from: `src/modules/brss/` (start with its `README.md`, then `rules.ts`).
 - The nine registered modules: `src/modules/registry.ts`.
 
 ## The contract
@@ -66,7 +67,8 @@ review.
    then `npm run db:migrate`.
 7. **Define permissions** (`permissions.ts`) and **entities** (`entities.ts`). Register *every*
    table as an entity, parents before children.
-8. **Write services** in `services/`. Reads use `withScope` + `listRecords`/`getRecord` (or a
+8. **Put business rules in `rules.ts`** as plain functions (no database), one per rule, each
+   with a test. Then **write services** in `services/`. Reads use `withScope` + `listRecords`/`getRecord` (or a
    query that includes `s.where(table)`); writes use `createRecord`, `updateRecord`,
    `archiveRecord`, `restoreRecord`. Never write another way.
 9. **Write pages** in `pages/` and list them in `portals.staff.routes`. Each route names the
@@ -169,6 +171,11 @@ customers sign in (see `docs/HANDOFF.md`). Until it is, those portals use the co
 - **A staff member cannot open a page.** The route's permission is not granted to them; a
   business admin switches it on in People and access.
 - **The sandbox reset fails.** An entity is listed before the entity it depends on.
+- **Two people did the same thing at the same moment and it happened twice.** Call
+  `takeLock(s, 'some-name')` (`@/core/db/lock`) at the start of the service, before reading the
+  rows it decides on. For running numbers use `nextRecordNumber()` (`@/core/records/numbering`).
+- **A service throws instead of returning a rejected promise.** Declare service functions
+  `async`, so a validation error always arrives the same way.
 - **"Cannot read properties of undefined" as soon as the app or a test starts.** A file in the
   module uses a *value* from one of the core's services at the top level of the file (outside
   any function), for example `const schema = someCoreSchema.extend(...)`. The core and the

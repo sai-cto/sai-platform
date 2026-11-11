@@ -21,7 +21,8 @@ export async function loginAs(page: Page, email: string): Promise<void> {
   await page.context().clearCookies();
   await page.goto('/login');
   await page.getByRole('button', { name: new RegExp(email.replace(/\./g, '\\.')) }).click();
-  await expect(page).toHaveURL(/\/console/);
+  // Generous: the very first page after the test server starts can take a while to build.
+  await expect(page).toHaveURL(/\/console/, { timeout: 30_000 });
 }
 
 /** The tabs shown in a business's header, in order. */

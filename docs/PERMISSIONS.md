@@ -86,7 +86,18 @@ New staff members start with: `customers.read`, `scheduling.read`, plus their mo
 Every module permission follows one of two standard rows: a `read` permission is ✅ for super admin,
 tech, executive and business admin and 🔑 for staff; a `write` permission is the same except — for executive.
 
-_No module defines its own permissions yet._
+### Big Red Shipping & Storage (`brss`)
+
+| Action | Key | Type | Super admin | Tech team | Executive | Business admin | Business staff |
+|---|---|---|:-:|:-:|:-:|:-:|:-:|
+| See orders *(on by default for new staff)* | `brss.orders.read` | read | ✅ | ✅ | ✅ | ✅ | 🔑 |
+| Process orders: create and change orders, take in articles, add charges, change order status | `brss.orders.write` | write | ✅ | ✅ | — | ✅ | 🔑 |
+| Give a discount above the staff limit | `brss.orders.discount_any` | write | ✅ | ✅ | — | ✅ | 🔑 |
+| See articles (boxes and items) *(on by default for new staff)* | `brss.articles.read` | read | ✅ | ✅ | ✅ | ✅ | 🔑 |
+| Change an article's details, status and warehouse location *(on by default for new staff)* | `brss.articles.write` | write | ✅ | ✅ | — | ✅ | 🔑 |
+| Book an appointment at a blocked time or at short notice | `brss.appointments.override` | write | ✅ | ✅ | — | ✅ | 🔑 |
+| See prices, storage terms, zones, buildings and warehouses *(on by default for new staff)* | `brss.catalog.read` | read | ✅ | ✅ | ✅ | ✅ | 🔑 |
+| Change prices, storage terms, zones, buildings and warehouses | `brss.catalog.write` | write | ✅ | ✅ | — | ✅ | 🔑 |
 
 ## Rules that are not a single cell
 
