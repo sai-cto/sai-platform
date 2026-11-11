@@ -27,21 +27,21 @@ The switch at the top right says **Live** or **Test mode**.
   so you can try every step, including paying by card.
 - **Live** is for HHMC's real jobs. It starts empty.
 
-The app has five sections: **Dashboard, Leads, Jobs, Schedule, Invoices** (plus **Settings**).
-Each move lives on **one Job page**: its price, estimate, booking, days, invoice, payments,
-calls and notes.
+The menu: **Dashboard, Leads, Estimates, Work Requests, Contacts, Calendar, Invoices** (plus
+**Settings**). Each move lives on **one work request page** (the "job"): its price, estimate,
+booking, days, invoice, payments, calls and notes.
 
 ## Five things to try in Test mode (about 20 minutes)
 
 1. **A new lead.** Leads → **Add lead**. Fill in a name, an email (a made-up address such as
    `test1@example.com`), a source and a move date. Then **Convert to job**.
-2. **Price it.** On the Job page, in **Quote**, pick an item (for example "2 Men"), enter the
+2. **Price it.** On the work request page, in **Quote**, pick an item (for example "2 Men"), enter the
    hours and click **Add line**. The totals update as you type. The 16' truck is already there.
 3. **Send the estimate.** Click **Send estimate**, then **Copy link**, and open that link in a
    **private / incognito window**: you are now the customer. Go through the 4 steps, sign, and
    **Pay deposit** with the test card.
-4. **Book it.** Back on the Job page (reload it) you'll see **Ready to book**. Click **Book this
-   move** and check it on the **Schedule** (Day / Week / Month).
+4. **Book it.** Back on the work request page (reload it) you'll see **Ready to book**. Click **Book this
+   move** and check it on the **Calendar**.
 5. **Invoice and get paid.** Enter the actual hours worked and click **Create invoice**, then
    **Send invoice**. Use **Copy payment link** to pay as the customer, or **Receive a payment**
    for a check. The job moves to **Closed**.
@@ -51,7 +51,7 @@ calls and notes.
 Switch to **Live** and do the same steps with a real customer. The differences are:
 
 - send the estimate link to the customer yourself;
-- take the deposit as **cash or check** with **Record deposit** on the Job page, and the
+- take the deposit as **cash or check** with **Record deposit** on the work request page, and the
   balance with **Receive a payment** on the invoice.
 
 Please keep Movegistics running alongside for now: this pilot doesn't replace it yet.
