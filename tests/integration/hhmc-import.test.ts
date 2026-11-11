@@ -198,6 +198,7 @@ describe('the loader matches phones only against customers from before the run',
     const extra = '\n"CN900020","Sam","Nomail","","+1 607-555-0178","","Hired  Hands","","","","03/01/2026","03/01/2026","","","","","","","","","","","",""\n"CN900021","Lee","Hasmail","lee.hasmail@example.com","+1 607-555-0178","","Hired  Hands","","","","03/02/2026","03/02/2026","","","","","","","","","","","",""\n';
     const run = await loadIntoHhmc(batch, normalize({ ...files, contacts: files.contacts.trimEnd() + extra }));
     expect(run.ids.get('contact:CN900020')).toBeTruthy();
+    expect(run.ids.get('contact:CN900021')).toBeTruthy();
     expect(run.ids.get('contact:CN900021')).not.toBe(run.ids.get('contact:CN900020'));
   });
 });

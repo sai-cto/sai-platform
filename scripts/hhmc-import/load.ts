@@ -65,7 +65,11 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
     people: await scope.db.select({ id: customers.id, email: customers.email, phone: customers.phone }).from(customers).where(scope.where(customers, 'include')),
   }));
   const customerByEmail = new Map(people.filter((p) => p.email).map((p) => [p.email!.toLowerCase(), p.id]));
-  const customerByPhone = new Map(people.filter((p) => p.phone).map((p) => [p.phone!.replace(/\D/g, '').slice(-10), { id: p.id, email: p.email?.toLowerCase() ?? null }]));
+  // A phone shared by several existing customers says nothing about who someone is: not used.
+  const phoneOf = (p: { phone: string | null }) => p.phone!.replace(/\D/g, '').slice(-10);
+  const phoneUses = new Map<string, number>();
+  for (const p of people) if (p.phone) phoneUses.set(phoneOf(p), (phoneUses.get(phoneOf(p)) ?? 0) + 1);
+  const customerByPhone = new Map(people.filter((p) => p.phone && phoneUses.get(phoneOf(p)) === 1).map((p) => [phoneOf(p), { id: p.id, email: p.email?.toLowerCase() ?? null }]));
   /** Same person? Email first; a phone only when the emails don't disagree (a shared household or
    *  business line is not the same person). Mirrors contactFor() in movegistics.ts. */
   const existingCustomer = (email: string | null, phone: string | null): string | null => {
