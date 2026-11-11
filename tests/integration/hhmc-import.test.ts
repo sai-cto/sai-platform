@@ -166,3 +166,38 @@ describe('re-running the import on a changed export', () => {
     await loadIntoHhmc(batch, normalize(files));
   });
 });
+
+describe('re-running the import: deposits and shared phones', () => {
+  it('an estimate with a deposit still takes Movegistics changes (the deposit is part of its own import)', async () => {
+    const ctx = await systemContext('hhmc', 'live');
+    const batch = <T>(fn: (s: Scope) => Promise<T>) => withScope(ctx, 'hhmc.import.run', fn);
+    const base = await loadIntoHhmc(batch, normalize(files));
+    const id = base.ids.get('estimate:ES900001')!;
+    const signed = await batch(async (s) => (await s.db.select().from(hhmcEstimates).where(and(s.where(hhmcEstimates), eq(hhmcEstimates.id, id))))[0]);
+    expect(signed.depositPaidCents).toBe(16008);
+    const run = await loadIntoHhmc(batch, normalize({ ...files, estimates: files.estimates.replace('"ES900001","Local Estimate for Avery Fixture","800.40","Signed"', '"ES900001","Local Estimate for Avery Fixture","800.40","Void"') }));
+    expect(run.stats.estimate.kept).toBe(0);
+    const voided = await batch(async (s) => (await s.db.select().from(hhmcEstimates).where(and(s.where(hhmcEstimates), eq(hhmcEstimates.id, id))))[0]);
+    expect(voided.status).toBe('void');
+    await loadIntoHhmc(batch, normalize(files)); // restore
+  });
+
+  it('someone without an email, then someone else with an email on the same phone: two customers', () => {
+    const n = normalize({
+      ...files,
+      contacts: files.contacts.trimEnd() + '\n"CN900010","Pat","Nomail","","+1 607-555-0177","","Hired  Hands","","","","03/01/2026","03/01/2026","","","","","","","","","","","",""\n"CN900011","Robin","Hasmail","robin.hasmail@example.com","+1 607-555-0177","","Hired  Hands","","","","03/02/2026","03/02/2026","","","","","","","","","","","",""\n',
+    });
+    expect(n.contacts.filter((c) => c.phone === '6075550177').map((c) => c.sid)).toEqual(['CN900010', 'CN900011']);
+  });
+});
+
+describe('the loader matches phones only against customers from before the run', () => {
+  it('two people on one phone (the first without an email) become two customers', async () => {
+    const ctx = await systemContext('hhmc', 'live');
+    const batch = <T>(fn: (s: Scope) => Promise<T>) => withScope(ctx, 'hhmc.import.run', fn);
+    const extra = '\n"CN900020","Sam","Nomail","","+1 607-555-0178","","Hired  Hands","","","","03/01/2026","03/01/2026","","","","","","","","","","","",""\n"CN900021","Lee","Hasmail","lee.hasmail@example.com","+1 607-555-0178","","Hired  Hands","","","","03/02/2026","03/02/2026","","","","","","","","","","","",""\n';
+    const run = await loadIntoHhmc(batch, normalize({ ...files, contacts: files.contacts.trimEnd() + extra }));
+    expect(run.ids.get('contact:CN900020')).toBeTruthy();
+    expect(run.ids.get('contact:CN900021')).not.toBe(run.ids.get('contact:CN900020'));
+  });
+});

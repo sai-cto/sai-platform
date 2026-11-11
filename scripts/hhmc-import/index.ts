@@ -32,6 +32,7 @@ const EXPLANATIONS: Record<string, string> = {
   'PAID invoices whose exported "Balance Due" was not zero (treated as fully paid)': 'Movegistics leaves "Balance Due" at the full amount on these PAID invoices; see "Open balance" above, including how many are not covered by payments.',
   'records linked by work request title alone (contact name differs)': 'The title matched exactly one work request but the contact name on the estimate / invoice / work order differs (e.g. renamed contact). Linked; worth a spot check.',
   'duplicate estimate ids in the export (second copy skipped)': 'The same id twice in one export.',
+  'payments naming an invoice that is not in the invoices export': 'Linked to the customer (and a deposit to their work request) instead; counted in "collected".',
   'duplicate invoice ids in the export (second copy skipped)': 'The same id twice in one export.',
   'duplicate payment ids in the export (second copy skipped)': 'The same id twice in one export.',
 };

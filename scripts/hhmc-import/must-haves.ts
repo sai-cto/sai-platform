@@ -20,7 +20,7 @@ function check(ok: unknown, what: string) {
 async function main() {
   loadEnv();
   const db = new URL(requireEnv('DATABASE_URL'));
-  if (!db.pathname.endsWith('_copy') || !['127.0.0.1', 'localhost', '[::1]'].includes(db.hostname) || db.searchParams.has('host')) throw new Error('Refusing: run this only against a local copy whose name ends in "_copy".');
+  if (!db.pathname.endsWith('_copy') || !['127.0.0.1', 'localhost', '[::1]'].includes(db.hostname) || db.searchParams.has('host') || db.searchParams.has('hostaddr')) throw new Error('Refusing: run this only against a local copy whose name ends in "_copy".');
   // Pilot / demo mode would force the printing email channel; a real card provider must never be used.
   if (process.env.PILOT_MODE === 'true' || process.env.DEMO_MODE === 'true') throw new Error('Refusing: unset PILOT_MODE and DEMO_MODE first.');
   process.env.PAYMENT_PROVIDER = 'mock';

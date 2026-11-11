@@ -337,7 +337,9 @@ npm run check            typecheck, lint clean · 21 files, 522 tests passed · 
 npm run test:e2e         50 passed (before the importer commits; re-run below)
 review gate              round 1 (Part 3 screens): 1 high, 5 medium, 8 minor → all fixed (fdf0ae0)
 review gate              round 2 (importer, scan): 2 high, 8 medium, minors → fixed (P5C-18)
-review gate              round 3: 1 high, 7 medium, minors → fixed (P5C-19); round 4 below
+review gate              round 3: 1 high, 7 medium, minors → fixed (P5C-19)
+review gate              round 4: 0 high, 2 medium → fixed (P5C-20); minors logged
+npm run check            528 tests passed; scan clean
 npm run test:e2e         50 passed (after round 2 fixes)
 ```
 

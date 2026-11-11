@@ -122,7 +122,8 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
         .from(entity.table)
         .where(and(s.where(entity.table, 'include'), eq(entity.table.id, ref.recordId)))
         .limit(1);
-      if (!current || current.updatedBy || current.archivedAt || new Date(current.updatedAt as Date).getTime() > ref.importedAt.getTime() + 1000) {
+      if (!current) throw new Error(`Refusing: an imported ${type} was permanently deleted in SAI; remove its import link (hhmc_import_refs) on purpose before re-importing it.`);
+      if (current.updatedBy || current.archivedAt || new Date(current.updatedAt as Date).getTime() > ref.importedAt.getTime() + 1000) {
         tally(type, 'kept');
         return { id: ref.recordId, created: false, updated: false };
       }
@@ -154,7 +155,8 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
     const { id, created } = await upsert('contact', c.sid, customerEntity, { kind: 'person', firstName: c.firstName, lastName: c.lastName, email: c.email, phone: c.phone, notes: c.notes, externalRef: `movegistics:${c.sid}` }, { createdOn: c.createdOn, existing: refs.has(`contact:${c.sid}`) ? null : existing });
     if (created) {
       if (c.email) customerByEmail.set(c.email, id);
-      if (c.phone && !customerByPhone.has(c.phone)) customerByPhone.set(c.phone, { id, email: c.email });
+      // Not added to the phone map: within one run, normalize() has already decided who is the
+      // same person; phone matching is only for customers that existed before this run.
     }
   });
   const customerId = (sid: string | null) => (sid ? (ids.get(`contact:${sid}`) ?? null) : null);
@@ -208,6 +210,16 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
     for (const d of days) await createRecord(s, jobDayEntity, { jobId, dayDate: d, startTime: '08:00', durationMinutes: Math.round(settings.defaultJobHours * 60), crewSize: 2, trucks: 1 });
   });
 
+  // Deposits are paid on the work request's estimate in force; worked out first so they are part of
+  // the estimate's own imported values (its hash, its "kept in SAI" check, one write).
+  const inForce = new Map<string, string>(); // job sid → its estimate in force
+  for (const e of n.estimates) if (e.status === 'signed' || ((e.status === 'sent' || e.status === 'viewed') && !inForce.has(e.jobSid))) inForce.set(e.jobSid, e.sid);
+  const depositPaid = new Map<string, number>();
+  for (const p of n.payments) {
+    const estimateSid = !p.invoiceSid && p.jobSid ? inForce.get(p.jobSid) : undefined;
+    if (estimateSid) depositPaid.set(estimateSid, (depositPaid.get(estimateSid) ?? 0) + p.amountCents - p.refundedCents);
+  }
+
   // ---- estimates (frozen, versioned; Movegistics exports totals only)
   const depositBp = bp(settings.depositPercent);
   await each(n.estimates as NEstimate[], async (e) => {
@@ -236,11 +248,11 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
         depositCents: Math.round((total * depositBp) / 10_000), sentAt: e.status === 'draft' ? null : sent, expiresAt: at(e.expiresOn),
         viewedAt: e.status === 'viewed' || e.status === 'signed' ? sent : null, signedAt: e.status === 'signed' ? sent : null,
         voidedAt: e.status === 'void' ? sent : null, voidReason: e.status === 'void' ? (e.voidReason ?? 'Void in Movegistics') : null,
-        createdByName: e.createdByName, signatureName: e.status === 'signed' ? 'Signed in Movegistics' : null,
+        createdByName: e.createdByName, signatureName: e.status === 'signed' ? 'Signed in Movegistics' : null, depositPaidCents: depositPaid.get(e.sid) ?? 0,
       },
       {
         createdOn: e.createdOn,
-        updatable: live ? ['status', 'viewedAt', 'signedAt', 'createdByName'] : ['status', 'voidedAt', 'voidReason', 'createdByName'],
+        updatable: live ? ['status', 'viewedAt', 'signedAt', 'createdByName', 'depositPaidCents'] : ['status', 'voidedAt', 'voidReason', 'createdByName', 'depositPaidCents'],
         // A later export can hold an earlier-dated or a deleted estimate: never collide on a version.
         beforeCreate: async (v) => {
           const [{ top }] = await s.db.select({ top: max(hhmcEstimates.version) }).from(hhmcEstimates).where(and(s.where(hhmcEstimates, 'include'), eq(hhmcEstimates.jobId, jobId)));
@@ -275,9 +287,6 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
   });
 
   // ---- payments (already received; recorded, never charged)
-  const inForce = new Map<string, string>(); // job sid → its estimate in force (deposits are paid on it)
-  for (const e of n.estimates) if (e.status === 'signed' || ((e.status === 'sent' || e.status === 'viewed') && !inForce.has(e.jobSid))) inForce.set(e.jobSid, e.sid);
-  const depositPaid = new Map<string, number>();
   await each(n.payments as NPayment[], async (p) => {
     const estimateSid = !p.invoiceSid && p.jobSid ? inForce.get(p.jobSid) : undefined;
     const subjectType = p.invoiceSid ? invoiceEntity.key : estimateSid ? estimateEntity.key : p.jobSid ? jobEntity.key : null;
@@ -294,11 +303,6 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
       },
       { createdOn: p.paidOn, updatable: ['refundedCents', 'description', 'subjectType', 'subjectId', 'customerId'] },
     );
-    if (estimateSid) depositPaid.set(estimateSid, (depositPaid.get(estimateSid) ?? 0) + p.amountCents - p.refundedCents);
-  });
-  await each([...depositPaid], async ([sid, paid]) => {
-    const id = ids.get(`estimate:${sid}`)!;
-    await updateRecord(s, estimateEntity, id, { depositPaidCents: paid });
   });
 
 
