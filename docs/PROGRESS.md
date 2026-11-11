@@ -274,3 +274,37 @@ Known, left for the CTO: the console's Data tab can archive any record its permi
 which bypasses module rules (for example archiving a signed estimate). HHMC counts archived signed
 estimates and invoices so it cannot be tricked into replacing or double-billing, but a general
 fix (an "archivable" flag on entities) is a core change.
+
+### Phase 5, part 2 — HHMC prototype on `main`, hosted test site (11 Nov 2026)
+
+The CTO cleared: merge to `main`, close the Data-tab archive hole, and prepare a hosted test
+site for HHMC's managers.
+
+- **Phase 4 merged into `main`** (`48c2b38`, merge commit), then this branch synced with it.
+- **H4 (the 4%)**: the card fee is charged on card payments only; new quotes default to no
+  service tax and card fee on (manager settings). Examples A/B/C still hold to the cent.
+- **Archive hole closed** (core): `archiveGuard`, `restoreGuard`, `afterArchiveOrRestore` on
+  entities, enforced in the record functions; HHMC, BRSS and core rules
+  (`tests/integration/archive-guard.test.ts`).
+- **Hosted test site** (demo mode, Vercel + Neon): access password, demo accounts from env vars,
+  TEST SITE banner, fake payments and email, no dev login (`docs/DEPLOY-DEMO.md`,
+  `npm run test:e2e:demo`). Manager guide and message: `docs/hhmc-analysis/`.
+- **Scheduler**: daily cron behind a manager setting that is off by default.
+
+```
+npm run check             tsc, eslint clean · Test Files 16 passed · Tests 481 passed · secret scan clean
+npm run test:e2e          50 passed
+npm run test:e2e:demo     3 passed (production build in demo mode: gate, accounts, no dev login,
+                          a full move with the customer signing and paying through links)
+```
+
+UI gate: `docs/screenshots/phase-5b/` (38 screenshots, 1440px and 375px): the changed Job,
+invoice and customer screens (cash total + "paid by card"), the console Settings tab with the new
+settings, and the demo site (access password, wrong password, demo sign-in, GM dashboard, jobs,
+a customer link page with the banner). Nothing scrolls sideways; the banner is on every demo page.
+
+Review gate (fresh independent reviewer):
+
+| Round | Result | What happened next |
+|---|---|---|
+| 1 | 0 critical · 1 high · 4 medium · 7 minor | All fixed (DECISIONS P5-27 … P5-29). High: archiving a draft invoice's line from the Data tab left its total stale (a customer could be overcharged). |
