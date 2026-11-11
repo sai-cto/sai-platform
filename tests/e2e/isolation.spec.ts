@@ -97,7 +97,9 @@ test('BRSS admin CAN open their own business, so the 404s above are not a blanke
   await expect(page.getByText(/Exported \d+ customers to CSV/).first()).toBeVisible();
 });
 
-test('customer and field portals are "not found" even for a super admin until a module builds one', async ({ page }) => {
+// HHMC has customer pages, but they open only through a customer link (/l/<token>): a console
+// sign-in, even a super admin's, still gets "not found" at /portal/<business>.
+test('customer and field portals are "not found" even for a super admin without a customer link', async ({ page }) => {
   await loginAs(page, SEED.superAdmin);
   for (const slug of ALL_SLUGS) {
     expect((await page.request.get(`/portal/${slug}`)).status()).toBe(404);

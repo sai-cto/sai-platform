@@ -23,6 +23,7 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:reset": "tsx scripts/db-reset.ts",
     "docs:permissions": "tsx scripts/generate-permissions-doc.ts",
+    "hhmc:automations": "tsx scripts/hhmc-automations.ts",
     "check": "npm run typecheck && npm run lint && npm run test && npm run secret-scan"
   },
   "dependencies": {

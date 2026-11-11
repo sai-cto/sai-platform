@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: Phase 4 (BRSS staff portal) built, verified and looked at as every role; independent review gate running._
+_Last updated: Phase 5 (HHMC module) built and verified; review and UI gates in progress. Stops before merge: `phase-4-brss` must be merged first._
 
 ## In plain English
 
@@ -31,6 +31,13 @@ and trucks, the price list with storage terms, and zip zones. It follows the rul
 old Salesforce system; each rule is listed with its Salesforce source in
 `src/modules/brss/RULES.md`. Screenshots: `docs/screenshots/phase-4/`.
 
+**Hired Hands (HHMC) now has its own app** (Phase 5): leads, one Job page per move (quote with
+live totals, estimates, booking, job days, invoices, payments, notes and calls), one schedule
+with day/week/month views, invoices, and settings. Customers review, sign and pay the deposit
+from an emailed link without an account, and pay their invoice the same way. Automatic emails
+(follow-ups, receipts, reminders) are rules in a table; with no scheduler yet, the tech team
+sends due ones with a button. Rules and sources: `src/modules/hhmc/README.md`.
+
 **What is not real yet:** BRSS's prices, zones and rates are invented, no card company or email
 service is connected, and twelve questions about how BRSS works were answered conservatively
 without a BRSS manager (`src/modules/brss/README.md`, "Decisions waiting for the CTO").
@@ -41,6 +48,7 @@ without a BRSS manager (`src/modules/brss/README.md`, "Decisions waiting for the
 - **Phase 2 — SAI Console.** ✅ Done. UI gate done (110 screenshots); passed the independent review gate after three rounds (see below) and merged to `main`.
 - **Phase 3 — module scaffolds.** ✅ Done. UI gate done (38 screenshots); passed the independent review gate after two rounds (see below) and merged to `main`.
 - **Phase 4 — BRSS proof module**, on branch `phase-4-brss`: built; UI gate done (86 screenshots); independent review gate running.
+- **Phase 5 — HHMC module**, on branch `claude/practical-brahmagupta-1o62aq` (based on `phase-4-brss`): built and verified; gates below. **Not merged**: merge `phase-4-brss` first.
 
 ## Acceptance criteria (final)
 
@@ -64,6 +72,7 @@ without a BRSS manager (`src/modules/brss/README.md`, "Decisions waiting for the
 | 2 — SAI Console | ✅ merged to `main` |
 | 3 — Module scaffolds | ✅ merged to `main` |
 | 4 — BRSS proof module | 🔨 built, review gate running |
+| 5 — HHMC module | 🔨 built; review and UI gates (see the Phase 5 log); stops before merge |
 
 ## Last verification
 

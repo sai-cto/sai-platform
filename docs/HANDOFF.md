@@ -17,7 +17,10 @@ See `docs/PROGRESS.md` for the live status and acceptance criteria.
 | No crew (field) or customer portal for BRSS | Intake and payment are done in the staff portal, which works on a phone. | Build `portals.field` / `portals.customer` in the BRSS manifest when wanted. |
 | Microsoft / Google sign-in never talked to a real directory | Built with the `arctic` library and tested up to the redirect URL. | Register an app in Entra ID or Google Cloud, fill in the variables in `.env.local`, sign in once. |
 | Day-before reminder emails | Need a scheduler. Out of scope until hosting is decided. | Add a scheduled job runner when the platform is hosted. |
-| Customer and field portals | Hosting routes exist and answer "not found". No module defines one. | Add `portals.customer` / `portals.field` to a module manifest and switch the toggle on. How customers sign in is undecided. |
+| Customer and field portals | HHMC has customer pages opened through signed links (`/l/<token>`, `src/core/links`). No module has a signed-in customer or field portal. | How customers sign in to an account is still undecided; links cover one-off review, sign and pay. |
+| HHMC automatic emails need a scheduler | Due emails (drip, past-due reminder) go out only when the tech team presses "Run due emails" or someone runs `npm run hhmc:automations`. | Run `npm run hhmc:automations` every 15 minutes from a scheduler once the app is hosted. |
+| HHMC estimate document is HTML, not PDF | No PDF library is approved (DECISIONS A3, P5-5). | Approve a PDF library, render `estimateDocument()` with it. |
+| HHMC wording is placeholder | Terms & Conditions and email templates are written fresh, not HHMC's. | A manager replaces them in HHMC → App → Settings → Templates. |
 | Email is not sent | The only notification adapter prints to the server console. | Add a real `NotificationChannel` and call `setEmailChannel()`. |
 | Session housekeeping | Sessions end after 12 hours; there is no idle timeout and expired rows are never deleted. | A small scheduled clean-up job once hosting exists. |
 | Orphaned file bytes | Bytes are removed when a save fails or rolls back, but a crash between writing a file and committing its row could still leave bytes on disk with no row. | A periodic sweep comparing the storage folder with the `files` table. |
@@ -37,3 +40,4 @@ See `docs/PROGRESS.md` for the live status and acceptance criteria.
 - Review the items marked **NEEDS JAI REVIEW** in `docs/DECISIONS.md`.
 - Sit down with a BRSS manager over `src/modules/brss/OPEN_QUESTIONS.md` (83 questions the old code cannot answer).
 - Supply the real BRSS price list, zip zones and shipping rates.
+- Sit down with an HHMC manager over DECISIONS H1–H14 and P5-5 … P5-14, and replace HHMC's placeholder terms and emails.
