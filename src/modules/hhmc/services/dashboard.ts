@@ -14,7 +14,7 @@ import { and, Column, desc, is, eq, gte, inArray, isNotNull, lt, lte, min, ne, s
 import { customers, payments } from '@/core/db/schema/tenant';
 import type { Scope } from '@/core/db/scope';
 import { authorize, can } from '@/core/rbac/permissions';
-import { estimateEntity, invoiceEntity } from '../entities';
+import { estimateEntity, invoiceEntity, jobEntity } from '../entities';
 import { CORE, P } from '../permissions';
 import { addDays, isDateText, isPastDue, localDate, localTime } from '../rules';
 import {
@@ -154,7 +154,7 @@ export type DashboardRow = {
   /** Lead, estimate, invoice or payment reference shown in the table. */
   reference: string;
   /** The page the row links to. */
-  href: { kind: 'lead' | 'job' | 'invoice'; id: string };
+  href: { kind: 'lead' | 'job' | 'invoice' | 'payment'; id: string };
   jobId: string | null;
   customerName: string;
   moveDate: string | null;
@@ -423,30 +423,30 @@ async function collectedRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
       hhmcInvoices,
       and(eq(payments.subjectType, invoiceEntity.key), eq(hhmcInvoices.id, payments.subjectId), s.where(hhmcInvoices, 'include')),
     )
-    .innerJoin(hhmcJobs, and(sql`${hhmcJobs.id} = coalesce(${hhmcEstimates.jobId}, ${hhmcInvoices.jobId})`, s.where(hhmcJobs, 'include')))
-    .innerJoin(customers, and(eq(customers.id, hhmcJobs.customerId), s.where(customers, 'include')))
-    .where(
+    // Every payment HHMC received counts, also one linked straight to a work request or to no
+    // record at all (e.g. history imported from Movegistics): money in is money in.
+    .leftJoin(
+      hhmcJobs,
       and(
-        s.where(payments),
-        eq(payments.kind, 'charge'),
-        eq(payments.status, 'succeeded'),
-        inArray(payments.subjectType, [estimateEntity.key, invoiceEntity.key]),
-        atIn(paidOn, b),
+        sql`${hhmcJobs.id} = coalesce(${hhmcEstimates.jobId}, ${hhmcInvoices.jobId}, case when ${payments.subjectType} = ${jobEntity.key} then ${payments.subjectId} end)`,
+        s.where(hhmcJobs, 'include'),
       ),
     )
+    .leftJoin(customers, and(sql`${customers.id} = coalesce(${hhmcJobs.customerId}, ${payments.customerId})`, s.where(customers, 'include')))
+    .where(and(s.where(payments), eq(payments.kind, 'charge'), eq(payments.status, 'succeeded'), atIn(paidOn, b)))
     .orderBy(desc(paidOn));
   return rows.map(({ p, paidOn: at, estimate, invoice, job, customer }) => {
     const refunded = p.refundedCents;
     const method = METHOD_LABELS[p.method] ?? p.method;
     return {
       id: p.id,
-      reference: invoice ? invoice.invoiceNumber : `Deposit ${estimate?.estimateNumber ?? ''}`.trim(),
-      href: invoice ? { kind: 'invoice', id: invoice.id } : { kind: 'job', id: job.id },
-      jobId: job.id,
-      customerName: personName(customer),
-      moveDate: job.moveDate,
+      reference: invoice ? invoice.invoiceNumber : estimate ? `Deposit ${estimate.estimateNumber}` : job ? `Payment on ${job.jobNumber}` : 'Payment (no work request)',
+      href: invoice ? { kind: 'invoice', id: invoice.id } : job ? { kind: 'job', id: job.id } : { kind: 'payment', id: p.id },
+      jobId: job?.id ?? null,
+      customerName: customer ? personName(customer) : 'No customer',
+      moveDate: job?.moveDate ?? null,
       date: localDate(new Date(at as unknown as string | Date), tz),
-      source: job.source,
+      source: job?.source ?? 'Other',
       amountCents: p.amountCents - refunded,
       paid: null,
       status: { kind: 'payment', label: refunded > 0 ? `${method} · ${money(refunded)} refunded` : method },

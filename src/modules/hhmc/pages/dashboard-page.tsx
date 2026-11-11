@@ -125,6 +125,8 @@ function StatusCell({ status }: { status: DashboardRow['status'] }) {
 }
 
 function recordHref(basePath: string, href: DashboardRow['href']): string {
+  // A payment with no work request opens the payment itself (console Data tab).
+  if (href.kind === 'payment') return `${basePath.replace(/\/app$/, '')}/data/core.payment/${href.id}`;
   const section = href.kind === 'lead' ? 'leads' : href.kind === 'job' ? 'jobs' : 'invoices';
   return `${basePath}/${section}/${href.id}`;
 }
