@@ -291,7 +291,7 @@ export async function seedDemoData(s: Scope): Promise<void> {
       valuation: valuation.body,
     };
     const deposit = computeDeposit(totals, depositBp, { byCard: true, convenienceFeeBp: opts.convenienceFeeBp });
-    const paidDeposit = signed && !(demo.stage === 'estimate_sent' && i !== 5) ;
+    const paidDeposit = signed;
     if (paidDeposit) {
       depositPayments.push({
         customerId: job.customerId,
@@ -306,6 +306,7 @@ export async function seedDemoData(s: Scope): Promise<void> {
         cardLast4: '4242',
         description: `Deposit for ${job.jobNumber}`,
         subjectType: estimateEntity.key,
+        subjectId: `index:${i}`,
         paidAt: new Date(sentAt.getTime() + 2 * DAY),
         createdAt: new Date(sentAt.getTime() + 2 * DAY),
       });
@@ -335,14 +336,14 @@ export async function seedDemoData(s: Scope): Promise<void> {
       createdAt: sentAt,
     });
   }
-  const payments = await seedRecords(s, paymentEntity, depositPayments);
-  const estimates = await seedRecords(
+  // Estimates first (the deposit payments point at them through subject_id).
+  const estimates = await seedRecords(s, estimateEntity, estimateRows);
+  const payments = await seedRecords(
     s,
-    estimateEntity,
-    estimateRows.map((row) => {
-      const i = jobs.findIndex((j) => j.id === row.jobId);
-      const payment = payments.find((p) => p.providerRef === `mock_ch_demo_hhmc_dep_${i}`);
-      return { ...row, depositPaymentId: payment?.id ?? null };
+    paymentEntity,
+    depositPayments.map((p) => {
+      const i = Number(String(p.subjectId).slice('index:'.length));
+      return { ...p, subjectId: estimates.find((e) => e.jobId === jobs[i].id)!.id };
     }),
   );
 

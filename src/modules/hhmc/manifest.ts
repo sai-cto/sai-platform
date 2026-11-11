@@ -6,7 +6,14 @@
 import { defineModule } from '@/core/modules/contract';
 import { formatMoney, formatNumber } from '@/ui/format';
 import { entities, jobEntity } from './entities';
-import { StubPage } from './pages/stub';
+import { CustomerPage } from './pages/customer-page';
+import { DashboardPage } from './pages/dashboard-page';
+import { InvoicePage, InvoicesPage } from './pages/invoices';
+import { JobPage } from './pages/job-page';
+import { JobsPage, NewJobPage } from './pages/jobs';
+import { LeadPage, LeadsPage, NewLeadPage } from './pages/leads';
+import { SchedulePage } from './pages/schedule-page';
+import { SettingsPage } from './pages/settings-page';
 import { CORE, P, permissions } from './permissions';
 import { seedDemoData } from './seed';
 import { estimateFunnel, invoiceTotals, leadsThisMonth, upcomingMoves } from './services/dashboard';
@@ -32,12 +39,34 @@ export const hhmcModule = defineModule({
 
   portals: {
     staff: {
-      nav: [{ label: 'Dashboard', path: '' }],
-      routes: [{ path: '', title: 'Dashboard', permission: P.jobsRead, component: StubPage }],
+      // Customers and payments are the console's shared Data tabs; the pages link to them.
+      nav: [
+        { label: 'Dashboard', path: '' },
+        { label: 'Leads', path: 'leads' },
+        { label: 'Jobs', path: 'jobs' },
+        { label: 'Schedule', path: 'schedule' },
+        { label: 'Invoices', path: 'invoices' },
+        { label: 'Settings', path: 'settings' },
+      ],
+      // prettier-ignore
+      routes: [
+        { path: '', title: 'Dashboard', permission: P.jobsRead, component: DashboardPage },
+        { path: 'leads', title: 'Leads', permission: P.leadsRead, component: LeadsPage },
+        { path: 'leads/new', title: 'Add lead', permission: P.leadsWrite, component: NewLeadPage },
+        { path: 'leads/:id', title: 'Lead', permission: P.leadsRead, component: LeadPage },
+        { path: 'jobs', title: 'Jobs', permission: P.jobsRead, component: JobsPage },
+        { path: 'jobs/new', title: 'New job', permission: P.jobsWrite, component: NewJobPage },
+        { path: 'jobs/:id', title: 'Job', permission: P.jobsRead, component: JobPage },
+        { path: 'schedule', title: 'Schedule', permission: CORE.schedulingRead, component: SchedulePage },
+        { path: 'invoices', title: 'Invoices', permission: P.invoicesRead, component: InvoicesPage },
+        { path: 'invoices/:id', title: 'Invoice', permission: P.invoicesRead, component: InvoicePage },
+        { path: 'settings', title: 'Settings', permission: P.catalogRead, component: SettingsPage },
+      ],
     },
+    // Opened only through a customer link (/l/<token>); see linkPurposes below.
     customer: {
       nav: [],
-      routes: [{ path: '', title: 'Your move', permission: 'customers.read', component: StubPage }],
+      routes: [{ path: '', title: 'Your move', permission: CORE.customersRead, component: CustomerPage }],
     },
   },
 

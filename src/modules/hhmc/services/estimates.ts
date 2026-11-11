@@ -245,12 +245,13 @@ export async function openEstimateByLink(ctx: BusinessContext, now: Date = new D
   requireEstimateLink(ctx, estimateId);
   return withScope(ctx, P.customerEstimate, async (s) => {
     let estimate = await loadEstimate(s, estimateId);
-    if (estimate.status === 'void') return { estimate, settings: await loadSettings(ctx), job: null };
+    const expired = estimate.status !== 'signed' && estimate.expiresAt !== null && estimate.expiresAt.getTime() <= now.getTime();
+    if (estimate.status === 'void') return { estimate, settings: await loadSettings(ctx), job: null, expired };
     if (estimate.status === 'sent') {
       estimate = await updateRecord(s, estimateEntity, estimateId, { status: 'viewed', viewedAt: now });
     }
     const job = await loadJob(s, estimate.jobId);
-    return { estimate, settings: await loadSettings(ctx), job };
+    return { estimate, settings: await loadSettings(ctx), job, expired };
   });
 }
 
@@ -309,7 +310,7 @@ async function takeDeposit(
   input: { method: 'card' | 'cash' | 'check'; cardToken?: string; attemptKey: string },
 ) {
   if (estimate.status !== 'signed') throw new ValidationError('The estimate must be signed before the deposit is paid.');
-  if (estimate.depositPaymentId) throw new ValidationError('The deposit has already been paid.');
+  if (estimate.depositPaymentId || estimate.depositPaidCents > 0) throw new ValidationError('The deposit has already been paid.');
   const job = await loadJob(s, estimate.jobId);
   const due =
     input.method === 'card'

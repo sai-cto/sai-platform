@@ -13,7 +13,7 @@ import type { BusinessContext } from '@/core/tenancy/context';
 import { quoteEntity, quoteLineEntity } from '../entities';
 import { P } from '../permissions';
 import { quoteEditable, STAGE_LABELS } from '../rules';
-import { hhmcCatalogItems, hhmcDiscounts, hhmcQuoteLines, type hhmcQuotes } from '../schema';
+import { hhmcCatalogItems, hhmcDiscounts, hhmcEstimates, hhmcQuoteLines, type hhmcQuotes } from '../schema';
 import { bp, loadSettings } from '../settings';
 import { loadJob, loadQuoteFor } from './common';
 import { optionalText, parse } from './input';
@@ -61,6 +61,12 @@ async function editableQuote(s: Scope, jobId: string) {
     );
   const quote = await loadQuoteFor(s, jobId);
   if (!quote) throw new NotFoundError();
+  const [signed] = await s.db
+    .select({ id: hhmcEstimates.id })
+    .from(hhmcEstimates)
+    .where(and(s.where(hhmcEstimates), eq(hhmcEstimates.jobId, jobId), eq(hhmcEstimates.status, 'signed')))
+    .limit(1);
+  if (signed) throw new ValidationError('The customer has signed the estimate: that is the price now, so the quote is locked.');
   return { job, quote };
 }
 
