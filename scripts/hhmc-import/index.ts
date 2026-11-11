@@ -25,10 +25,15 @@ const EXPLANATIONS: Record<string, string> = {
   'estimates with no matching work request (not imported)': 'Their work request title and contact match no work request in the export. Not counted in any total above (estimates are not part of the reconciliation totals). NEEDS JAI REVIEW.',
   'older open estimates voided (Movegistics allowed several per work request)': 'HHMC allows one estimate in force per work request; the later one is kept, earlier ones are void with a note saying so.',
   'invoices with no matching work request (a placeholder work request was made)': 'Kept so invoiced and collected totals reconcile; each is marked in its scope of work. Not counted as work requests.',
-  'payment requests never paid (not imported: no money moved)': "Movegistics' \"REQUESTED\" rows: a payment link was sent but never paid.",
+  'payment requests never paid (not imported: no money moved)': "Movegistics' REQUESTED rows (a pay link sent, never paid) and any FAILED, DECLINED, VOIDED or CANCELLED rows.",
   'payments not linked to any work request': 'Recorded against the customer; they count in "collected" but not in a work request.',
   'payments whose contact name matches no single contact (imported without a customer)': 'Contact name is shared by several people or by none; recorded without a customer.',
-  'partially refunded payments (refund amount not in the export: recorded as not refunded)': 'The export does not say how much was refunded. NEEDS JAI REVIEW: read the refunds from Movegistics and enter them.',
+  'partially refunded payments (refund amount not in the export: recorded as not refunded)': 'The export does not say how much was refunded: those months are marked "unverified" below. NEEDS JAI REVIEW: read the refunds from Movegistics and enter them.',
+  'PAID invoices whose exported "Balance Due" was not zero (treated as fully paid)': 'Movegistics leaves "Balance Due" at the full amount on these PAID invoices; see "Open balance" above, including how many are not covered by payments.',
+  'records linked by work request title alone (contact name differs)': 'The title matched exactly one work request but the contact name on the estimate / invoice / work order differs (e.g. renamed contact). Linked; worth a spot check.',
+  'duplicate estimate ids in the export (second copy skipped)': 'The same id twice in one export.',
+  'duplicate invoice ids in the export (second copy skipped)': 'The same id twice in one export.',
+  'duplicate payment ids in the export (second copy skipped)': 'The same id twice in one export.',
 };
 
 function arg(name: string): string | undefined {
@@ -39,7 +44,10 @@ function arg(name: string): string | undefined {
 async function main() {
   loadEnv();
   const url = new URL(requireEnv('DATABASE_URL'));
-  if (!['127.0.0.1', 'localhost', '::1'].includes(url.hostname)) throw new Error('Refusing: the HHMC import only runs against a database on this machine.');
+  if (!['127.0.0.1', 'localhost', '::1', '[::1]'].includes(url.hostname)) throw new Error('Refusing: the HHMC import only runs against a database on this machine.');
+  if (url.searchParams.has('host') || url.searchParams.has('hostaddr')) throw new Error('Refusing: a host given in the database URL query is not allowed.');
+  const dbName = url.pathname.replace(/^\//, '');
+  if (dbName === 'sai_test' || dbName.endsWith('_copy')) throw new Error('Refusing: not the test database or a throw-away copy.');
   const dir = (arg('--dir') ?? path.join(os.homedir(), 'Documents/SAI/hhmc-data/raw')).replace(/^~/, os.homedir());
   const dryRun = process.argv.includes('--dry-run');
   const clear = process.argv.includes('--clear-live-demo');
@@ -71,7 +79,8 @@ async function main() {
     if (clear) console.log(`Cleared demo data: ${await scoped((s) => clearLiveDemo(s))} rows; settings data re-created.`);
     const t0 = Date.now();
     const { stats } = await loadIntoHhmc(scoped, n);
-    for (const [type, st] of Object.entries(stats)) console.log(`  ${type}: ${st.created} created, ${st.updated} updated, ${st.unchanged} unchanged`);
+    for (const [type, st] of Object.entries(stats))
+      console.log(`  ${type}: ${st.created} created, ${st.updated} updated, ${st.unchanged} unchanged, ${st.kept} kept (changed in SAI), ${st.linked} linked to an existing record`);
     console.log(`Loaded in ${((Date.now() - t0) / 1000).toFixed(1)} s.`);
     const r = reconciliationReport(movegisticsSide(files), await scoped((s) => ourSide(s, ctx.business.timeZone)), n.issues, EXPLANATIONS);
     report = r.markdown;
@@ -79,14 +88,18 @@ async function main() {
   } finally {
     await closeDb();
   }
-  const out = path.join(path.dirname(dir), 'RECONCILIATION.md');
+  // Next to the raw exports' folder (the parent of --dir), never inside the repository.
+  const out = path.join(fs.realpathSync(path.dirname(dir)), 'RECONCILIATION.md');
+  if (out.startsWith(fs.realpathSync(path.resolve(__dirname, '..', '..')) + path.sep)) throw new Error('Refusing to write the reconciliation inside the repository.');
   fs.writeFileSync(out, report, { mode: 0o600 });
   console.log(`Reconciliation: ${differences === 0 ? 'everything matches' : `${differences} difference(s)`} → ${out}`);
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message.split('\n')[0] : error);
-  const cause = (error as { cause?: { message?: string; code?: string } })?.cause;
-  if (cause) console.error('Cause:', cause.code ?? '', cause.message ?? cause);
+  // Only our own messages are printed in full; anything else could quote a real value.
+  const message = error instanceof Error ? error.message : '';
+  const ours = message.startsWith('Refusing') || (error instanceof Error && error.name === 'UnknownValues') || message.startsWith('Movegistics values');
+  const code = (error as { cause?: { code?: string } })?.cause?.code;
+  console.error(ours ? message : `Import failed: ${error instanceof Error ? error.name : 'error'}${code ? ` (database code ${code})` : ''}. Nothing printed from the data; re-run to retry.`);
   process.exit(1);
 });

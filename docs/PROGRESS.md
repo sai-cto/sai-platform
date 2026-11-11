@@ -336,6 +336,9 @@ throw-away database copy (P5C-17).
 npm run check            typecheck, lint clean · 21 files, 522 tests passed · secret + personal-data scan clean
 npm run test:e2e         50 passed (before the importer commits; re-run below)
 review gate              round 1 (Part 3 screens): 1 high, 5 medium, 8 minor → all fixed (fdf0ae0)
+review gate              round 2 (importer, scan): 2 high, 8 medium, minors → fixed (P5C-18)
+review gate              round 3: 1 high, 7 medium, minors → fixed (P5C-19); round 4 below
+npm run test:e2e         50 passed (after round 2 fixes)
 ```
 
 ## Phase 5, part 3: the real-data pilot with Microsoft sign-in (11 Nov 2026)

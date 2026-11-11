@@ -4,7 +4,8 @@
  * data: line items, discounts, templates, automation rules, trucks. Refuses as soon as live holds
  * a single record imported from Movegistics, so real data can never be wiped by it.
  */
-import { and, eq, notLike } from 'drizzle-orm';
+import { and, eq, isNotNull, notLike, sql } from 'drizzle-orm';
+import { customers } from '../../src/core/db/schema/tenant';
 import { logActivity } from '../../src/core/audit/log';
 import { txOf, type Scope } from '../../src/core/db/scope';
 import { entitiesFor } from '../../src/core/modules/registry';
@@ -22,6 +23,22 @@ export async function clearLiveDemo(s: Scope): Promise<number> {
     .where(and(eq(hhmcImportRefs.businessId, s.ctx.business.id), eq(hhmcImportRefs.environment, 'live'), notLike(hhmcImportRefs.sourceId, 'DEMO-%')))
     .limit(1);
   if (real) throw new Error('Refusing: HHMC live already holds imported Movegistics records. Re-run the import without --clear-live-demo.');
+  // Fake demo rows are written by the seed's system actor (created_by is null) with reserved test
+  // addresses. Anything made by a person, or any customer with a real-looking email, is not demo.
+  for (const entity of entitiesFor('hhmc')) {
+    const [byPerson] = await s.db
+      .select({ id: entity.table.id })
+      .from(entity.table)
+      .where(and(eq(entity.table.businessId, s.ctx.business.id), eq(entity.table.environment, 'live'), isNotNull(entity.table.createdBy)))
+      .limit(1);
+    if (byPerson) throw new Error(`Refusing: HHMC live holds ${entity.labelPlural.toLowerCase()} made by a person, not by the demo seed.`);
+  }
+  const [realEmail] = await s.db
+    .select({ id: customers.id })
+    .from(customers)
+    .where(and(eq(customers.businessId, s.ctx.business.id), eq(customers.environment, 'live'), isNotNull(customers.email), sql`${customers.email} !~* '@([a-z0-9-]+\\.)*(example\\.(com|org|net)|[a-z0-9-]*\\.?example|[a-z0-9-]+\\.(test|invalid|localhost))$'`))
+    .limit(1);
+  if (realEmail) throw new Error('Refusing: HHMC live holds a customer whose email is not a reserved test address.');
   let removed = 0;
   for (const entity of [...entitiesFor('hhmc')].reverse()) {
     const rows = await txOf(s)

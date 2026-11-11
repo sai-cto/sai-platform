@@ -20,7 +20,10 @@ function check(ok: unknown, what: string) {
 async function main() {
   loadEnv();
   const db = new URL(requireEnv('DATABASE_URL'));
-  if (!db.pathname.endsWith('_copy') || !['127.0.0.1', 'localhost'].includes(db.hostname)) throw new Error('Refusing: run this only against a local copy whose name ends in "_copy".');
+  if (!db.pathname.endsWith('_copy') || !['127.0.0.1', 'localhost', '[::1]'].includes(db.hostname) || db.searchParams.has('host')) throw new Error('Refusing: run this only against a local copy whose name ends in "_copy".');
+  // Pilot / demo mode would force the printing email channel; a real card provider must never be used.
+  if (process.env.PILOT_MODE === 'true' || process.env.DEMO_MODE === 'true') throw new Error('Refusing: unset PILOT_MODE and DEMO_MODE first.');
+  process.env.PAYMENT_PROVIDER = 'mock';
   const { and, desc, eq, sql } = await import('drizzle-orm');
   const { getDb, closeDb } = await import('../../src/core/db/client');
   const { users, customers, notifications } = await import('../../src/core/db/schema');
@@ -96,12 +99,14 @@ async function main() {
   check(closed.stage === 'closed', 'invoice paid in full → work request closed');
 
   const emails = await withScope(ctx, 'notifications.read', (s) => s.db.select({ id: notifications.id }).from(notifications).where(and(s.where(notifications), eq(notifications.recipient, real.c.email!))));
-  check(sent.length === emails.length || sent.length > 0, `${sent.length} customer email(s) went to the silent recorder only: nothing was sent`);
+  check(sent.length > 0 && sent.length === emails.length, `all ${sent.length} customer email(s) went to the silent recorder (nothing was sent or printed)`);
   await closeDb();
   console.log('All three must-haves work end to end on a real customer (in a throw-away copy).');
 }
 
 main().catch(async (error) => {
-  console.error(error instanceof Error ? error.message : error);
+  // Our own messages only: an app or database error can quote a real name or value.
+  const message = error instanceof Error ? error.message : '';
+  console.error(message.startsWith('Refusing') || message.startsWith('FAILED:') ? message : `Failed: ${error instanceof Error ? error.name : 'error'} (details not printed: they can hold real data)`);
   process.exit(1);
 });

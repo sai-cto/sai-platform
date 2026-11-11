@@ -8,8 +8,9 @@
  * Nothing here sends an email, queues an automation or takes a payment: payments are recorded as
  * already received ("manual" provider), exactly as Movegistics shows them.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, like, max } from 'drizzle-orm';
 import { txOf, type Scope } from '../../src/core/db/scope';
+import { customers } from '../../src/core/db/schema/tenant';
 import { customerEntity, paymentEntity } from '../../src/core/records/core-entities';
 import { createRecord, updateRecord } from '../../src/core/records/records';
 import {
@@ -23,13 +24,13 @@ import {
   quoteEntity,
   quoteLineEntity,
 } from '../../src/modules/hhmc/entities';
-import { hhmcImportRefs, type EstimateSnapshot } from '../../src/modules/hhmc/schema';
+import { hhmcEstimates, hhmcImportRefs, hhmcInvoiceLines, type EstimateSnapshot } from '../../src/modules/hhmc/schema';
 import { SECTION_KEYS, sectionLabel, type SectionKey } from '../../src/modules/hhmc/services/pricing';
 import { bp, loadSettings } from '../../src/modules/hhmc/settings';
 import type { EntityDef } from '../../src/core/modules/contract';
 import { hashOf, type NContact, type NEstimate, type NInvoice, type NJob, type NLead, type NPayment, type Normalized } from './movegistics';
 
-export type LoadStats = Record<string, { created: number; updated: number; unchanged: number }>;
+export type LoadStats = Record<string, { created: number; updated: number; unchanged: number; kept: number; linked: number }>;
 
 const TZ_NOON = 'T12:00:00-05:00';
 /** A Movegistics date (no time) as a timestamp: noon in Ithaca, so it never slips a day. */
@@ -55,7 +56,23 @@ const BATCH = 250;
 
 export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats: LoadStats; ids: Map<string, string> }> {
   let s!: Scope; // the current batch's scope (every helper below uses it)
-  const { settings, refs } = await batch(async (scope) => ({ settings: await loadSettings(scope.ctx), refs: await loadRefs(scope) }));
+  const { settings, refs, people } = await batch(async (scope) => ({
+    settings: await loadSettings(scope.ctx),
+    refs: await loadRefs(scope),
+    // Customers already in HHMC live, by email and phone: a person the import has not linked yet
+    // (a new export order, a merged Movegistics duplicate) is linked, never created twice.
+    // Archived customers too: re-importing must never make a second copy of someone archived.
+    people: await scope.db.select({ id: customers.id, email: customers.email, phone: customers.phone }).from(customers).where(scope.where(customers, 'include')),
+  }));
+  const customerByEmail = new Map(people.filter((p) => p.email).map((p) => [p.email!.toLowerCase(), p.id]));
+  const customerByPhone = new Map(people.filter((p) => p.phone).map((p) => [p.phone!.replace(/\D/g, '').slice(-10), { id: p.id, email: p.email?.toLowerCase() ?? null }]));
+  /** Same person? Email first; a phone only when the emails don't disagree (a shared household or
+   *  business line is not the same person). Mirrors contactFor() in movegistics.ts. */
+  const existingCustomer = (email: string | null, phone: string | null): string | null => {
+    if (email && customerByEmail.has(email)) return customerByEmail.get(email)!;
+    const byPhone = phone ? customerByPhone.get(phone) : undefined;
+    return byPhone && (!byPhone.email || !email || byPhone.email === email) ? byPhone.id : null;
+  };
   /** Each item, BATCH at a time, each batch committed on its own. */
   async function each<T>(items: T[], fn: (item: T) => Promise<void>) {
     for (let i = 0; i < items.length; i += BATCH) {
@@ -67,8 +84,8 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
   }
   const ids = new Map<string, string>(); // "<type>:<sid>" → local id
   const stats: LoadStats = {};
-  const tally = (type: string, what: 'created' | 'updated' | 'unchanged') => {
-    stats[type] ??= { created: 0, updated: 0, unchanged: 0 };
+  const tally = (type: string, what: 'created' | 'updated' | 'unchanged' | 'kept' | 'linked') => {
+    stats[type] ??= { created: 0, updated: 0, unchanged: 0, kept: 0, linked: 0 };
     stats[type][what]++;
   };
 
@@ -78,8 +95,15 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
     sid: string,
     entity: T,
     values: Record<string, unknown>,
-    options: { createdOn?: string | null; updatable?: (keyof typeof values)[] } = {},
-  ): Promise<{ id: string; created: boolean }> {
+    options: {
+      createdOn?: string | null;
+      updatable?: (keyof typeof values)[];
+      /** An existing record to link instead of creating one (customers matched by email/phone). */
+      existing?: string | null;
+      /** Last adjustments right before creating (e.g. the next free estimate version). */
+      beforeCreate?: (values: Record<string, unknown>) => Promise<void>;
+    } = {},
+  ): Promise<{ id: string; created: boolean; updated: boolean }> {
     const key = `${type}:${sid}`;
     const hash = hashOf(values);
     const ref = refs.get(key);
@@ -87,26 +111,51 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
       ids.set(key, ref.recordId);
       if (ref.contentHash === hash) {
         tally(type, 'unchanged');
-        return { id: ref.recordId, created: false };
+        return { id: ref.recordId, created: false, updated: false };
+      }
+      // A record someone changed in SAI after the import (updated_by = a person; the import
+      // runs as the system actor) is never overwritten from Movegistics.
+      // Kept as it is in SAI when: a person changed it (updated_by), anything changed it after the
+      // last import (a customer link writes with no user id), or someone archived it.
+      const [current] = await s.db
+        .select({ updatedBy: entity.table.updatedBy, updatedAt: entity.table.updatedAt, archivedAt: entity.table.archivedAt })
+        .from(entity.table)
+        .where(and(s.where(entity.table, 'include'), eq(entity.table.id, ref.recordId)))
+        .limit(1);
+      if (!current || current.updatedBy || current.archivedAt || new Date(current.updatedAt as Date).getTime() > ref.importedAt.getTime() + 1000) {
+        tally(type, 'kept');
+        return { id: ref.recordId, created: false, updated: false };
       }
       const patch = options.updatable ? Object.fromEntries(options.updatable.map((k) => [k, values[k as string]])) : values;
       await updateRecord(s, entity, ref.recordId, patch as never);
       await updateRecord(s, importRefEntity, ref.id, { contentHash: hash, importedAt: new Date() });
       tally(type, 'updated');
-      return { id: ref.recordId, created: false };
+      return { id: ref.recordId, created: false, updated: true };
     }
-    const row = (await createRecord(s, entity, values as never)) as { id: string };
-    await backdate(s, entity, row.id, options.createdOn);
-    await createRecord(s, importRefEntity, { source: 'movegistics', sourceType: type, sourceId: sid, entityKey: entity.key, recordId: row.id, contentHash: hash });
-    ids.set(key, row.id);
-    refs.set(key, { recordId: row.id, contentHash: hash } as Ref);
-    tally(type, 'created');
-    return { id: row.id, created: true };
+    let recordId: string;
+    if (options.existing) {
+      recordId = options.existing;
+      tally(type, 'linked');
+    } else {
+      if (options.beforeCreate) await options.beforeCreate(values);
+      recordId = ((await createRecord(s, entity, values as never)) as { id: string }).id;
+      await backdate(s, entity, recordId, options.createdOn);
+      tally(type, 'created');
+    }
+    const refRow = (await createRecord(s, importRefEntity, { source: 'movegistics', sourceType: type, sourceId: sid, entityKey: entity.key, recordId, contentHash: hash })) as Ref;
+    ids.set(key, recordId);
+    refs.set(key, refRow);
+    return { id: recordId, created: !options.existing, updated: false };
   }
 
   // ---- customers
   await each(n.contacts as NContact[], async (c) => {
-    await upsert('contact', c.sid, customerEntity, { kind: 'person', firstName: c.firstName, lastName: c.lastName, email: c.email, phone: c.phone, notes: c.notes, externalRef: `movegistics:${c.sid}` }, { createdOn: c.createdOn });
+    const existing = existingCustomer(c.email, c.phone);
+    const { id, created } = await upsert('contact', c.sid, customerEntity, { kind: 'person', firstName: c.firstName, lastName: c.lastName, email: c.email, phone: c.phone, notes: c.notes, externalRef: `movegistics:${c.sid}` }, { createdOn: c.createdOn, existing: refs.has(`contact:${c.sid}`) ? null : existing });
+    if (created) {
+      if (c.email) customerByEmail.set(c.email, id);
+      if (c.phone && !customerByPhone.has(c.phone)) customerByPhone.set(c.phone, { id, email: c.email });
+    }
   });
   const customerId = (sid: string | null) => (sid ? (ids.get(`contact:${sid}`) ?? null) : null);
 
@@ -189,7 +238,15 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
         voidedAt: e.status === 'void' ? sent : null, voidReason: e.status === 'void' ? (e.voidReason ?? 'Void in Movegistics') : null,
         createdByName: e.createdByName, signatureName: e.status === 'signed' ? 'Signed in Movegistics' : null,
       },
-      { createdOn: e.createdOn, updatable: live ? ['status', 'viewedAt', 'signedAt', 'createdByName'] : ['status', 'voidedAt', 'voidReason', 'createdByName'] },
+      {
+        createdOn: e.createdOn,
+        updatable: live ? ['status', 'viewedAt', 'signedAt', 'createdByName'] : ['status', 'voidedAt', 'voidReason', 'createdByName'],
+        // A later export can hold an earlier-dated or a deleted estimate: never collide on a version.
+        beforeCreate: async (v) => {
+          const [{ top }] = await s.db.select({ top: max(hhmcEstimates.version) }).from(hhmcEstimates).where(and(s.where(hhmcEstimates, 'include'), eq(hhmcEstimates.jobId, jobId)));
+          if (top !== null && Number(v.version) <= top) v.version = top + 1;
+        },
+      },
     );
   });
 
@@ -197,7 +254,7 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
   await each(n.invoices as NInvoice[], async (i) => {
     const jobId = ids.get(`work_request:${i.jobSid}`)!;
     const paid = i.amountCents - i.balanceCents;
-    const { id: invoiceId, created } = await upsert(
+    const { id: invoiceId, created, updated } = await upsert(
       'invoice',
       i.sid,
       invoiceEntity,
@@ -210,6 +267,10 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
       },
       { createdOn: i.invoiceDate, updatable: ['status', 'dueDate', 'paidCents', 'paidAt', 'sentAt', 'subtotalCents', 'totalCents'] },
     );
+    if (updated) {
+      const [line] = await s.db.select({ id: hhmcInvoiceLines.id, rateCents: hhmcInvoiceLines.rateCents }).from(hhmcInvoiceLines).where(and(s.where(hhmcInvoiceLines), eq(hhmcInvoiceLines.invoiceId, invoiceId), eq(hhmcInvoiceLines.sortOrder, 0), like(hhmcInvoiceLines.name, 'Movegistics invoice %'))).limit(1);
+      if (line && line.rateCents !== i.amountCents) await updateRecord(s, invoiceLineEntity, line.id, { rateCents: i.amountCents });
+    }
     if (created) await createRecord(s, invoiceLineEntity, { invoiceId, section: 'transportation_labor', name: `Movegistics invoice ${i.sid} total (line items were not in the export)`, unit: 'each', qtyHundredths: 100, rateCents: i.amountCents, serviceDate: i.invoiceDate, sortOrder: 0 });
   });
 

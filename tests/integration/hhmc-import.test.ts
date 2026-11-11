@@ -9,11 +9,13 @@ import { and, eq, inArray, like } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { notifications, payments } from '@/core/db/schema';
 import { withScope, type Scope } from '@/core/db/scope';
-import { hhmcAutomationQueue, hhmcImportRefs, hhmcInvoices, hhmcJobs } from '@/modules/hhmc/schema';
+import { updateRecord } from '@/core/records/records';
+import { jobEntity } from '@/modules/hhmc/entities';
+import { hhmcAutomationQueue, hhmcEstimates, hhmcImportRefs, hhmcInvoiceLines, hhmcInvoices, hhmcJobs } from '@/modules/hhmc/schema';
 import { loadIntoHhmc } from '../../scripts/hhmc-import/load';
-import { cents, day, FILE_NAMES, leadSource, normalize, type Files } from '../../scripts/hhmc-import/movegistics';
+import { cents, day, FILE_NAMES, leadSource, normalize, UnknownValues, type Files } from '../../scripts/hhmc-import/movegistics';
 import { movegisticsSide, ourSide, reconciliationReport } from '../../scripts/hhmc-import/reconcile';
-import { systemContext } from './helpers';
+import { ctxFor, systemContext, USERS } from './helpers';
 
 const dir = path.resolve(__dirname, '../fixtures/movegistics');
 const files = Object.fromEntries(Object.entries(FILE_NAMES).map(([k, f]) => [k, fs.readFileSync(path.join(dir, f), 'utf8')])) as Files;
@@ -27,7 +29,7 @@ describe('Movegistics exports → normalized records', () => {
     expect(cents('12.999999999999998')).toBe(1300);
     expect(cents('$1,234.5')).toBe(123450);
     expect(day('01/20/2026')).toBe('2026-01-20');
-    expect(day('1767225600000')).toBe('2026-01-01');
+    expect(day('1767225600000')).toBe('2025-12-31'); // midnight UTC = 7 pm the day before in Ithaca
   });
 
   it('keeps one customer per email (then phone)', () => {
@@ -73,6 +75,20 @@ describe('Movegistics exports → normalized records', () => {
   });
 });
 
+describe('unknown Movegistics values stop the import', () => {
+  it('an invoice, estimate or payment status the importer does not know is never guessed', () => {
+    const odd = { ...files, invoices: files.invoices.replace('"PARTIAL_PAID"', '"WRITTEN_OFF"'), payments: files.payments.replace('"REQUESTED"', '"CHARGEBACK"') };
+    expect(() => normalize(odd)).toThrow(UnknownValues);
+    expect(() => normalize(odd)).toThrow(/invoice Status: WRITTEN_OFF.*payment Transaction Status: CHARGEBACK/);
+  });
+
+  it('declined or failed payments are not money; a void invoice owes nothing', () => {
+    const n = normalize({ ...files, payments: files.payments.replace('"REQUESTED"', '"FAILED"'), invoices: files.invoices.replace('"PARTIAL_PAID"', '"VOID"') });
+    expect(n.payments.some((p) => p.sid === 'PM900004')).toBe(false);
+    expect(n.invoices.find((i) => i.sid === 'IN900002')).toMatchObject({ status: 'void', balanceCents: 0 });
+  });
+});
+
 describe('loading into HHMC through the record functions', () => {
   it('imports, reconciles to the cent, and a second run changes nothing', async () => {
     const ctx = await systemContext('hhmc', 'live');
@@ -93,7 +109,8 @@ describe('loading into HHMC through the record functions', () => {
     expect(mine.pays.map((p) => p.provider)).toEqual(['manual', 'manual', 'manual', 'manual']);
     expect(mine.pays.reduce((t, p) => t + p.amountCents - p.refundedCents, 0)).toBe(16008 + 64032 + 15000);
     expect(mine.jobs.find((j) => j.jobNumber === 'WR900001')!.createdAt.toISOString().slice(0, 10)).toBe('2026-01-06');
-    expect(report.markdown).toContain('Per month');
+    expect(report.differences).toBe(0);
+    expect(report.markdown).toContain('every number matches to the cent');
 
     // Nothing was emailed or queued for imported records.
     const quiet = await batch(async (s) => ({
@@ -105,8 +122,47 @@ describe('loading into HHMC through the record functions', () => {
 
     // Re-running: no duplicates, nothing changed.
     const second = await loadIntoHhmc(batch, normalize(files));
-    for (const st of Object.values(second.stats)) expect(st.created + st.updated).toBe(0);
+    for (const st of Object.values(second.stats)) expect(st.created + st.updated + st.linked).toBe(0);
     const refs = await batch((s) => s.db.select().from(hhmcImportRefs).where(and(s.where(hhmcImportRefs), eq(hhmcImportRefs.sourceId, 'WR900001'))));
     expect(refs).toHaveLength(1);
+  });
+});
+
+describe('re-running the import on a changed export', () => {
+  it('keeps two people who share a phone apart, keeps staff edits, never collides on an estimate version, keeps the invoice line equal to its total', async () => {
+    const ctx = await systemContext('hhmc', 'live');
+    const batch = <T>(fn: (s: Scope) => Promise<T>) => withScope(ctx, 'hhmc.import.run', fn);
+    const base = await loadIntoHhmc(batch, normalize(files));
+
+    // Staff change a work request in SAI.
+    const gm = await ctxFor(USERS.hhmcAdmin, 'hhmc', 'live');
+    const wr = base.ids.get('work_request:WR900002')!;
+    await withScope(gm, 'hhmc.jobs.write', (s) => updateRecord(s, jobEntity, wr, { internalNotes: 'Changed by staff in SAI' }));
+
+    const changed: Files = {
+      ...files,
+      // Someone else on Avery's (shared) phone, with a different email.
+      contacts: files.contacts.trimEnd() + '\n"CN900009","Dana","Sharedline","dana.sharedline@example.com","+1 607-555-0101","","Hired  Hands","","","","03/01/2026","03/01/2026","","","","","","","","","","","",""\n',
+      // Movegistics changes the same work request's note.
+      workRequests: files.workRequests.replace('"1170","","","","","","Interstate"', '"1170","","","","Edited in Movegistics","","Interstate"'),
+      // A new estimate dated BEFORE the existing ones for the same work request.
+      estimates: files.estimates.trimEnd() + '\n"ES900005","Interstate Estimate for Blake Sample","1050","Sent","General","Blake Sample","","","02/01/2026","02/01/2026","03/01/2026","Blake Sample - Work Request","Interstate",""\n',
+      // An invoice amount corrected in Movegistics.
+      invoices: files.invoices.replace('"IN900001","","","01/21/2026","800.40","800.40"', '"IN900001","","","01/21/2026","810.00","810.00"'),
+    };
+    const run = await loadIntoHhmc(batch, normalize(changed));
+    expect(run.ids.get('contact:CN900009')).not.toBe(base.ids.get('contact:CN900001'));
+    expect(run.stats.work_request.kept).toBeGreaterThanOrEqual(1);
+    const after = await batch(async (s) => ({
+      job: (await s.db.select().from(hhmcJobs).where(and(s.where(hhmcJobs), eq(hhmcJobs.id, wr))))[0],
+      versions: (await s.db.select({ v: hhmcEstimates.version, n: hhmcEstimates.estimateNumber }).from(hhmcEstimates).where(and(s.where(hhmcEstimates, 'include'), eq(hhmcEstimates.jobId, wr)))).map((e) => e.v),
+      line: (await s.db.select().from(hhmcInvoiceLines).where(and(s.where(hhmcInvoiceLines), eq(hhmcInvoiceLines.invoiceId, base.ids.get('invoice:IN900001')!))))[0],
+    }));
+    expect(after.job.internalNotes).toBe('Changed by staff in SAI');
+    expect(new Set(after.versions).size).toBe(after.versions.length);
+    expect(after.line.rateCents).toBe(81000);
+
+    // Back to the original export (other tests rely on it).
+    await loadIntoHhmc(batch, normalize(files));
   });
 });

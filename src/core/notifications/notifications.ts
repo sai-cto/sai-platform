@@ -24,8 +24,12 @@ export const consoleEmailChannel: NotificationChannel = {
   name: 'console-email',
   async send(message) {
     if (process.env.NODE_ENV !== 'test') {
+      // Nothing from the message: recipient, subject and body can all hold real customer data
+      // (local real-data import, pilot mode). EMAIL_CONSOLE_FULL=true prints it, for fake data.
       console.log(
-        `\n[email — not actually sent]\n  To:      ${message.recipient}\n  Subject: ${message.subject}\n  ${message.body.replace(/\n/g, '\n  ')}\n`,
+        process.env.EMAIL_CONSOLE_FULL === 'true'
+          ? `\n[email — not actually sent]\n  To:      ${message.recipient}\n  Subject: ${message.subject}\n  ${message.body.replace(/\n/g, '\n  ')}\n`
+          : '[email — not actually sent]',
       );
     }
     return { ok: true };

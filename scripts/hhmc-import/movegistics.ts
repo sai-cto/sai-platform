@@ -85,7 +85,7 @@ export function day(v: string | undefined): string | null {
   if (!s) return null;
   const us = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s);
   if (us) return `${us[3]}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}`;
-  if (/^\d{12,14}$/.test(s)) return new Date(Number(s)).toISOString().slice(0, 10);
+  if (/^\d{12,14}$/.test(s)) return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(Number(s)));
   const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
   return iso ? `${iso[1]}-${iso[2]}-${iso[3]}` : null;
 }
@@ -149,12 +149,33 @@ const SECTION_COLUMNS: Record<string, string> = {
   storage: 'Storage Amount',
 };
 
+/** Movegistics status values we know. Anything else stops the import: nothing is guessed. */
+export const ESTIMATE_STATUS: Record<string, EstimateStatus> = { SIGNED: 'signed', VIEWED: 'viewed', SENT: 'sent', VOID: 'void', DRAFT: 'draft' };
+export const INVOICE_STATUS: Record<string, InvoiceStatus> = { PAID: 'paid', SENT: 'sent', PARTIAL_PAID: 'partially_paid', DRAFT: 'draft', CREATED: 'draft', VOID: 'void', VOIDED: 'void', CANCELLED: 'void', CANCELED: 'void' };
+/** Payment "Transaction Status": money received, refunded, or never received (not imported). */
+export const PAYMENT_STATUS: Record<string, 'received' | 'refunded' | 'partial_refund' | 'not_received'> = {
+  SUCCESSFUL: 'received', RECORDED: 'received', REFUNDED: 'refunded', PARTIAL_REFUNDED: 'partial_refund',
+  REQUESTED: 'not_received', FAILED: 'not_received', DECLINED: 'not_received', VOIDED: 'not_received', CANCELLED: 'not_received', CANCELED: 'not_received',
+};
+export class UnknownValues extends Error {
+  override name = 'UnknownValues';
+}
+function strict<T>(map: Record<string, T>, raw: string | undefined, what: string, unknown: Map<string, Set<string>>): T | undefined {
+  const key = (raw ?? '').trim().toUpperCase().replace(/\s+/g, '_');
+  if (key in map) return map[key];
+  // The value is printed: mask anything that could be personal data (shifted columns).
+  const shown = !key ? '(blank)' : /@|\d{4,}/.test(key) || key.length > 30 ? '(a value that looks like personal data: columns shifted?)' : key;
+  unknown.set(what, (unknown.get(what) ?? new Set()).add(shown));
+  return undefined;
+}
+
 export const hashOf = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 32);
 
 // ---------------------------------------------------------------- normalize
 
 export function normalize(files: Files): Normalized {
   const issues: Issues = {};
+  const unknown = new Map<string, Set<string>>();
   const issue = (key: string) => (issues[key] = (issues[key] ?? 0) + 1);
 
   // ---- contacts: deduplicated by email, then phone (the first one wins; later ones point to it)
@@ -162,7 +183,6 @@ export function normalize(files: Files): Normalized {
   const byEmail = new Map<string, NContact>();
   const byPhone = new Map<string, NContact>();
   const byName = new Map<string, NContact[]>();
-  const alias = new Map<string, NContact>(); // Movegistics contact id → kept contact
   const keep = (c: NContact) => {
     contacts.push(c);
     if (c.email) byEmail.set(c.email, c);
@@ -175,7 +195,6 @@ export function normalize(files: Files): Normalized {
     const phone = normPhone(r['Contact Number - Mobile']) ?? normPhone(r['Contact Number - Home']);
     const existing = (email && byEmail.get(email)) || (!email && phone && byPhone.get(phone)) || null;
     if (existing) {
-      alias.set(r['Contact ID'], existing);
       issue('contacts merged as duplicates (same email or phone)');
       continue;
     }
@@ -184,12 +203,12 @@ export function normalize(files: Files): Normalized {
       issue('contacts skipped (no name, email or phone)');
       continue;
     }
-    alias.set(c.sid, c);
     keep(c);
   }
   /** Finds (or creates, from a work request / lead) the contact for this person. */
   const contactFor = (p: { email: string | null; phone: string | null; first: string; last: string; sid: string; createdOn: string | null }, source: string): NContact => {
-    const found = (p.email && byEmail.get(p.email)) || (p.phone && byPhone.get(p.phone)) || null;
+    const byPhoneMatch = p.phone ? byPhone.get(p.phone) : undefined;
+    const found = (p.email && byEmail.get(p.email)) || (byPhoneMatch && (!byPhoneMatch.email || !p.email || byPhoneMatch.email === p.email) ? byPhoneMatch : null) || null;
     if (found) return found;
     const named = byName.get(nameOf(p.first, p.last)) ?? [];
     if (!p.email && !p.phone && named.length === 1) return named[0];
@@ -271,7 +290,13 @@ export function normalize(files: Files): Normalized {
   }
   const findJob = (title: string, contactName: string, onDate?: string | null): NJob | null => {
     const exact = jobByKey.get(titleKey(title, contactName)) ?? [];
-    const pool = exact.length ? exact : (jobByTitle.get(normName(title)) ?? []);
+    let pool = exact;
+    if (!pool.length) {
+      const byTitle = jobByTitle.get(normName(title)) ?? [];
+      if (byTitle.length !== 1) return null;
+      issue('records linked by work request title alone (contact name differs)');
+      pool = byTitle;
+    }
     if (!pool.length) return null;
     if (pool.length === 1 || !onDate) return pool[pool.length - 1];
     // Several work requests with the same title (repeat customers): the latest created on or before the date.
@@ -282,10 +307,17 @@ export function normalize(files: Files): Normalized {
   // ---- estimates: versions per job; at most one in force (the platform allows only one)
   const estimates: NEstimate[] = [];
   const estimateRows = parseCsv(files.estimates).map((r) => ({ r, createdOn: day(r['Created Date']) }));
-  estimateRows.sort((a, b) => (a.createdOn ?? '').localeCompare(b.createdOn ?? '') || a.r['Estimate ID'].localeCompare(b.r['Estimate ID']));
+  estimateRows.sort((a, b) => (a.createdOn ?? '').localeCompare(b.createdOn ?? '') || a.r['Estimate ID'].localeCompare(b.r['Estimate ID'], 'en', { numeric: true }));
   const perJob = new Map<string, NEstimate[]>();
-  const STATUS: Record<string, EstimateStatus> = { signed: 'signed', viewed: 'viewed', sent: 'sent', void: 'void', draft: 'draft' };
+  const seenEstimates = new Set<string>();
   for (const { r, createdOn } of estimateRows) {
+    if (seenEstimates.has(r['Estimate ID'])) {
+      issue('duplicate estimate ids in the export (second copy skipped)');
+      continue;
+    }
+    seenEstimates.add(r['Estimate ID']);
+    const estimateStatus = strict(ESTIMATE_STATUS, r['Status'], 'estimate Status', unknown);
+    if (!estimateStatus) continue;
     const job = findJob(r['Work Request Title'] ?? '', r['Contacts'] ?? '', createdOn);
     if (!job) {
       issue('estimates with no matching work request (not imported)');
@@ -293,7 +325,7 @@ export function normalize(files: Files): Normalized {
     }
     const list = perJob.get(job.sid) ?? [];
     const e: NEstimate = {
-      sid: r['Estimate ID'], jobSid: job.sid, version: list.length + 1, status: STATUS[(r['Status'] ?? '').toLowerCase()] ?? 'sent',
+      sid: r['Estimate ID'], jobSid: job.sid, version: list.length + 1, status: estimateStatus,
       amountCents: cents(r['Estimate Amount']), createdByName: ownerName(r['Estimate Owner']), createdOn, expiresOn: day(r['Expiration Date']), voidReason: null,
     };
     list.push(e);
@@ -314,8 +346,15 @@ export function normalize(files: Files): Normalized {
 
   // ---- invoices
   const invoices: NInvoice[] = [];
-  const INV: Record<string, InvoiceStatus> = { paid: 'paid', sent: 'sent', partial_paid: 'partially_paid', draft: 'draft', created: 'draft' };
+  const seenInvoices = new Set<string>();
   for (const r of invRows) {
+    if (seenInvoices.has(r['Invoice ID'])) {
+      issue('duplicate invoice ids in the export (second copy skipped)');
+      continue;
+    }
+    seenInvoices.add(r['Invoice ID']);
+    const invoiceStatus = strict(INVOICE_STATUS, r['Status'], 'invoice Status', unknown);
+    if (!invoiceStatus) continue;
     const invoiceDate = day(r['Invoice Date']) ?? day(r['Created Date'])!;
     const email = normEmail(r['Contact Email']);
     const phone = normPhone(r['Contact Phone']);
@@ -335,10 +374,10 @@ export function normalize(files: Files): Normalized {
     const amount = cents(r['Invoice Amount']);
     // Movegistics leaves "Balance Due" at the full amount on many invoices it marks PAID (281 in
     // 2025, nearly all fully covered by payments in its own payments export): PAID means $0 due.
-    const status = INV[(r['Status'] ?? '').toLowerCase()] ?? 'sent';
+    const status = invoiceStatus;
     const exported = Math.max(0, Math.min(cents(r['Balance Due']), amount));
     if (status === 'paid' && exported > 0) issue('PAID invoices whose exported "Balance Due" was not zero (treated as fully paid)');
-    const balance = status === 'paid' ? 0 : exported;
+    const balance = status === 'paid' || status === 'void' ? 0 : exported;
     invoices.push({
       sid: r['Invoice ID'], jobSid: job.sid, contactSid: job.contactSid, status, amountCents: amount, balanceCents: balance,
       invoiceDate, dueDate: day(r['Due Date']) ?? invoiceDate, ownerName: ownerName(r['Invoice Owner']), poNumber: blank(r['PO Number']),
@@ -362,9 +401,16 @@ export function normalize(files: Files): Normalized {
   };
   const jobsOfContact = new Map<string, NJob[]>();
   for (const j of jobs) jobsOfContact.set(j.contactSid, [...(jobsOfContact.get(j.contactSid) ?? []), j]);
+  const seenPayments = new Set<string>();
   for (const r of parseCsv(files.payments)) {
-    const tx = (r['Transaction Status'] ?? '').toUpperCase();
-    if (tx === 'REQUESTED' || tx === '') {
+    if (seenPayments.has(r['Payment ID'])) {
+      issue('duplicate payment ids in the export (second copy skipped)');
+      continue;
+    }
+    seenPayments.add(r['Payment ID']);
+    const tx = strict(PAYMENT_STATUS, r['Transaction Status'], 'payment Transaction Status', unknown);
+    if (!tx) continue;
+    if (tx === 'not_received') {
       issue('payment requests never paid (not imported: no money moved)');
       continue;
     }
@@ -385,12 +431,17 @@ export function normalize(files: Files): Normalized {
     const mode = (r['Payment Mode'] ?? '').toLowerCase();
     payments.push({
       sid: r['Payment ID'], contactSid, invoiceSid: invoice?.sid ?? null, jobSid, isDeposit: !invoice && (r['Deposit'] ?? '').toLowerCase() === 'yes',
-      amountCents: amount, refundedCents: tx === 'REFUNDED' ? amount : 0, partialRefund: tx === 'PARTIAL_REFUNDED',
+      amountCents: amount, refundedCents: tx === 'refunded' ? amount : 0, partialRefund: tx === 'partial_refund',
       method: mode.startsWith('card') ? 'card' : mode === 'cash' ? 'cash' : mode === 'check' ? 'check' : 'other', paidOn,
       cardBrand: blank(r['Card Type']), cardLast4: blank(r['Last 4 Digits Of Card']), description: blank(r['Description']) ?? (invoice ? `Payment on ${invoice.sid}` : 'Deposit'),
     });
-    if (tx === 'PARTIAL_REFUNDED') issue('partially refunded payments (refund amount not in the export: recorded as not refunded)');
+    if (tx === 'partial_refund') issue('partially refunded payments (refund amount not in the export: recorded as not refunded)');
 
+  }
+  if (unknown.size) {
+    throw new UnknownValues(
+      `Movegistics values this importer does not know (nothing was imported; add them to the maps in movegistics.ts on purpose): ${[...unknown].map(([k, v]) => `${k}: ${[...v].join(', ')}`).join('; ')}`,
+    );
   }
   return { contacts, leads, jobs, estimates, invoices, payments, issues };
 }
