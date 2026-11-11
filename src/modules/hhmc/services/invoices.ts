@@ -89,6 +89,8 @@ export async function createInvoice(
   const terms = (INVOICE_TERMS as readonly string[]).includes(raw.terms ?? '') ? (raw.terms as (typeof INVOICE_TERMS)[number]) : 'due_on_receipt';
   return withScope(ctx, P.invoicesWrite, async (s) => {
     authorize(ctx, P.jobsWrite);
+    // The estimate lock too, so a deposit cannot land while the invoice is being made.
+    await takeLock(s, `hhmc-estimates:${jobId}`);
     await takeLock(s, `hhmc-invoice:${jobId}`);
     const job = await loadJob(s, jobId);
     if (job.stage !== 'booked' && job.stage !== 'completed')
@@ -96,7 +98,8 @@ export async function createInvoice(
     const open = await s.db
       .select({ id: hhmcInvoices.id })
       .from(hhmcInvoices)
-      .where(and(s.where(hhmcInvoices), eq(hhmcInvoices.jobId, jobId), ne(hhmcInvoices.status, 'void')))
+      // Archived (Data tab) invoices still count: an archive must not let a job be billed twice.
+      .where(and(s.where(hhmcInvoices, 'include'), eq(hhmcInvoices.jobId, jobId), ne(hhmcInvoices.status, 'void')))
       .limit(1);
     if (open.length > 0) throw new ValidationError('This job already has an invoice. Void it first to start again.');
     const [estimate] = await s.db
@@ -229,7 +232,9 @@ export async function updateInvoiceOptions(
 /** Sends the invoice with its payment link; the past-due reminder is queued (ref §9.2). */
 export async function sendInvoice(ctx: BusinessContext, invoiceId: string, now: Date = new Date()) {
   return withScope(ctx, P.invoicesWrite, async (s) => {
+    // Everything this needs, before the email goes out (ARCHITECTURE rule 7).
     authorize(ctx, CORE.notificationsWrite);
+    authorize(ctx, P.jobsWrite);
     await takeLock(s, `hhmc-invoice-pay:${invoiceId}`);
     const invoice = await loadInvoice(s, invoiceId);
     if (invoice.status !== 'draft' && invoice.status !== 'sent' && invoice.status !== 'partially_paid')

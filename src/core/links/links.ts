@@ -17,7 +17,7 @@ import crypto from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { businessModules, businesses } from '../db/schema';
-import { NotFoundError } from '../errors';
+import { NotFoundError, ValidationError } from '../errors';
 import { isUuid } from '../ids';
 import { getModule } from '../modules/registry';
 import type { BusinessContext, Environment } from '../tenancy/context';
@@ -33,7 +33,7 @@ function secret(): Buffer {
   const value = process.env.LINK_SIGNING_SECRET ?? '';
   // A short or missing secret would make links guessable: refuse rather than sign weakly.
   if (value.length < 32)
-    throw new Error('LINK_SIGNING_SECRET is not set (or shorter than 32 characters). Run "npm run setup".');
+    throw new ValidationError('Customer links are not set up: LINK_SIGNING_SECRET is missing or too short. Run "npm run setup".');
   return Buffer.from(value, 'utf8');
 }
 
@@ -66,7 +66,13 @@ export function verifyLink(token: string, now: Date = new Date()): Payload {
   const [body, signature, extra] = token.split('.');
   if (!body || !signature || extra !== undefined) throw new NotFoundError();
   const given = Buffer.from(signature, 'base64url');
-  const expected = mac(body);
+  let expected: Buffer;
+  try {
+    expected = mac(body);
+  } catch (error) {
+    console.error(error); // not configured: no link can be checked, so none is valid
+    throw new NotFoundError();
+  }
   if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected))
     throw new NotFoundError();
   let payload: Payload;

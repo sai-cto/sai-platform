@@ -3,7 +3,6 @@
  * page"). Summary, addresses, the quote with live totals, estimates, booking, job days,
  * invoices, payments, notes and calls, emails and activity.
  */
-import crypto from 'node:crypto';
 import Link from 'next/link';
 import type { PortalPageProps } from '@/core/modules/contract';
 import { can } from '@/core/rbac/permissions';
@@ -43,6 +42,7 @@ import { depositDueByCard } from '../services/estimates';
 import { balanceOf } from '../services/invoices';
 import { jobActivity, jobPage } from '../services/views';
 import { CopyLinkButton } from './copy-link';
+import { AttemptKey } from './attempt-key';
 import { Disclosure } from './disclosure';
 import { JobFields, areaClass } from './jobs';
 import { EstimateStatusBadge, Fact, InvoiceStatusBadge, Note, Select, StageBadge, formatDay, formatTime } from './parts';
@@ -221,9 +221,9 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                           <Note tone="green" title={`Deposit paid: ${formatMoney(e.depositPaidCents)}`} />
                         ) : (
                           <Note title={`Deposit not paid yet (${formatMoney(due.totalDueCents)} by card)`}>
-                            {can(ctx, CORE.paymentsWrite) && canWrite ? (
+                            {can(ctx, CORE.paymentsWrite) && canWrite && can(ctx, P.estimatesWrite) && (job.stage === 'estimate_sent' || job.stage === 'booked') && !openInvoice ? (
                               <ActionForm action={recordDepositAction.bind(null, slug, mode, e.id)} submitLabel="Record deposit" submitVariant="secondary">
-                                <input type="hidden" name="attemptKey" value={crypto.randomUUID()} />
+                                <AttemptKey />
                                 <Field label="Paid by" htmlFor={`dep-${e.id}`}>
                                   <Select id={`dep-${e.id}`} name="method" defaultValue="card">
                                     <option value="card">{`Card (test card) · ${formatMoney(due.totalDueCents)}`}</option>

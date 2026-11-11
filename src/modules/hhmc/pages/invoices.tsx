@@ -1,5 +1,4 @@
 /** Invoices (ref §7.1): the list with open / past due / paid, and one invoice. */
-import crypto from 'node:crypto';
 import Link from 'next/link';
 import type { PortalPageProps } from '@/core/modules/contract';
 import { can } from '@/core/rbac/permissions';
@@ -24,6 +23,7 @@ import { INVOICE_TERMS, type InvoiceStatus } from '../schema';
 import { balanceOf, INVOICES_PAGE_SIZE, listInvoices } from '../services/invoices';
 import { formatQty, lineTotalCents, SECTIONS, sectionLabel } from '../services/pricing';
 import { invoicePage } from '../services/views';
+import { AttemptKey } from './attempt-key';
 import { Disclosure } from './disclosure';
 import { Check, Fact, InvoiceStatusBadge, Select, formatDay, hrefWith } from './parts';
 
@@ -195,7 +195,7 @@ export async function InvoicePage({ ctx, params, basePath }: PortalPageProps) {
           {canWrite && can(ctx, CORE.paymentsWrite) && (invoice.status === 'sent' || invoice.status === 'partially_paid') ? (
             <Card title="Receive a payment">
               <ActionForm action={invoicePaymentAction.bind(null, slug, mode, invoice.id)} submitLabel="Record payment">
-                <input type="hidden" name="attemptKey" value={crypto.randomUUID()} />
+                <AttemptKey />
                 <Field label="Amount ($)" htmlFor="ip-amount"><input id="ip-amount" name="amount" inputMode="decimal" defaultValue={(balance / 100).toFixed(2)} className={inputClass} /></Field>
                 <Field label="Paid by" htmlFor="ip-method">
                   <Select id="ip-method" name="method" defaultValue="check">

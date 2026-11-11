@@ -6,7 +6,7 @@
  * Staff side: send, resend, void, the customer link. Customer side (through a customer link,
  * src/core/links): view, sign (ref §7.3), pay the deposit.
  */
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne } from 'drizzle-orm';
 import { withScope, type Scope } from '@/core/db/scope';
 import { takeLock } from '@/core/db/lock';
 import { ForbiddenError, NotFoundError, ValidationError } from '@/core/errors';
@@ -21,7 +21,7 @@ import type { BusinessContext } from '@/core/tenancy/context';
 import { estimateEntity } from '../entities';
 import { CORE, P } from '../permissions';
 import { canSignEstimate, canVoidEstimate, isLiveEstimate } from '../rules';
-import { hhmcEstimates, type EstimateSnapshot } from '../schema';
+import { hhmcEstimates, hhmcInvoices, type EstimateSnapshot } from '../schema';
 import { loadSettings } from '../settings';
 import { cancelQueued, enqueue } from './automations';
 import {
@@ -41,6 +41,16 @@ import { computeDeposit, lineTotalCents } from './pricing';
 import { quoteSummary } from './quote';
 
 const DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Loads an estimate, takes its job's lock, then loads it again: everything that changes an
+ * estimate or its deposit decides on the row as it is AFTER waiting for anyone else.
+ */
+async function lockedEstimate(s: Scope, estimateId: string) {
+  const first = await loadEstimate(s, estimateId);
+  await takeLock(s, `hhmc-estimates:${first.jobId}`);
+  return loadEstimate(s, estimateId);
+}
 
 async function liveEstimates(s: Scope, jobId: string) {
   return s.db
@@ -76,7 +86,9 @@ async function storeDocument(s: Scope, estimate: typeof hhmcEstimates.$inferSele
  */
 export async function sendEstimate(ctx: BusinessContext, jobId: string, now: Date = new Date()) {
   return withScope(ctx, P.estimatesWrite, async (s) => {
+    // Everything this needs, before the email goes out (ARCHITECTURE rule 7).
     authorize(ctx, CORE.notificationsWrite);
+    authorize(ctx, P.jobsWrite);
     await takeLock(s, `hhmc-estimates:${jobId}`);
     const job = await loadJob(s, jobId);
     if (job.stage !== 'qualified' && job.stage !== 'estimate_sent')
@@ -88,7 +100,13 @@ export async function sendEstimate(ctx: BusinessContext, jobId: string, now: Dat
     if (summary.totals.totalCents <= 0) throw new ValidationError('The quote total must be more than zero.');
 
     const live = await liveEstimates(s, jobId);
-    if (live.some((e) => e.status === 'signed'))
+    // An archived (Data tab) signed estimate still counts: what a customer signed is never replaced.
+    const [signedAnywhere] = await s.db
+      .select({ id: hhmcEstimates.id })
+      .from(hhmcEstimates)
+      .where(and(s.where(hhmcEstimates, 'include'), eq(hhmcEstimates.jobId, jobId), eq(hhmcEstimates.status, 'signed')))
+      .limit(1);
+    if (signedAnywhere)
       throw new ValidationError('This job already has a signed estimate. It cannot be replaced.');
     for (const old of live) {
       await updateRecord(s, estimateEntity, old.id, { status: 'void', voidedAt: now, voidReason: 'Replaced by a newer version.' });
@@ -199,6 +217,8 @@ export async function resendEstimate(ctx: BusinessContext, estimateId: string) {
     const estimate = await loadEstimate(s, estimateId);
     if (estimate.status !== 'sent' && estimate.status !== 'viewed')
       throw new ValidationError('Only an estimate waiting for a signature can be resent.');
+    if (estimate.expiresAt && estimate.expiresAt.getTime() <= Date.now())
+      throw new ValidationError('This estimate has expired: send a new version instead.');
     const job = await loadJob(s, estimate.jobId);
     await emailEstimate(s, estimate, await loadCustomer(s, job.customerId), 'estimate_email');
   });
@@ -208,8 +228,7 @@ export async function resendEstimate(ctx: BusinessContext, estimateId: string) {
 export async function voidEstimate(ctx: BusinessContext, estimateId: string, reason: string, now: Date = new Date()) {
   const why = reason.trim() || 'Voided by staff.';
   return withScope(ctx, P.estimatesWrite, async (s) => {
-    const estimate = await loadEstimate(s, estimateId);
-    await takeLock(s, `hhmc-estimates:${estimate.jobId}`);
+    const estimate = await lockedEstimate(s, estimateId);
     if (!canVoidEstimate(estimate.status))
       throw new ValidationError(estimate.status === 'signed' ? 'A signed estimate cannot be voided.' : 'This estimate is already void.');
     await updateRecord(s, estimateEntity, estimateId, { status: 'void', voidedAt: now, voidReason: why.slice(0, 500) });
@@ -273,10 +292,11 @@ export async function signEstimateByLink(ctx: BusinessContext, input: SignatureI
   if (name.length < 2 || name.length > 120) throw new ValidationError('Type your full name to sign.');
   if (!input.agree) throw new ValidationError('Tick the box to agree to the terms, pricing and services.');
   return withScope(ctx, P.customerEstimate, async (s) => {
-    const estimate = await loadEstimate(s, estimateId);
-    await takeLock(s, `hhmc-estimates:${estimate.jobId}`);
+    const estimate = await lockedEstimate(s, estimateId);
     const problem = canSignEstimate(estimate.status, estimate.expiresAt, now);
     if (problem) throw new ValidationError(problem);
+    const jobNow = await loadJob(s, estimate.jobId);
+    if (jobNow.stage !== 'estimate_sent') throw new ValidationError('This estimate can no longer be signed. Please contact us.');
     const signed = await updateRecord(s, estimateEntity, estimateId, {
       status: 'signed',
       signedAt: now,
@@ -299,7 +319,9 @@ export function depositDueByCard(estimate: typeof hhmcEstimates.$inferSelect) {
   return computeDeposit(
     { subtotalCents: estimate.subtotalCents, serviceTaxCents: estimate.serviceTaxCents },
     estimate.snapshot.depositBp,
-    { byCard: true, convenienceFeeBp: estimate.snapshot.convenienceFeeBp },
+    // The fee on a card deposit follows the estimate: with the card fee off, the deposit has none
+    // either (otherwise the invoice would credit back a fee it never charged; review round 1).
+    { byCard: estimate.snapshot.convenienceFeeOn, convenienceFeeBp: estimate.snapshot.convenienceFeeBp },
   );
 }
 
@@ -312,6 +334,14 @@ async function takeDeposit(
   if (estimate.status !== 'signed') throw new ValidationError('The estimate must be signed before the deposit is paid.');
   if (estimate.depositPaymentId || estimate.depositPaidCents > 0) throw new ValidationError('The deposit has already been paid.');
   const job = await loadJob(s, estimate.jobId);
+  if (job.stage !== 'estimate_sent' && job.stage !== 'booked')
+    throw new ValidationError('A deposit can no longer be taken for this move. Please contact us.');
+  const [invoice] = await s.db
+    .select({ id: hhmcInvoices.id })
+    .from(hhmcInvoices)
+    .where(and(s.where(hhmcInvoices, 'include'), eq(hhmcInvoices.jobId, job.id), ne(hhmcInvoices.status, 'void')))
+    .limit(1);
+  if (invoice) throw new ValidationError('This move has been invoiced: pay the invoice instead of a deposit.');
   const due =
     input.method === 'card'
       ? depositDueByCard(estimate)
@@ -340,8 +370,7 @@ export async function payDepositByLink(ctx: BusinessContext, input: { cardToken?
   const estimateId = ctx.link?.subjectId ?? '';
   requireEstimateLink(ctx, estimateId);
   return withScope(ctx, P.customerEstimate, async (s) => {
-    const estimate = await loadEstimate(s, estimateId);
-    await takeLock(s, `hhmc-deposit:${estimateId}`);
+    const estimate = await lockedEstimate(s, estimateId);
     return takeDeposit(s, estimate, { method: 'card', cardToken: input.cardToken, attemptKey: input.attemptKey });
   });
 }
@@ -354,9 +383,10 @@ export async function recordDeposit(
 ) {
   if (ctx.link) throw new ForbiddenError(P.jobsWrite);
   return withScope(ctx, P.jobsWrite, async (s) => {
+    // Everything the flow needs, before the card is charged (ARCHITECTURE rule 7).
     authorize(ctx, CORE.paymentsWrite);
-    const estimate = await loadEstimate(s, estimateId);
-    await takeLock(s, `hhmc-deposit:${estimateId}`);
+    authorize(ctx, P.estimatesWrite);
+    const estimate = await lockedEstimate(s, estimateId);
     return takeDeposit(s, estimate, input);
   });
 }

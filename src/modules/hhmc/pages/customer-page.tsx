@@ -5,7 +5,6 @@
  * Valuation, typed final signature; time, IP and browser are stored) → Confirmation with Pay
  * Deposit. Invoice link: the invoice and Pay the balance.
  */
-import crypto from 'node:crypto';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { NotFoundError } from '@/core/errors';
@@ -21,6 +20,7 @@ import { PURPOSE } from '../services/common';
 import { depositDueByCard, openEstimateByLink } from '../services/estimates';
 import { balanceOf, openInvoiceByLink } from '../services/invoices';
 import { formatQty, lineTotalCents, SECTIONS } from '../services/pricing';
+import { AttemptKey } from './attempt-key';
 import { formatDay } from './parts';
 
 const STEPS = [
@@ -195,7 +195,7 @@ async function EstimateReview({ ctx, searchParams, basePath }: PortalPageProps) 
                 <div className="flex justify-between font-semibold"><dt>Total deposit required</dt><dd>{formatMoney(deposit.totalDueCents)}</dd></div>
               </dl>
               <ActionForm action={payDepositLinkAction.bind(null, tokenFrom(basePath))} submitLabel={`Pay deposit ${formatMoney(deposit.totalDueCents)}`}>
-                <input type="hidden" name="attemptKey" value={crypto.randomUUID()} />
+                <AttemptKey />
                 <TestCardChoice />
               </ActionForm>
               <p className="mt-3 text-xs text-zinc-500">{`The deposit holds your date (${settings.depositPercent}% of the price before any card fee). The rest is invoiced after your move.`}</p>
@@ -241,7 +241,7 @@ async function InvoicePay({ ctx, basePath }: PortalPageProps) {
       ) : (
         <Card title="Pay now">
           <ActionForm action={payInvoiceLinkAction.bind(null, tokenFrom(basePath))} submitLabel={`Pay ${formatMoney(balance)}`}>
-            <input type="hidden" name="attemptKey" value={crypto.randomUUID()} />
+            <AttemptKey />
             <TestCardChoice />
           </ActionForm>
         </Card>

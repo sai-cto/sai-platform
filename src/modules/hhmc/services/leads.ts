@@ -5,6 +5,7 @@
 import { and, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { customers } from '@/core/db/schema/tenant';
+import { takeLock } from '@/core/db/lock';
 import { withScope, type Scope } from '@/core/db/scope';
 import { ValidationError } from '@/core/errors';
 import { authorize, can } from '@/core/rbac/permissions';
@@ -208,7 +209,9 @@ export async function convertLead(
   return withScope(ctx, P.leadsWrite, async (s) => {
     authorize(ctx, P.jobsWrite);
     authorize(ctx, CORE.customersRead);
+    await takeLock(s, `hhmc-lead:${id}`); // a double click must not convert twice
     const lead = await loadLead(s, id);
+    if (lead.status === 'converted') throw new ValidationError('This lead has already been converted.');
     const problem = leadMoveProblem(lead.status, 'converted');
     if (problem) throw new ValidationError(problem);
     const candidates = await candidateCustomers(s, lead);

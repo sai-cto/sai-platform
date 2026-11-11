@@ -555,3 +555,107 @@ describe('dashboard', () => {
     expect(jobs).toBeGreaterThan(5);
   });
 });
+
+describe('review gate round 1: regressions', () => {
+  const sig = { valuationInitials: 'AL', signatureName: 'Avery Signer', agree: true, ip: null, userAgent: null };
+
+  async function signedJob(ctx: BusinessContext) {
+    const { job } = await exampleAJob(ctx);
+    const est = await sendEstimate(ctx, job.id);
+    const customer = await buildLinkContext(tokenOf(await customerLinkFor(ctx, est.id)));
+    return { job, est, customer };
+  }
+
+  it('two deposit payments at the same moment charge once', async () => {
+    const ctx = await admin();
+    const { est, customer } = await signedJob(ctx);
+    await signEstimateByLink(customer, sig);
+    const results = await Promise.allSettled([
+      payDepositByLink(customer, { attemptKey: `a${tag()}x` }),
+      payDepositByLink(customer, { attemptKey: `b${tag()}x` }),
+    ]);
+    const paid = results.filter((r) => r.status === 'fulfilled' && r.value.ok);
+    expect(paid).toHaveLength(1);
+    const charges = await withScope(ctx, 'payments.read', (s) =>
+      s.db.select().from(payments).where(and(s.where(payments), eq(payments.subjectId, est.id), eq(payments.status, 'succeeded'))),
+    );
+    expect(charges).toHaveLength(1);
+  });
+
+  it('void and sign at the same moment: exactly one wins', async () => {
+    const ctx = await admin();
+    const { job, est, customer } = await signedJob(ctx);
+    await Promise.allSettled([voidEstimate(ctx, est.id, 'x'), signEstimateByLink(customer, sig)]);
+    const [row] = await withScope(ctx, P.jobsRead, (s) => s.db.select().from(hhmcEstimates).where(and(s.where(hhmcEstimates), eq(hhmcEstimates.id, est.id))));
+    const stage = (await loadJobAs(ctx, job.id)).stage;
+    if (row.status === 'signed') expect(stage).toBe('estimate_sent');
+    else expect([row.status, stage]).toEqual(['void', 'qualified']);
+  });
+
+  it('a lost job voids its open estimate, so the link cannot sign or pay', async () => {
+    const ctx = await admin();
+    const { job, customer } = await signedJob(ctx);
+    await markLost(ctx, job.id, 'Went elsewhere');
+    await expect(signEstimateByLink(customer, sig)).rejects.toThrow(/can no longer be signed/);
+  });
+
+  it('no deposit once the move is invoiced (no overpayment)', async () => {
+    const ctx = await admin();
+    const { job, est, customer } = await signedJob(ctx);
+    await signEstimateByLink(customer, sig);
+    await bookJob(ctx, job.id); // booked without a deposit (P5-11)
+    await createInvoice(ctx, job.id);
+    await expect(payDepositByLink(customer, { attemptKey: `t${tag()}x` })).rejects.toThrow(/invoiced|no longer be taken/);
+    expect(est.id).toBeTruthy();
+  });
+
+  it('a card deposit carries the card fee only when the estimate has it on', async () => {
+    const ctx = await admin();
+    const { job } = await exampleAJob(ctx);
+    await setQuoteOptions(ctx, job.id, { serviceTaxOn: false, convenienceFeeOn: false });
+    const est = await sendEstimate(ctx, job.id);
+    const customer = await buildLinkContext(tokenOf(await customerLinkFor(ctx, est.id)));
+    await signEstimateByLink(customer, sig);
+    const dep = await payDepositByLink(customer, { attemptKey: `t${tag()}x` });
+    expect(dep.ok && dep.payment.amountCents).toBe(13650); // 20% of $682.50, no fee
+  });
+
+  it('a retry after a declined card with a new attempt key is charged', async () => {
+    const ctx = await admin();
+    const { customer } = await signedJob(ctx);
+    await signEstimateByLink(customer, sig);
+    expect((await payDepositByLink(customer, { cardToken: 'mock_declined', attemptKey: `d${tag()}x` })).ok).toBe(false);
+    expect((await payDepositByLink(customer, { attemptKey: `e${tag()}x` })).ok).toBe(true);
+  });
+
+  it('sending needs the job permission up front, before any email goes out', async () => {
+    const ctx = await admin();
+    const { job } = await exampleAJob(ctx);
+    const limited = { ...ctx, permissions: new Set([...ctx.permissions].filter((p) => p !== P.jobsWrite)) };
+    await expect(sendEstimate(limited, job.id)).rejects.toBeInstanceOf(ForbiddenError);
+    expect((await emailsAbout(ctx, job.id)).length).toBe(0);
+  });
+
+  it('a double click converts a lead once', async () => {
+    const ctx = await admin();
+    const lead = await newLead(ctx);
+    const results = await Promise.allSettled([convertLead(ctx, lead.id, {}), convertLead(ctx, lead.id, {})]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+  });
+
+  it('the past-due reminder waits for the due date; an expired estimate gets no drip', async () => {
+    const { automationStillWanted } = await import('@/modules/hhmc/rules');
+    expect(automationStillWanted({ trigger: 'invoice_sent', respectsOptIn: false, invoiceStatus: 'sent', invoicePastDue: false }).ok).toBe(false);
+    expect(automationStillWanted({ trigger: 'invoice_sent', respectsOptIn: false, invoiceStatus: 'sent', invoicePastDue: true }).ok).toBe(true);
+    expect(automationStillWanted({ trigger: 'estimate_sent', respectsOptIn: true, jobOptIn: true, jobStage: 'estimate_sent', estimateStatus: 'sent', estimateExpired: true }).ok).toBe(false);
+  });
+
+  it('cancelling a booked job needs the booking permission', async () => {
+    const ctx = await admin();
+    const { job, customer } = await signedJob(ctx);
+    await signEstimateByLink(customer, sig);
+    await bookJob(ctx, job.id);
+    const noBook = { ...ctx, permissions: new Set([...ctx.permissions].filter((p) => p !== P.jobsBook)) };
+    await expect(cancelJob(noBook, job.id, 'x')).rejects.toBeInstanceOf(ForbiddenError);
+  });
+});

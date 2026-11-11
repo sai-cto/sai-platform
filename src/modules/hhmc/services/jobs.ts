@@ -8,14 +8,16 @@ import { z } from 'zod';
 import { customers } from '@/core/db/schema/tenant';
 import { withScope, type Scope } from '@/core/db/scope';
 import { ValidationError } from '@/core/errors';
+import { authorize } from '@/core/rbac/permissions';
 import { nextRecordNumber } from '@/core/records/numbering';
 import { createRecord, updateRecord } from '@/core/records/records';
 import type { BusinessContext } from '@/core/tenancy/context';
-import { jobDayEntity, jobEntity, noteEntity, quoteEntity, quoteLineEntity } from '../entities';
+import { estimateEntity, jobDayEntity, jobEntity, noteEntity, quoteEntity, quoteLineEntity } from '../entities';
 import { P } from '../permissions';
 import { isDateText, isJobTypeFor, JOB_TYPES, stageMoveProblem, STAGE_LABELS } from '../rules';
 import {
   hhmcCatalogItems,
+  hhmcEstimates,
   hhmcJobs,
   LEAD_SOURCES,
   SERVICE_TYPES,
@@ -58,6 +60,15 @@ export async function moveStage(
     completedAt: to === 'completed' ? now : undefined,
     closedAt: to === 'closed' ? now : undefined,
   });
+  if (to === 'lost' || to === 'cancelled') {
+    // The customer's link must not keep working on a dead job (review round 1).
+    const open = await s.db
+      .select({ id: hhmcEstimates.id })
+      .from(hhmcEstimates)
+      .where(and(s.where(hhmcEstimates), eq(hhmcEstimates.jobId, jobId), inArray(hhmcEstimates.status, ['sent', 'viewed'])));
+    for (const e of open)
+      await updateRecord(s, estimateEntity, e.id, { status: 'void', voidedAt: now, voidReason: `The job was ${STAGE_LABELS[to].toLowerCase()}.` });
+  }
   if (job.stage === 'estimate_sent') {
     await cancelQueued(s, { triggers: ['estimate_sent'], jobId }, `The job moved to ${STAGE_LABELS[to]}.`);
   }
@@ -252,6 +263,7 @@ export async function cancelJob(ctx: BusinessContext, jobId: string, reason: str
   return withScope(ctx, P.jobsWrite, async (s) => {
     const job = await loadJob(s, jobId);
     if (job.stage === 'booked') {
+      authorize(ctx, P.jobsBook); // cancelling a booked job releases its booking
       await releaseAppointments(s, jobId, 'Job cancelled');
     }
     return moveStage(s, jobId, 'cancelled', { cancelledReason: reason });

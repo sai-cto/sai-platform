@@ -17,7 +17,7 @@ import { createRecord, updateRecord } from '@/core/records/records';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { automationRuleEntity, queueEntity } from '../entities';
 import { CORE, P } from '../permissions';
-import { automationStillWanted } from '../rules';
+import { automationStillWanted, localDate } from '../rules';
 import {
   hhmcAutomationQueue,
   hhmcAutomationRules,
@@ -154,6 +154,8 @@ async function processRow(s: Scope, row: QueueRow, now: Date): Promise<'sent' | 
           estimateStatus: estimate?.archivedAt ? null : (estimate?.status ?? null),
           leadStatus: lead?.archivedAt ? null : (lead?.status ?? null),
           invoiceStatus: invoice?.archivedAt ? null : (invoice?.status ?? null),
+          invoicePastDue: invoice ? invoice.dueDate < localDate(now, s.ctx.business.timeZone) : null,
+          estimateExpired: estimate?.expiresAt ? estimate.expiresAt.getTime() <= now.getTime() : false,
         });
   if (!verdict.ok) {
     await updateRecord(s, queueEntity, row.id, { status: 'cancelled', cancelledReason: verdict.reason });
@@ -223,7 +225,8 @@ export async function processDueAutomationsInScope(
  * a business's own people never trigger sending by hand. Needs notifications.write as well.
  */
 export async function processDueAutomations(ctx: BusinessContext, now: Date = new Date()) {
-  if (ctx.actor.id !== null && ctx.role !== 'tech' && ctx.role !== 'super_admin')
+  const systemActor = ctx.actor.id === null && !ctx.link && ctx.role === 'super_admin';
+  if (!systemActor && ctx.role !== 'tech' && ctx.role !== 'super_admin')
     throw new ForbiddenError(P.automationsRun, 'Only the tech team can send due emails by hand.');
   return withScope(ctx, P.automationsRun, async (s) => {
     if (!can(ctx, CORE.notificationsWrite)) throw new ForbiddenError(CORE.notificationsWrite);

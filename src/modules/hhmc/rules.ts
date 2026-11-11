@@ -310,6 +310,9 @@ export function automationStillWanted(input: {
   estimateStatus?: EstimateStatus | null;
   leadStatus?: LeadStatus | null;
   invoiceStatus?: InvoiceStatus | null;
+  /** Due date already passed (for the past-due reminder). */
+  invoicePastDue?: boolean | null;
+  estimateExpired?: boolean;
 }): { ok: true } | { ok: false; reason: string } {
   if (input.respectsOptIn && input.jobOptIn === false)
     return { ok: false, reason: 'Automation opt-in is off for this job.' };
@@ -318,6 +321,7 @@ export function automationStillWanted(input: {
       if (input.jobStage !== 'estimate_sent') return { ok: false, reason: 'The job left Estimate Sent.' };
       if (input.estimateStatus !== 'sent' && input.estimateStatus !== 'viewed')
         return { ok: false, reason: `The estimate is ${input.estimateStatus ?? 'gone'}.` };
+      if (input.estimateExpired) return { ok: false, reason: 'The estimate has expired.' };
       return { ok: true };
     case 'lead_no_contact':
       return input.leadStatus === 'new' ? { ok: true } : { ok: false, reason: `The lead is ${input.leadStatus ?? 'gone'}.` };
@@ -326,9 +330,11 @@ export function automationStillWanted(input: {
         ? { ok: true }
         : { ok: false, reason: 'The booking was released.' };
     case 'invoice_sent':
-      return input.invoiceStatus === 'sent' || input.invoiceStatus === 'partially_paid'
-        ? { ok: true }
-        : { ok: false, reason: `The invoice is ${input.invoiceStatus ?? 'gone'}.` };
+      if (input.invoiceStatus !== 'sent' && input.invoiceStatus !== 'partially_paid')
+        return { ok: false, reason: `The invoice is ${input.invoiceStatus ?? 'gone'}.` };
+      // A Net 30 invoice is not "past due" on day 8 (review round 1).
+      if (input.invoicePastDue === false) return { ok: false, reason: 'The invoice is not past due.' };
+      return { ok: true };
     default:
       return { ok: true };
   }

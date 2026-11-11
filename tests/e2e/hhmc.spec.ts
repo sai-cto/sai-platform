@@ -73,7 +73,8 @@ test('a move from lead to Closed, with the customer signing and paying from thei
   await customer.getByLabel('Card').selectOption('mock_declined');
   await customer.getByRole('button', { name: 'Pay deposit $141.96' }).click();
   await expect(customer.locator('p[role=alert]')).toContainText('declined');
-  await customer.reload();
+  // Retry straight away, without reloading: a new attempt, not the declined one again.
+  await customer.getByLabel('Card').selectOption('');
   await customer.getByRole('button', { name: 'Pay deposit $141.96' }).click();
   await expect(customer.getByText('✓ Deposit paid ($141.96)')).toBeVisible();
   // A tampered link is "not found".
