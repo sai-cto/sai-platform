@@ -19,7 +19,7 @@ import { archiveRecord, createRecord, updateRecord } from '@/core/records/record
 import type { BusinessContext } from '@/core/tenancy/context';
 import { invoiceEntity, invoiceLineEntity } from '../entities';
 import { CORE, P } from '../permissions';
-import { dueDateFor, invoiceStatusAfterPayment, isDateText, localDate } from '../rules';
+import { addDays, dueDateFor, invoiceStatusAfterPayment, isDateText, localDate, localTime } from '../rules';
 import {
   hhmcEstimates,
   hhmcInvoiceLines,
@@ -105,7 +105,7 @@ export async function createInvoice(
     const [estimate] = await s.db
       .select()
       .from(hhmcEstimates)
-      .where(and(s.where(hhmcEstimates), eq(hhmcEstimates.jobId, jobId), eq(hhmcEstimates.status, 'signed')))
+      .where(and(s.where(hhmcEstimates, 'include'), eq(hhmcEstimates.jobId, jobId), eq(hhmcEstimates.status, 'signed')))
       .limit(1);
     if (!estimate) throw new ValidationError('The job has no signed estimate.');
     const settings = await loadSettings(ctx);
@@ -262,7 +262,9 @@ export async function sendInvoice(ctx: BusinessContext, invoiceId: string, now: 
     });
     await sendNotification(s, { recipient: customer.email, subject: email.subject, body: email.body, subjectType: invoiceEntity.key, subjectId: invoiceId });
     if (first && status === 'sent') {
-      await enqueue(s, 'invoice_sent', { jobId: job.id, invoiceId, recipient: customer.email, optIn: job.automationOptIn }, now);
+      // Never before the day after the due date (a Net 30 invoice is not past due on day 8).
+      const notBefore = localTime(addDays(invoice.dueDate, 1), '09:00', ctx.business.timeZone);
+      await enqueue(s, 'invoice_sent', { jobId: job.id, invoiceId, recipient: customer.email, optIn: job.automationOptIn, notBefore }, now);
     }
     if (status === 'paid') await afterPaidInFull(s, updated, now);
     return updated;

@@ -17,7 +17,7 @@ import { createRecord, updateRecord } from '@/core/records/records';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { automationRuleEntity, queueEntity } from '../entities';
 import { CORE, P } from '../permissions';
-import { automationStillWanted, localDate } from '../rules';
+import { addDays, automationStillWanted, localDate, localTime, NOT_PAST_DUE } from '../rules';
 import {
   hhmcAutomationQueue,
   hhmcAutomationRules,
@@ -53,7 +53,7 @@ export type QueueRefs = {
 export async function enqueue(
   s: Scope,
   trigger: AutomationTrigger,
-  refs: QueueRefs & { recipient: string | null; optIn?: boolean },
+  refs: QueueRefs & { recipient: string | null; optIn?: boolean; notBefore?: Date },
   now: Date = new Date(),
 ): Promise<number> {
   if (!refs.recipient) return 0;
@@ -79,11 +79,11 @@ export async function enqueue(
       invoiceId: refs.invoiceId ?? null,
       paymentId: refs.paymentId ?? null,
       recipient: refs.recipient,
-      dueAt: new Date(now.getTime() + rule.delayMinutes * 60_000),
+      dueAt: new Date(Math.max(now.getTime() + rule.delayMinutes * 60_000, refs.notBefore?.getTime() ?? 0)),
       status: 'queued',
     });
     queued++;
-    if (rule.delayMinutes === 0 && can(s.ctx, CORE.notificationsWrite)) {
+    if (rule.delayMinutes === 0 && !refs.notBefore && can(s.ctx, CORE.notificationsWrite)) {
       await processRow(s, row, now);
     }
   }
@@ -125,7 +125,7 @@ async function one<T>(rows: Promise<T[]>): Promise<T | null> {
 }
 
 /** Sends one queued email if it is still wanted; otherwise cancels it with the reason. */
-async function processRow(s: Scope, row: QueueRow, now: Date): Promise<'sent' | 'cancelled' | 'failed'> {
+async function processRow(s: Scope, row: QueueRow, now: Date): Promise<'sent' | 'cancelled' | 'failed' | 'deferred'> {
   const rule = await one(
     s.db.select().from(hhmcAutomationRules).where(and(s.where(hhmcAutomationRules, 'include'), eq(hhmcAutomationRules.id, row.ruleId))),
   );
@@ -157,6 +157,11 @@ async function processRow(s: Scope, row: QueueRow, now: Date): Promise<'sent' | 
           invoicePastDue: invoice ? invoice.dueDate < localDate(now, s.ctx.business.timeZone) : null,
           estimateExpired: estimate?.expiresAt ? estimate.expiresAt.getTime() <= now.getTime() : false,
         });
+  if (!verdict.ok && invoice && rule?.trigger === 'invoice_sent' && verdict.reason === NOT_PAST_DUE) {
+    // Not due yet (e.g. its terms changed): wait until the day after the due date instead.
+    await updateRecord(s, queueEntity, row.id, { dueAt: localTime(addDays(invoice.dueDate, 1), '09:00', s.ctx.business.timeZone) });
+    return 'deferred';
+  }
   if (!verdict.ok) {
     await updateRecord(s, queueEntity, row.id, { status: 'cancelled', cancelledReason: verdict.reason });
     return 'cancelled';
@@ -208,14 +213,14 @@ async function processRow(s: Scope, row: QueueRow, now: Date): Promise<'sent' | 
 export async function processDueAutomationsInScope(
   s: Scope,
   now: Date,
-): Promise<{ sent: number; cancelled: number; failed: number }> {
+): Promise<{ sent: number; cancelled: number; failed: number; deferred: number }> {
   const due = await s.db
     .select()
     .from(hhmcAutomationQueue)
     .where(and(s.where(hhmcAutomationQueue), eq(hhmcAutomationQueue.status, 'queued'), lte(hhmcAutomationQueue.dueAt, now)))
     .orderBy(asc(hhmcAutomationQueue.dueAt))
     .limit(500);
-  const result = { sent: 0, cancelled: 0, failed: 0 };
+  const result = { sent: 0, cancelled: 0, failed: 0, deferred: 0 };
   for (const row of due) result[await processRow(s, row, now)]++;
   return result;
 }

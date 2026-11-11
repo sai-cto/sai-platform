@@ -659,3 +659,93 @@ describe('review gate round 1: regressions', () => {
     await expect(cancelJob(noBook, job.id, 'x')).rejects.toBeInstanceOf(ForbiddenError);
   });
 });
+
+describe('review gate round 2: regressions', () => {
+  const sig = { valuationInitials: 'AL', signatureName: 'Avery Signer', agree: true, ip: null, userAgent: null };
+
+  it('marking lost and signing at the same moment never leave a signed estimate on a lost job', async () => {
+    const ctx = await admin();
+    const { job } = await exampleAJob(ctx);
+    const est = await sendEstimate(ctx, job.id);
+    const customer = await buildLinkContext(tokenOf(await customerLinkFor(ctx, est.id)));
+    await Promise.allSettled([markLost(ctx, job.id, 'Gone'), signEstimateByLink(customer, sig)]);
+    const [row] = await withScope(ctx, P.jobsRead, (s) => s.db.select().from(hhmcEstimates).where(and(s.where(hhmcEstimates), eq(hhmcEstimates.id, est.id))));
+    const stage = (await loadJobAs(ctx, job.id)).stage;
+    // Either it was signed first (and the job may then be lost with the signature kept), or voided first.
+    if (stage === 'lost' && row.status !== 'signed') expect(row.status).toBe('void');
+    if (row.status === 'signed') expect(row.signatureName).toBe('Avery Signer');
+    expect(row.status === 'void' && row.signedAt !== null).toBe(false);
+  });
+
+  it('a Net 30 invoice gets its past-due reminder after the due date, not cancelled on day 8', async () => {
+    const ctx = await admin();
+    const { job } = await exampleAJob(ctx);
+    const est = await sendEstimate(ctx, job.id);
+    const customer = await buildLinkContext(tokenOf(await customerLinkFor(ctx, est.id)));
+    await signEstimateByLink(customer, sig);
+    await bookJob(ctx, job.id);
+    const invoice = await createInvoice(ctx, job.id, { terms: 'net_30' });
+    const sent = await sendInvoice(ctx, invoice.id);
+    const reminder = (await queueOf(ctx, job.id)).find((r) => r.trigger === 'invoice_sent')!;
+    expect(reminder.q.dueAt.getTime()).toBeGreaterThan(sent.sentAt!.getTime() + 30 * DAY);
+    // Running the processor on day 9 does nothing to it.
+    await withScope(ctx, P.jobsWrite, (s) => processDueAutomationsInScope(s, new Date(sent.sentAt!.getTime() + 9 * DAY)));
+    expect((await queueOf(ctx, job.id)).find((r) => r.trigger === 'invoice_sent')!.q.status).toBe('queued');
+    // After the due date it goes out.
+    await withScope(ctx, P.jobsWrite, (s) => processDueAutomationsInScope(s, new Date(sent.sentAt!.getTime() + 33 * DAY)));
+    expect((await queueOf(ctx, job.id)).find((r) => r.trigger === 'invoice_sent')!.q.status).toBe('sent');
+  });
+
+  it('opening an old link never brings a void estimate back', async () => {
+    const ctx = await admin();
+    const { job } = await exampleAJob(ctx);
+    const v1 = await sendEstimate(ctx, job.id);
+    const oldCustomer = await buildLinkContext(tokenOf(await customerLinkFor(ctx, v1.id)));
+    await Promise.allSettled([sendEstimate(ctx, job.id), openEstimateByLink(oldCustomer)]);
+    const rows = await withScope(ctx, P.jobsRead, (s) => s.db.select().from(hhmcEstimates).where(and(s.where(hhmcEstimates), eq(hhmcEstimates.jobId, job.id))));
+    expect(rows.filter((r) => ['sent', 'viewed', 'signed'].includes(r.status)).length).toBeLessThanOrEqual(1);
+  });
+
+  it('a signed estimate link keeps working for the deposit after the estimate would have expired', async () => {
+    const ctx = await admin();
+    const { job } = await exampleAJob(ctx);
+    const est = await sendEstimate(ctx, job.id);
+    const customer = await buildLinkContext(tokenOf(await customerLinkFor(ctx, est.id)));
+    await signEstimateByLink(customer, sig);
+    const link = await customerLinkFor(ctx, est.id);
+    expect(() => verifyLink(tokenOf(link), new Date(Date.now() + 60 * DAY))).not.toThrow();
+  });
+
+  it('customer-link actions call only link services (never a staff service with the link context)', async () => {
+    const fs = await import('node:fs');
+    const source = fs.readFileSync('src/modules/hhmc/actions.ts', 'utf8');
+    const linkActions = source.split('export async function ').filter((block) => block.includes('requireLinkContext('));
+    expect(linkActions.length).toBe(3);
+    for (const block of linkActions) {
+      const called = [...block.matchAll(/await (\w+)\(ctx/g)].map((m) => m[1]);
+      expect(called.length).toBeGreaterThan(0);
+      for (const fn of called) expect(fn).toMatch(/ByLink$/);
+    }
+  });
+});
+
+describe('review gate round 3: regressions', () => {
+  it('a past-due reminder that comes due before the due date is deferred, not cancelled', async () => {
+    const ctx = await admin();
+    const { job } = await exampleAJob(ctx);
+    const est = await sendEstimate(ctx, job.id);
+    const customer = await buildLinkContext(tokenOf(await customerLinkFor(ctx, est.id)));
+    await signEstimateByLink(customer, { valuationInitials: 'AL', signatureName: 'Avery Signer', agree: true, ip: null, userAgent: null });
+    await bookJob(ctx, job.id);
+    const invoice = await createInvoice(ctx, job.id, { terms: 'net_60' });
+    const sent = await sendInvoice(ctx, invoice.id);
+    // A reminder queued the old way (8 days after sending, ignoring the terms).
+    await withScope(ctx, P.jobsWrite, (s) => enqueue(s, 'invoice_sent', { jobId: job.id, invoiceId: invoice.id, recipient: 'x@example.com', optIn: true }, sent.sentAt!));
+    const day9 = new Date(sent.sentAt!.getTime() + 9 * DAY);
+    const result = await withScope(ctx, P.jobsWrite, (s) => processDueAutomationsInScope(s, day9));
+    expect(result.deferred).toBe(1);
+    const rows = (await queueOf(ctx, job.id)).filter((r) => r.trigger === 'invoice_sent');
+    expect(rows.every((r) => r.q.status === 'queued')).toBe(true);
+    expect(rows.every((r) => r.q.dueAt.getTime() > sent.sentAt!.getTime() + 60 * DAY)).toBe(true);
+  });
+});

@@ -129,8 +129,11 @@ export function appUrl(): string {
 export const PURPOSE = { estimate: 'hhmc.estimate', invoice: 'hhmc.invoice' } as const;
 
 /** The customer's link to review and sign an estimate. Valid until the estimate expires. */
-export function estimateLink(s: Scope, estimate: { id: string; expiresAt: Date | null }): string {
-  const expiresAt = estimate.expiresAt ?? new Date(Date.now() + 30 * 24 * 3600 * 1000);
+export function estimateLink(s: Scope, estimate: { id: string; expiresAt: Date | null; signedAt?: Date | null }): string {
+  // A signed estimate's link stays usable for 90 days after signing (to pay the deposit).
+  const base = estimate.expiresAt ?? new Date(Date.now() + 30 * 24 * 3600 * 1000);
+  const afterSigning = estimate.signedAt ? estimate.signedAt.getTime() + 90 * 24 * 3600 * 1000 : 0;
+  const expiresAt = new Date(Math.max(base.getTime(), afterSigning));
   return `${appUrl()}/l/${signLink(s.ctx, { purpose: PURPOSE.estimate, subjectId: estimate.id, expiresAt })}`;
 }
 

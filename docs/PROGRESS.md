@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: Phase 5 (HHMC module) built and verified; review and UI gates in progress. Stops before merge: `phase-4-brss` must be merged first._
+_Last updated: Phase 5 (HHMC module) built and verified; review gate passed (3 rounds), UI gate done (70 screenshots). Stopped before merge: `phase-4-brss` must be merged first._
 
 ## In plain English
 
@@ -48,7 +48,7 @@ without a BRSS manager (`src/modules/brss/README.md`, "Decisions waiting for the
 - **Phase 2 — SAI Console.** ✅ Done. UI gate done (110 screenshots); passed the independent review gate after three rounds (see below) and merged to `main`.
 - **Phase 3 — module scaffolds.** ✅ Done. UI gate done (38 screenshots); passed the independent review gate after two rounds (see below) and merged to `main`.
 - **Phase 4 — BRSS proof module**, on branch `phase-4-brss`: built; UI gate done (86 screenshots); independent review gate running.
-- **Phase 5 — HHMC module**, on branch `claude/practical-brahmagupta-1o62aq` (based on `phase-4-brss`): built and verified; gates below. **Not merged**: merge `phase-4-brss` first.
+- **Phase 5 — HHMC module**, on branch `claude/practical-brahmagupta-1o62aq` (based on `phase-4-brss`): built, verified, review and UI gates passed. **Not merged**: merge `phase-4-brss` first.
 
 ## Acceptance criteria (final)
 
@@ -72,7 +72,7 @@ without a BRSS manager (`src/modules/brss/README.md`, "Decisions waiting for the
 | 2 — SAI Console | ✅ merged to `main` |
 | 3 — Module scaffolds | ✅ merged to `main` |
 | 4 — BRSS proof module | 🔨 built, review gate running |
-| 5 — HHMC module | 🔨 built; review and UI gates (see the Phase 5 log); stops before merge |
+| 5 — HHMC module | ✅ built, gates passed; **waiting for the CTO to merge** (after `phase-4-brss`) |
 
 ## Last verification
 
@@ -229,3 +229,48 @@ and while driving the screens from the browser tests:
 One thing to know when running the app locally: starting a second `npm run dev` (or the browser
 tests) before an earlier dev server has fully stopped can make pages reload in a loop. Stop the
 old one first (`pkill -f next-server`).
+
+### Phase 5 — HHMC module (11 Nov 2026)
+
+Built on `phase-4-brss` (not yet merged into `main`; the CTO chose to base this branch on it)
+and pushed to `claude/practical-brahmagupta-1o62aq`. **Stops before merge**: merge
+`phase-4-brss` first, then this branch.
+
+```
+npm run check
+  tsc --noEmit            clean
+  eslint                  clean
+  vitest run              Test Files 14 passed (14) · Tests 467 passed (467)
+                          (hhmc-pricing 8: ref §4.2 examples A, B, C to the cent; hhmc 37: full lifecycle,
+                           drip cancellation, v2 voids v1, permission refusals, sandbox/live, customer links,
+                           review regressions)
+  secret scan             clean
+npm run test:e2e          50 passed (auth 11 · brss 6 · console 12 · hhmc 3 · isolation 12 · modules 6)
+npm run docs:permissions  regenerated (13 HHMC permissions)
+```
+
+UI gate: 70 screenshots in `docs/screenshots/phase-5/` (35 screens × 1440px and 375px): HHMC admin
+(dashboard, leads, lead, new lead, jobs, new job, the Job page at four stages, schedule month /
+week / day, invoices, past due, an open and a paid invoice, settings, Overview tab, test mode),
+HHMC staff (no Book button, read-only settings), tech (Run due emails, module registry),
+executive and another business's admin ("not found"), and the customer pages (estimate summary,
+full estimate, sign, confirmation, invoice pay, tampered link "not found"). Every page answered as
+expected and none scrolls sideways at 375px. Found and fixed while looking: header cells with
+screen-reader-only text made five pages scroll sideways on a phone; the month calendar cut off
+"M / T"; the quote stayed editable after signing; seeded deposits did not appear under Payments.
+
+Review gate (independent reviewer subagent, no access to the author's reasoning):
+
+| Round | Result | What happened next |
+|---|---|---|
+| 1 | 0 critical · 1 high · 5 medium · 8 minor | All fixed but one (Data-tab archive bypassing module rules: a core design question, mitigated in the module, recorded below). High: two deposit payments at the same moment could both charge (the estimate was read before the lock). 10 regression tests. |
+| 2 | 0 critical · 0 high · 2 medium · 6 minor | All fixed: Lost/Cancel now share the estimate lock with signing and deposits; Net 30/60 invoices get their past-due reminder after the due date; card-fee display follows the charge; 5 regression tests incl. a static check that customer-link actions call only link services. |
+| 3 | **Nothing above minor** (2 minor). Gate passed. | Both fixed: a retry keeps its payment key unless the card was refused or the payment succeeded; the past-due deferral has its own test. |
+
+Also found while verifying: the e2e dev server reached Next's memory threshold with HHMC's pages
+and restarted mid-run (logins then failed); `playwright.config.ts` gives it more heap.
+
+Known, left for the CTO: the console's Data tab can archive any record its permission allows,
+which bypasses module rules (for example archiving a signed estimate). HHMC counts archived signed
+estimates and invoices so it cannot be tricked into replacing or double-billing, but a general
+fix (an "archivable" flag on entities) is a core change.

@@ -290,7 +290,7 @@ export async function seedDemoData(s: Scope): Promise<void> {
       termsBody: terms(job.serviceType).body,
       valuation: valuation.body,
     };
-    const deposit = computeDeposit(totals, depositBp, { byCard: true, convenienceFeeBp: opts.convenienceFeeBp });
+    const deposit = computeDeposit(totals, depositBp, { byCard: opts.convenienceFeeOn, convenienceFeeBp: opts.convenienceFeeBp });
     const paidDeposit = signed;
     if (paidDeposit) {
       depositPayments.push({

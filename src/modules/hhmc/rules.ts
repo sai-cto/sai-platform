@@ -297,6 +297,8 @@ export function renderTemplate(text: string, values: Record<string, string>): st
 
 // ---------------------------------------------------------------- automations
 
+export const NOT_PAST_DUE = 'The invoice is not past due yet.';
+
 /**
  * R-AUTO-CANCEL — should a queued email still go out? Checked when it is due (prompt
  * "Automations": a drip is cancelled when the job leaves Estimate Sent, when the estimate is
@@ -333,7 +335,7 @@ export function automationStillWanted(input: {
       if (input.invoiceStatus !== 'sent' && input.invoiceStatus !== 'partially_paid')
         return { ok: false, reason: `The invoice is ${input.invoiceStatus ?? 'gone'}.` };
       // A Net 30 invoice is not "past due" on day 8 (review round 1).
-      if (input.invoicePastDue === false) return { ok: false, reason: 'The invoice is not past due.' };
+      if (input.invoicePastDue === false) return { ok: false, reason: NOT_PAST_DUE };
       return { ok: true };
     default:
       return { ok: true };

@@ -120,7 +120,7 @@ async function EstimateReview({ ctx, searchParams, basePath }: PortalPageProps) 
             <div><dt className="text-xs text-zinc-500">Service</dt><dd>{`${SERVICE_TYPE_LABELS[s.serviceType]} · ${s.jobType} · ${s.crewSize} movers, ${s.trucks} truck${s.trucks === 1 ? '' : 's'}`}</dd></div>
           </dl>
           <Prices e={e} />
-          <p className="mt-3 text-xs text-zinc-600">{`Deposit to hold your date: ${pct(s.depositBp)} = ${formatMoney(deposit.depositCents)} (+ ${pct(s.convenienceFeeBp)} card fee ${formatMoney(deposit.cardFeeCents)} = ${formatMoney(deposit.totalDueCents)} by card).`}</p>
+          <p className="mt-3 text-xs text-zinc-600">{`Deposit to hold your date: ${pct(s.depositBp)} = ${formatMoney(deposit.depositCents)}${s.convenienceFeeOn ? ` (+ ${pct(s.convenienceFeeBp)} card fee ${formatMoney(deposit.cardFeeCents)} = ${formatMoney(deposit.totalDueCents)} by card)` : ''}.`}</p>
           <div className="mt-4 flex justify-end"><Link className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white" href={go('estimate')}>Next: full estimate</Link></div>
         </Card>
       ) : null}
@@ -191,7 +191,7 @@ async function EstimateReview({ ctx, searchParams, basePath }: PortalPageProps) 
             <>
               <dl className="mb-4 space-y-1 text-sm tabular-nums">
                 <div className="flex justify-between"><dt>{`Deposit amount (${pct(e.snapshot.depositBp)})`}</dt><dd>{formatMoney(deposit.depositCents)}</dd></div>
-                <div className="flex justify-between"><dt>{`Card convenience fee (${pct(e.snapshot.convenienceFeeBp)})`}</dt><dd>{formatMoney(deposit.cardFeeCents)}</dd></div>
+                {deposit.cardFeeCents > 0 ? <div className="flex justify-between"><dt>{`Card convenience fee (${pct(e.snapshot.convenienceFeeBp)})`}</dt><dd>{formatMoney(deposit.cardFeeCents)}</dd></div> : null}
                 <div className="flex justify-between font-semibold"><dt>Total deposit required</dt><dd>{formatMoney(deposit.totalDueCents)}</dd></div>
               </dl>
               <ActionForm action={payDepositLinkAction.bind(null, tokenFrom(basePath))} submitLabel={`Pay deposit ${formatMoney(deposit.totalDueCents)}`}>

@@ -130,6 +130,7 @@ export async function disqualifyLead(ctx: BusinessContext, id: string, reason: s
   if (!why) throw new ValidationError('Give a reason the lead is disqualified.');
   if (why.length > 500) throw new ValidationError('Use at most 500 characters.');
   return withScope(ctx, P.leadsWrite, async (s) => {
+    await takeLock(s, `hhmc-lead:${id}`);
     const lead = await loadLead(s, id);
     const problem = leadMoveProblem(lead.status, 'disqualified');
     if (problem) throw new ValidationError(problem);

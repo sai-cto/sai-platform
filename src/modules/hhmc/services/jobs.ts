@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { customers } from '@/core/db/schema/tenant';
 import { withScope, type Scope } from '@/core/db/scope';
 import { ValidationError } from '@/core/errors';
+import { takeLock } from '@/core/db/lock';
 import { authorize } from '@/core/rbac/permissions';
 import { nextRecordNumber } from '@/core/records/numbering';
 import { createRecord, updateRecord } from '@/core/records/records';
@@ -251,7 +252,11 @@ export async function setAutomationOptIn(ctx: BusinessContext, jobId: string, on
 }
 
 export async function markLost(ctx: BusinessContext, jobId: string, reason: string) {
-  return withScope(ctx, P.jobsWrite, (s) => moveStage(s, jobId, 'lost', { lostReason: reason }));
+  return withScope(ctx, P.jobsWrite, async (s) => {
+    // Same lock as signing and deposits: a customer cannot sign or pay while the job is lost.
+    await takeLock(s, `hhmc-estimates:${jobId}`);
+    return moveStage(s, jobId, 'lost', { lostReason: reason });
+  });
 }
 
 export async function reopenJob(ctx: BusinessContext, jobId: string) {
@@ -261,6 +266,8 @@ export async function reopenJob(ctx: BusinessContext, jobId: string) {
 /** Cancelling a booked job also releases its booking (needs the booking permission). */
 export async function cancelJob(ctx: BusinessContext, jobId: string, reason: string) {
   return withScope(ctx, P.jobsWrite, async (s) => {
+    await takeLock(s, `hhmc-estimates:${jobId}`);
+    await takeLock(s, `hhmc-booking:${jobId}`);
     const job = await loadJob(s, jobId);
     if (job.stage === 'booked') {
       authorize(ctx, P.jobsBook); // cancelling a booked job releases its booking

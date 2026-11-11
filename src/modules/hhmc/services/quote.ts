@@ -49,7 +49,7 @@ export async function quoteSummary(s: Scope, jobId: string) {
   const lines = await quoteLines(s, quote.id);
   const options = await priceOptionsFor(s, quote);
   const totals = computeTotals(lines, options);
-  const deposit = computeDeposit(totals, options.depositBp, { byCard: true, convenienceFeeBp: options.convenienceFeeBp });
+  const deposit = computeDeposit(totals, options.depositBp, { byCard: options.convenienceFeeOn, convenienceFeeBp: options.convenienceFeeBp });
   return { quote, lines, options, totals, deposit };
 }
 

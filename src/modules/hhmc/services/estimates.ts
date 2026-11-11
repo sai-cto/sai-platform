@@ -263,7 +263,7 @@ export async function openEstimateByLink(ctx: BusinessContext, now: Date = new D
   const estimateId = ctx.link?.subjectId ?? '';
   requireEstimateLink(ctx, estimateId);
   return withScope(ctx, P.customerEstimate, async (s) => {
-    let estimate = await loadEstimate(s, estimateId);
+    let estimate = await lockedEstimate(s, estimateId);
     const expired = estimate.status !== 'signed' && estimate.expiresAt !== null && estimate.expiresAt.getTime() <= now.getTime();
     if (estimate.status === 'void') return { estimate, settings: await loadSettings(ctx), job: null, expired };
     if (estimate.status === 'sent') {

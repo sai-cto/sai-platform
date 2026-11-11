@@ -67,7 +67,7 @@ export function QuoteEditor({
       : null;
   const priced = { ...options, serviceTaxOn: taxOn, convenienceFeeOn: feeOn };
   const totals = computeTotals(draft ? [...lines, draft] : lines, priced);
-  const deposit = computeDeposit(totals, options.depositBp, { byCard: true, convenienceFeeBp: options.convenienceFeeBp });
+  const deposit = computeDeposit(totals, options.depositBp, { byCard: feeOn, convenienceFeeBp: options.convenienceFeeBp });
 
   return (
     <div>
@@ -195,8 +195,8 @@ export function QuoteEditor({
           {feeOn ? <div className="flex justify-between"><dt>Card fee {pct(options.convenienceFeeBp)}</dt><dd>{usd(totals.convenienceFeeCents)}</dd></div> : null}
           <div className="flex justify-between border-t border-zinc-200 pt-1 font-semibold"><dt>Grand total</dt><dd data-testid="quote-total">{usd(totals.totalCents)}</dd></div>
           <div className="flex justify-between text-xs text-zinc-600">
-            <dt>Deposit {pct(options.depositBp)} (by card +{pct(options.convenienceFeeBp)})</dt>
-            <dd>{usd(deposit.depositCents)} + {usd(deposit.cardFeeCents)} = {usd(deposit.totalDueCents)}</dd>
+            <dt>Deposit {pct(options.depositBp)}{feeOn ? ` (by card +${pct(options.convenienceFeeBp)})` : ''}</dt>
+            <dd>{feeOn ? `${usd(deposit.depositCents)} + ${usd(deposit.cardFeeCents)} = ${usd(deposit.totalDueCents)}` : usd(deposit.depositCents)}</dd>
           </div>
           {draft ? <p className="text-xs text-amber-700">Includes the line being typed (not saved yet).</p> : null}
         </dl>

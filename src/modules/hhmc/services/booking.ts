@@ -135,6 +135,7 @@ export async function bookJob(ctx: BusinessContext, jobId: string, now: Date = n
     authorize(ctx, P.jobsWrite);
     authorize(ctx, CORE.schedulingWrite);
     authorize(ctx, CORE.schedulingRead);
+    await takeLock(s, `hhmc-estimates:${jobId}`);
     await takeLock(s, `hhmc-booking:${jobId}`);
     const job = await loadJob(s, jobId);
     if (job.stage !== 'estimate_sent')
@@ -142,7 +143,8 @@ export async function bookJob(ctx: BusinessContext, jobId: string, now: Date = n
     const [signed] = await s.db
       .select({ id: hhmcEstimates.id })
       .from(hhmcEstimates)
-      .where(and(s.where(hhmcEstimates), eq(hhmcEstimates.jobId, jobId), eq(hhmcEstimates.status, 'signed')))
+      // An archived (Data tab) signed estimate still counts.
+      .where(and(s.where(hhmcEstimates, 'include'), eq(hhmcEstimates.jobId, jobId), eq(hhmcEstimates.status, 'signed')))
       .limit(1);
     if (!signed) throw new ValidationError('The customer must sign the estimate before the job is booked.');
     const days = await jobDaysOf(s, jobId);
@@ -208,6 +210,7 @@ export async function releaseAppointments(s: Scope, jobId: string, reason: strin
 export async function releaseBooking(ctx: BusinessContext, jobId: string, now: Date = new Date()) {
   return withScope(ctx, P.jobsBook, async (s) => {
     authorize(ctx, P.jobsWrite);
+    await takeLock(s, `hhmc-estimates:${jobId}`); // same order as createInvoice: estimates, then booking
     await takeLock(s, `hhmc-booking:${jobId}`);
     const job = await loadJob(s, jobId);
     if (job.stage !== 'booked') throw new ValidationError('Only a booked job can be released.');

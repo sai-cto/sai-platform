@@ -14,7 +14,7 @@ const pct = (bp: number) => `${(bp / 100).toString()}%`;
 
 export function estimateDocument(businessName: string, e: typeof hhmcEstimates.$inferSelect): string {
   const snap = e.snapshot;
-  const deposit = computeDeposit(e, snap.depositBp, { byCard: true, convenienceFeeBp: snap.convenienceFeeBp });
+  const deposit = computeDeposit(e, snap.depositBp, { byCard: snap.convenienceFeeOn, convenienceFeeBp: snap.convenienceFeeBp });
   const sections = SECTIONS.filter((sec) => snap.lines.some((l) => l.section === sec.key))
     .map((sec) => {
       const rows = snap.lines
@@ -45,7 +45,7 @@ ${snap.convenienceFeeOn ? `<tr><td>Card convenience fee ${pct(snap.convenienceFe
 <tr><td><b>Grand total</b></td><td><b>${usd(e.totalCents)}</b></td></tr>
 </table>
 <h2>Deposit</h2>
-<p>Deposit ${pct(snap.depositBp)}: ${usd(deposit.depositCents)}. Paid by card, a ${pct(snap.convenienceFeeBp)} convenience fee of ${usd(deposit.cardFeeCents)} is added: ${usd(deposit.totalDueCents)}.</p>
+<p>Deposit ${pct(snap.depositBp)}: ${usd(deposit.depositCents)}.${snap.convenienceFeeOn ? ` Paid by card, a ${pct(snap.convenienceFeeBp)} convenience fee of ${usd(deposit.cardFeeCents)} is added: ${usd(deposit.totalDueCents)}.` : ''}</p>
 <h2>Scope of work</h2><pre>${esc(snap.scopeOfWork ?? '—')}</pre>
 <h2>Valuation</h2><pre>${esc(snap.valuation)}</pre>
 <h2>${esc(snap.termsTitle)}</h2><pre>${esc(snap.termsBody)}</pre>
