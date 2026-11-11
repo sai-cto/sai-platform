@@ -4,7 +4,7 @@
  * resets, and in the automatic isolation and audit tests.
  */
 import type { EntityDef } from '@/core/modules/contract';
-import { CORE, P } from './permissions';
+import { P } from './permissions';
 import {
   hhmcAutomationQueue,
   hhmcAutomationRules,
@@ -265,8 +265,9 @@ export const queueEntity: EntityDef<typeof hhmcAutomationQueue> = {
   label: 'queued email',
   labelPlural: 'Queued emails',
   table: hhmcAutomationQueue,
-  readPermission: CORE.notificationsRead,
-  writePermission: CORE.notificationsWrite,
+  // Queued by whatever event triggers it (sending an estimate, a payment …), so it follows the
+  // job permissions. SENDING still needs notifications.write (sendNotification checks it).
+  ...jobs,
   titleOf: (row) => `email to ${text(row.recipient)}`,
   listColumns: [
     { key: 'recipient', label: 'To' },

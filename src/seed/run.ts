@@ -61,7 +61,8 @@ export async function seedAll(options: { demoData: boolean }): Promise<void> {
         businessId: row.id,
         moduleKey: b.slug,
         staffPortalEnabled: true,
-        customerPortalEnabled: false,
+        // A module that has customer pages (e.g. links emailed to customers) starts with them on.
+        customerPortalEnabled: Boolean(mod?.portals.customer),
         fieldPortalEnabled: false,
         settings: mod?.settings?.defaults ?? {},
       })

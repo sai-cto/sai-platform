@@ -50,6 +50,13 @@
       "when": 1794322997008,
       "tag": "0006_brss_module",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794358231122,
+      "tag": "0007_hhmc_module",
+      "breakpoints": true
     }
   ]
 }

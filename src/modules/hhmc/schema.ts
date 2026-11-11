@@ -319,7 +319,7 @@ export const hhmcEstimates = tenantTable(
     sameTenant('hhmc_estimates_job_fk', t, t.jobId, hhmcJobs),
     sameTenant('hhmc_estimates_payment_fk', t, t.depositPaymentId, payments),
     sameTenant('hhmc_estimates_file_fk', t, t.documentFileId, files),
-    uniqueIndex('hhmc_estimates_number').on(t.businessId, t.environment, t.estimateNumber),
+    uniqueIndex('hhmc_estimates_number').on(t.businessId, t.environment, t.estimateNumber, t.version),
     uniqueIndex('hhmc_estimates_version').on(t.businessId, t.environment, t.jobId, t.version),
     // Never two live estimates for one job (ref §10 "duplicate estimates per WR").
     uniqueIndex('hhmc_estimates_one_live')

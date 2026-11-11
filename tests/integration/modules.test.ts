@@ -59,7 +59,10 @@ describe('the registered modules', () => {
     expect(report.problems).toEqual([]);
     expect(report.registered).toBe(SEED_BUSINESSES.length);
     expect(report.installed.every((row) => row.manifest && row.portals.staff.built && row.portals.staff.on)).toBe(true);
-    expect(report.installed.every((row) => !row.portals.customer.built && !row.portals.field.built)).toBe(true);
+    // A customer portal is built exactly where a module defines one (HHMC's customer links); no field portal yet.
+    for (const row of report.installed)
+      expect(row.portals.customer.built).toBe(Boolean(getModule(row.moduleKey ?? "")?.portals.customer));
+    expect(report.installed.every((row) => !row.portals.field.built)).toBe(true);
   });
 });
 
