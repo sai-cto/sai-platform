@@ -22,7 +22,7 @@ import { estimateEntity } from '../entities';
 import { CORE, P } from '../permissions';
 import { canSignEstimate, canVoidEstimate, isLiveEstimate } from '../rules';
 import { hhmcEstimates, hhmcInvoices, type EstimateSnapshot } from '../schema';
-import { loadSettings } from '../settings';
+import { brandOf, loadSettings } from '../settings';
 import { cancelQueued, enqueue } from './automations';
 import {
   estimateLink,
@@ -71,7 +71,7 @@ async function storeDocument(s: Scope, estimate: typeof hhmcEstimates.$inferSele
   const file = await saveFile(s, {
     filename: `${estimate.estimateNumber}-v${estimate.version}-${label}.html`,
     contentType: 'text/html; charset=utf-8',
-    bytes: new TextEncoder().encode(estimateDocument(s.ctx.business.name, estimate)),
+    bytes: new TextEncoder().encode(estimateDocument(s.ctx.business.name, estimate, brandOf(await loadSettings(s.ctx), s.ctx.business.name))),
     subjectType: estimateEntity.key,
     subjectId: estimate.id,
   });
@@ -176,6 +176,7 @@ export async function sendEstimate(ctx: BusinessContext, jobId: string, now: Dat
       depositCents: deposit.depositCents,
       sentAt: now,
       expiresAt: new Date(now.getTime() + settings.estimateExpiryDays * DAY),
+      createdByName: ctx.actor.name,
     });
     await storeDocument(s, estimate, 'sent');
     await emailEstimate(s, estimate, customer, 'estimate_email');

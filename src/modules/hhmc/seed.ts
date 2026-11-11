@@ -18,6 +18,7 @@ import {
   catalogItemEntity,
   discountEntity,
   estimateEntity,
+  importRefEntity,
   invoiceEntity,
   invoiceLineEntity,
   jobDayEntity,
@@ -323,6 +324,8 @@ export async function seedDemoData(s: Scope): Promise<void> {
       version: 1,
       status,
       snapshot,
+      // Fake staff names: managers rely on seeing who made each estimate.
+      createdByName: i % 2 === 0 ? 'Hana HHMC-Admin' : 'Hollis HHMC-Staff',
       subtotalCents: totals.subtotalCents,
       serviceTaxCents: totals.serviceTaxCents,
       convenienceFeeCents: totals.convenienceFeeCents,
@@ -439,7 +442,7 @@ export async function seedDemoData(s: Scope): Promise<void> {
   // ---- notes and calls
   await seedRecords(s, noteEntity, [
     { jobId: jobs[3].id, kind: 'call', callOutcome: 'voicemail', body: 'Left a message about the estimate.', authorName: 'HHMC Staff', createdAt: new Date(now.getTime() - 2 * DAY) },
-    { jobId: jobs[4].id, kind: 'call', callOutcome: 'spoke', body: 'Customer asked about a Cornellian discount; applied 5%.', authorName: 'HHMC Admin', createdAt: new Date(now.getTime() - DAY) },
+    { jobId: jobs[4].id, kind: 'call', callOutcome: 'spoke', body: 'Customer is a Cornellian: ticked it in the estimate builder ($20/hr off labor).', authorName: 'HHMC Admin', createdAt: new Date(now.getTime() - DAY) },
     { jobId: jobs[7].id, kind: 'note', callOutcome: null, body: 'Gate code at drop-off: ask the customer on the day.', authorName: 'HHMC Admin', createdAt: new Date(now.getTime() - DAY) },
     { leadId: leads.find((l) => l.status === 'new')!.id, kind: 'call', callOutcome: 'ringcentral', body: 'No answer.', authorName: 'HHMC Staff', createdAt: new Date(now.getTime() - 3600 * 1000) },
   ]);
@@ -466,4 +469,11 @@ export async function seedDemoData(s: Scope): Promise<void> {
     queueRows.push({ ruleId: rule('past_due').id, jobId: pastDue.jobId, invoiceId: pastDue.id, recipient: 'billing@example.com', dueAt: new Date(pastDue.sentAt!.getTime() + 8 * DAY), status: 'queued' });
   }
   await seedRecords(s, queueEntity, queueRows);
+
+  // ---- import links: two pretend Movegistics ids, so the Data tab and the automatic tests have
+  // rows to look at. Real ones are written only by scripts/hhmc-import (never in a seed).
+  await seedRecords(s, importRefEntity, [
+    { source: 'movegistics', sourceType: 'contact', sourceId: 'DEMO-1001', entityKey: 'core.customer', recordId: jobCustomers[0].id, contentHash: 'demo' },
+    { source: 'movegistics', sourceType: 'contact', sourceId: 'DEMO-1002', entityKey: 'core.customer', recordId: jobCustomers[1].id, contentHash: 'demo' },
+  ]);
 }

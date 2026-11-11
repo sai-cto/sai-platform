@@ -329,7 +329,7 @@ describe('automations', () => {
     expect(result.failed).toBe(0);
   });
 
-  it('lead no-contact emails go out at 0 / +24 h / +2 d and stop when the lead is converted', async () => {
+  it('lead no-contact: three emails over a week (same day, day 3, day 7) that stop when the lead is converted', async () => {
     const ctx = await admin();
     const lead = await newLead(ctx);
     expect(await startNoContactEmails(ctx, lead.id)).toBe(3);
@@ -338,6 +338,9 @@ describe('automations', () => {
       s.db.select().from(hhmcAutomationQueue).where(and(s.where(hhmcAutomationQueue), eq(hhmcAutomationQueue.leadId, lead.id))),
     );
     expect(rows.map((r) => r.status).sort()).toEqual(['queued', 'queued', 'sent']);
+    // Managers: "a series of three follow-up emails are sent over the following week".
+    const first = Math.min(...rows.map((r) => r.dueAt.getTime()));
+    expect(rows.map((r) => Math.round((r.dueAt.getTime() - first) / 86_400_000)).sort((a, b) => a - b)).toEqual([0, 3, 7]);
     await convertLead(ctx, lead.id, {});
     const after = await withScope(ctx, P.jobsRead, (s) =>
       s.db.select().from(hhmcAutomationQueue).where(and(s.where(hhmcAutomationQueue), eq(hhmcAutomationQueue.leadId, lead.id))),

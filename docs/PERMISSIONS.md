@@ -101,6 +101,7 @@ tech, executive and business admin and 🔑 for staff; a `write` permission is t
 | See the price catalog, discounts, templates and automation rules *(on by default for new staff)* | `hhmc.catalog.read` | read | ✅ | ✅ | ✅ | ✅ | 🔑 |
 | Change the price catalog, discounts, templates and automation rules | `hhmc.catalog.write` | write | ✅ | ✅ | — | ✅ | 🔑 |
 | Send due automation emails now (tech team only; no scheduler yet) | `hhmc.automations.run` | write | ✅ | ✅ | — | ✅ | 🔑 |
+| Import records from Movegistics (tech team; command line only) | `hhmc.import.run` | write | ✅ | ✅ | — | ✅ | 🔑 |
 | Customer link only: review, sign and pay the deposit on one estimate | `hhmc.customer.estimate` | write | ✅ | ✅ | — | ✅ | 🔑 |
 | Customer link only: pay one invoice | `hhmc.customer.invoice` | write | ✅ | ✅ | — | ✅ | 🔑 |
 

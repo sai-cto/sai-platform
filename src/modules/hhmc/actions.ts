@@ -69,7 +69,8 @@ import {
   setQuoteOptions,
   updateQuoteLine,
 } from './services/quote';
-import { updateCatalogItem, updateTemplate } from './services/settings';
+import { applyBuilder, lookupMileage } from './services/builder';
+import { createCatalogItem, updateCatalogItem, updateTemplate } from './services/settings';
 
 type Form = ActionResult | null;
 
@@ -253,6 +254,45 @@ function lineFields(form: FormData) {
     discount: text(form, 'discount'),
     description: text(form, 'description'),
   };
+}
+
+/** The estimate builder form (pages/estimate-builder.tsx). Materials are "m:<catalog id>" fields. */
+export async function buildQuoteAction(slug: string, mode: string, jobId: string, _p: Form, form: FormData) {
+  return run(slug, mode, async (ctx) => {
+    const materials: Record<string, string> = {};
+    for (const [key, value] of form.entries()) if (key.startsWith('m:') && typeof value === 'string') materials[key.slice(2)] = value;
+    const result = await applyBuilder(ctx, jobId, {
+      crewSize: text(form, 'crewSize'),
+      hoursMode: text(form, 'hoursMode') || 'split',
+      totalHours: text(form, 'totalHours'),
+      loadHours: text(form, 'loadHours'),
+      driveHours: text(form, 'driveHours'),
+      unloadHours: text(form, 'unloadHours'),
+      cornellian: ticked(form, 'cornellian'),
+      ownTruck: ticked(form, 'ownTruck'),
+      truckSize: text(form, 'truckSize') || '16',
+      truckDays: text(form, 'truckDays'),
+      miles: text(form, 'miles'),
+      driveMinutes: text(form, 'driveMinutes'),
+      packingHours: text(form, 'packingHours'),
+      valuation: ticked(form, 'valuation'),
+      replace: ticked(form, 'replace'),
+      materials,
+      originAccess: all(form, 'originAccess'),
+      destinationAccess: all(form, 'destinationAccess'),
+      originNotes: text(form, 'originNotes'),
+      destinationNotes: text(form, 'destinationNotes'),
+    });
+    const kind = result.truckPricing === 'long_distance' ? 'long-distance truck pricing' : result.truckPricing === 'local' ? 'local truck pricing' : 'labor only (customer\'s truck)';
+    return [`Added ${result.lines.length} line${result.lines.length === 1 ? '' : 's'} with ${kind}.`, ...result.warnings].join(' ');
+  });
+}
+
+export async function lookupMileageAction(slug: string, mode: string, jobId: string) {
+  return run(slug, mode, async (ctx) => {
+    const route = await lookupMileage(ctx, jobId);
+    return `${(route.distanceTenths / 10).toFixed(1)} miles, about ${route.driveMinutes} minutes' drive.`;
+  });
 }
 
 export async function addQuoteLineAction(slug: string, mode: string, jobId: string, _p: Form, form: FormData) {
@@ -445,10 +485,20 @@ export async function runDueEmailsAction(slug: string, mode: string) {
 
 export async function ruleAction(slug: string, mode: string, id: string, _p: Form, form: FormData) {
   return run(slug, mode, async (ctx) => {
-    const minutes = Number(text(form, 'delayMinutes'));
-    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 60 * 24 * 60) throw new ValidationError('Enter the delay in whole minutes (up to 60 days).');
+    // "2 days" / "3 hours" from the Settings page; plain minutes still accepted.
+    const unit = text(form, 'delayUnit');
+    const amount = Number(text(form, unit ? 'delay' : 'delayMinutes'));
+    const minutes = unit === 'days' ? amount * 1440 : unit === 'hours' ? amount * 60 : amount;
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 60 * 24 * 60) throw new ValidationError('Enter the wait as a whole number (up to 60 days).');
     await updateRule(ctx, id, { isActive: ticked(form, 'isActive'), delayMinutes: minutes });
     return 'Saved.';
+  });
+}
+
+export async function newCatalogItemAction(slug: string, mode: string, _p: Form, form: FormData) {
+  return run(slug, mode, async (ctx) => {
+    const item = await createCatalogItem(ctx, { name: text(form, 'name'), category: text(form, 'category'), unit: text(form, 'unit'), rate: text(form, 'rate') });
+    return `Added "${item.name}".`;
   });
 }
 

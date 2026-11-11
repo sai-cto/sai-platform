@@ -1,5 +1,6 @@
 /** Leads (ref §3.2): the list, adding one, and one lead with disqualify / couldn't reach / convert. */
 import Link from 'next/link';
+import { Badge } from '@/ui/badge';
 import type { PortalPageProps } from '@/core/modules/contract';
 import { can } from '@/core/rbac/permissions';
 import { ActionForm } from '@/ui/action-form';
@@ -90,7 +91,7 @@ export async function LeadsPage({ ctx, searchParams, basePath }: PortalPageProps
                   </Td>
                   <Td>{lead.source}{lead.sourceDetail ? <span className="block text-xs text-zinc-500">{lead.sourceDetail}</span> : null}</Td>
                   <Td className="whitespace-nowrap">{formatDay(lead.moveDate)}</Td>
-                  <Td><LeadStatusBadge status={lead.status} /></Td>
+                  <Td><LeadStatusBadge status={lead.status} />{lead.status === 'new' && lead.noContactStartedAt ? <span className="ml-1"><Badge tone="amber">No contact</Badge></span> : null}</Td>
                   <Td className="whitespace-nowrap text-zinc-500">{formatRelative(lead.createdAt)}</Td>
                 </tr>
               ))}
@@ -197,6 +198,7 @@ export async function LeadPage({ ctx, params, basePath }: PortalPageProps) {
         actions={
           <>
             <LeadStatusBadge status={lead.status} />
+            {lead.status === 'new' && lead.noContactStartedAt ? <Badge tone="amber">No contact: follow-up emails running</Badge> : null}
             {canWrite && lead.status === 'new' && lead.email && !lead.noContactStartedAt ? (
               <ConfirmButton
                 action={noContactAction.bind(null, slug, mode, lead.id)}

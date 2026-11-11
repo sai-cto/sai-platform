@@ -16,6 +16,7 @@ import { Card, Field, inputClass } from '@/ui/layout';
 import { payDepositLinkAction, payInvoiceLinkAction, signEstimateLinkAction } from '../actions';
 import { SERVICE_TYPE_LABELS, TERMS_LABELS } from '../rules';
 import type { hhmcEstimates } from '../schema';
+import { brandOf, loadSettings, type Brand } from '../settings';
 import { PURPOSE } from '../services/common';
 import { depositDueByCard, openEstimateByLink } from '../services/estimates';
 import { balanceOf, cardBalanceOf, openInvoiceByLink } from '../services/invoices';
@@ -62,14 +63,22 @@ function Prices({ e }: { e: typeof hhmcEstimates.$inferSelect }) {
   );
 }
 
-function Shell({ business, title, children }: { business: string; title: string; children: ReactNode }) {
+function Shell({ business, title, brand, children }: { business: string; title: string; brand?: Brand; children: ReactNode }) {
   return (
     <div className="space-y-4">
-      <header>
-        <p className="text-sm text-zinc-500">{business}</p>
+      <header className="space-y-3">
+        {brand ? (
+          <div className="rounded-md px-4 py-3 text-white" style={{ backgroundColor: brand.color }}>
+            <p className="font-medium">{brand.header}</p>
+            {brand.contact ? <p className="text-xs opacity-90">{brand.contact}</p> : null}
+          </div>
+        ) : (
+          <p className="text-sm text-zinc-500">{business}</p>
+        )}
         <h1 className="text-xl font-semibold tracking-tight text-zinc-900">{title}</h1>
       </header>
       {children}
+      {brand?.footer ? <footer className="border-t border-zinc-200 pt-3 text-xs text-zinc-500">{brand.footer}</footer> : null}
     </div>
   );
 }
@@ -86,9 +95,10 @@ async function EstimateReview({ ctx, searchParams, basePath }: PortalPageProps) 
   const { estimate: e, settings, expired } = await openEstimateByLink(ctx);
   const s = e.snapshot;
   const business = ctx.business.name;
+  const brand = brandOf(await loadSettings(ctx), business);
   if (e.status === 'void')
     return (
-      <Shell business={business} title="This estimate is no longer valid">
+      <Shell business={business} brand={brand} title="This estimate is no longer valid">
         <Card><p className="text-sm">It was replaced or withdrawn. If you were sent a newer one, open the link in that email, or reply to us.</p></Card>
       </Shell>
     );
@@ -98,7 +108,7 @@ async function EstimateReview({ ctx, searchParams, basePath }: PortalPageProps) 
   const go = (to: Step) => `${basePath}?step=${to}`;
 
   return (
-    <Shell business={business} title={s.title}>
+    <Shell business={business} brand={brand} title={s.title}>
       <ol aria-label="Steps" className="flex flex-wrap gap-1 text-xs print:hidden">
         {STEPS.map((st, i) => (
           <li key={st.key} aria-current={st.key === step ? 'step' : undefined} className={cn('rounded-full px-2.5 py-1', st.key === step ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-600')}>
@@ -222,7 +232,7 @@ async function InvoicePay({ ctx, basePath }: PortalPageProps) {
   const byCard = cardBalanceOf(invoice);
   const pctOf = (bp: number) => `${bp / 100}%`;
   return (
-    <Shell business={ctx.business.name} title={`Invoice ${invoice.invoiceNumber}`}>
+    <Shell business={ctx.business.name} brand={brandOf(await loadSettings(ctx), ctx.business.name)} title={`Invoice ${invoice.invoiceNumber}`}>
       <Card>
         <p className="mb-3 text-sm text-zinc-600">{`${formatDay(invoice.invoiceDate)} · ${TERMS_LABELS[invoice.terms]} · due ${formatDay(invoice.dueDate)}`}</p>
         <ul className="space-y-1 text-sm">

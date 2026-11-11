@@ -53,7 +53,7 @@ export async function quoteSummary(s: Scope, jobId: string) {
   return { quote, lines, options, totals, deposit };
 }
 
-async function editableQuote(s: Scope, jobId: string) {
+export async function editableQuote(s: Scope, jobId: string) {
   const job = await loadJob(s, jobId);
   if (!quoteEditable(job.stage))
     throw new ValidationError(

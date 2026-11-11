@@ -15,6 +15,7 @@ import {
   hhmcCatalogItems,
   hhmcDiscounts,
   hhmcEstimates,
+  hhmcImportRefs,
   hhmcInvoiceLines,
   hhmcInvoices,
   hhmcJobDays,
@@ -362,6 +363,25 @@ export const queueEntity: EntityDef<typeof hhmcAutomationQueue> = {
   immutableFields: ['ruleId'],
 };
 
+/** Which local record each imported Movegistics record became (ids and a hash only). */
+export const importRefEntity: EntityDef<typeof hhmcImportRefs> = {
+  key: 'hhmc.import_ref',
+  label: 'import link',
+  labelPlural: 'Import links',
+  table: hhmcImportRefs,
+  readPermission: P.catalogRead,
+  writePermission: P.importRun,
+  titleOf: (row) => `${text(row.source)} ${text(row.sourceType)} ${text(row.sourceId)}`,
+  listColumns: [
+    { key: 'sourceType', label: 'Movegistics record' },
+    { key: 'sourceId', label: 'Movegistics id' },
+    { key: 'entityKey', label: 'Became' },
+    { key: 'importedAt', label: 'Imported', format: 'datetime' },
+  ],
+  searchColumns: ['sourceType', 'sourceId', 'entityKey'],
+  immutableFields: ['source', 'sourceType', 'sourceId'],
+};
+
 /** Parents before children: a sandbox reset fills them in this order. */
 export const entities: EntityDef[] = [
   catalogItemEntity,
@@ -378,4 +398,5 @@ export const entities: EntityDef[] = [
   invoiceLineEntity,
   noteEntity,
   queueEntity,
+  importRefEntity,
 ] as EntityDef[];

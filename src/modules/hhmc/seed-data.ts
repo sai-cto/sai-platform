@@ -46,9 +46,10 @@ export const CATALOG: Item[] = [
   { name: 'Junk Removal', category: 'Additional Services', section: 'additional_services', unit: 'each', rateCents: 15000 },
 ];
 
+// The Cornellian discount is no longer a 5% discount: the managers price it as $20 off every
+// labor hour (setting cornellianDiscountPerHour; the "Cornellian" box in the estimate builder).
 export const DISCOUNTS = [
   { name: 'Friends & Family', percentBp: 500 },
-  { name: 'Cornellian', percentBp: 500 },
   { name: 'Repeat Customer', percentBp: 500 },
 ];
 
@@ -83,8 +84,8 @@ export const RULES: { key: string; name: string; trigger: AutomationTrigger; del
   { key: 'drip_day3', name: 'Quick note on your move date (Day 3)', trigger: 'estimate_sent', delayMinutes: 4320, templateKey: 'drip_day3', respectsOptIn: true },
   { key: 'drip_day7', name: 'Still thinking it over? (Day 7)', trigger: 'estimate_sent', delayMinutes: 10080, templateKey: 'drip_day7', respectsOptIn: true },
   { key: 'lead_sorry', name: 'Sorry we missed you', trigger: 'lead_no_contact', delayMinutes: 0, templateKey: 'lead_sorry', respectsOptIn: false },
-  { key: 'lead_didnt_connect', name: "Didn't Connect", trigger: 'lead_no_contact', delayMinutes: 1440, templateKey: 'lead_didnt_connect', respectsOptIn: false },
-  { key: 'lead_last_checkin', name: 'Last Check In', trigger: 'lead_no_contact', delayMinutes: 2880, templateKey: 'lead_last_checkin', respectsOptIn: false },
+  { key: 'lead_didnt_connect', name: "Didn't Connect (Day 3)", trigger: 'lead_no_contact', delayMinutes: 3 * 1440, templateKey: 'lead_didnt_connect', respectsOptIn: false },
+  { key: 'lead_last_checkin', name: 'Last Check In (Day 7)', trigger: 'lead_no_contact', delayMinutes: 7 * 1440, templateKey: 'lead_last_checkin', respectsOptIn: false },
   { key: 'payment_receipt', name: 'Payment Receipt', trigger: 'payment_received', delayMinutes: 0, templateKey: 'payment_receipt', respectsOptIn: false },
   { key: 'booked', name: "You're Booked", trigger: 'job_booked', delayMinutes: 0, templateKey: 'booked', respectsOptIn: false },
   { key: 'review_request', name: 'How did your move go?', trigger: 'invoice_paid', delayMinutes: 0, templateKey: 'review_request', respectsOptIn: true },

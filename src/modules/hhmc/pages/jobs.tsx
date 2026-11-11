@@ -1,4 +1,4 @@
-/** Jobs: the list and a new job. The Job page itself is job-page.tsx. */
+/** Work requests (jobs): the list and a new one. The Job page itself is job-page.tsx. */
 import Link from 'next/link';
 import { listCustomers } from '@/core/customers/customers';
 import type { PortalPageProps } from '@/core/modules/contract';
@@ -13,6 +13,7 @@ import { createJobAction } from '../actions';
 import { CORE, P } from '../permissions';
 import { BEDROOMS, JOB_TYPES, SERVICE_TYPE_LABELS, STAGE_LABELS } from '../rules';
 import { LEAD_SOURCES, SERVICE_TYPES, STAGES, type hhmcJobs, type Stage } from '../schema';
+import { contactPage } from '../services/directory';
 import { JOBS_PAGE_SIZE, listJobs } from '../services/jobs';
 import { Check, Select, StageBadge, formatDay, hrefWith } from './parts';
 
@@ -27,9 +28,9 @@ export async function JobsPage({ ctx, searchParams, basePath }: PortalPageProps)
   return (
     <>
       <PageHeader
-        title="Jobs"
-        description="One record per move, from quote to closed."
-        actions={can(ctx, P.jobsWrite) && can(ctx, CORE.customersRead) ? <Link href={`${base}/new`} className={buttonClass({ variant: 'primary' })}>New job</Link> : null}
+        title="Work requests"
+        description="One record per move, from first estimate to closed (Movegistics' work request and work order in one)."
+        actions={can(ctx, P.jobsWrite) && can(ctx, CORE.customersRead) ? <Link href={`${base}/new`} className={buttonClass({ variant: 'primary' })}>New work request</Link> : null}
       />
       <Card flush>
         <form className="flex flex-wrap items-end gap-3 border-b border-zinc-200 p-3" action={base}>
@@ -46,12 +47,12 @@ export async function JobsPage({ ctx, searchParams, basePath }: PortalPageProps)
           <button type="submit" className={buttonClass({ variant: 'secondary' })}>Show</button>
         </form>
         {rows.length === 0 ? (
-          <EmptyState title="No jobs match." />
+          <EmptyState title="No work requests match." />
         ) : (
           <Table>
             <thead>
               <tr>
-                <Th>Job</Th>
+                <Th>Work request</Th>
                 <Th>Customer</Th>
                 <Th>Move date</Th>
                 <Th>Service</Th>
@@ -140,32 +141,41 @@ export function JobFields({ job }: { job?: typeof hhmcJobs.$inferSelect }) {
   );
 }
 
-export async function NewJobPage({ ctx, basePath }: PortalPageProps) {
+export async function NewJobPage({ ctx, basePath, searchParams }: PortalPageProps) {
   const { rows } = await listCustomers(ctx, { limit: 500 });
+  // Repeat customer (Contacts → "New estimate / work request"): keep who they are and how they
+  // usually move; only the new addresses and dates need entering.
+  const repeat = searchParams.customer ? await contactPage(ctx, searchParams.customer).catch(() => null) : null;
+  const last = repeat?.lastJob ?? null;
+  const prefill = last
+    ? { ...last, moveDate: null, tentative: false, originAddress: null, destinationAddress: null, extraStops: [], source: 'Repeat Customer' as const, sourceDetail: last.jobNumber, customerComments: null, scopeOfWork: null, internalNotes: null, arrivalWindow: null }
+    : undefined;
+  const choices = repeat && !rows.some((c) => c.id === repeat.customer.id) ? [repeat.customer, ...rows] : rows;
   return (
     <>
       <PageHeader
-        title="New job"
+        title={repeat ? `New estimate / work request for ${customerName(repeat.customer)}` : 'New work request'}
         description={
           <>
-            <Link href={`${basePath}/jobs`} className="hover:underline">← All jobs</Link>
-            {' · '}Most jobs start from a lead (Leads → Convert). Use this for a repeat customer who calls directly.
+            <Link href={repeat ? `${basePath}/contacts/${repeat.customer.id}` : `${basePath}/jobs`} className="hover:underline">{repeat ? '← Back to the contact' : '← All work requests'}</Link>
+            {repeat ? ' · Their contact details are kept. Enter the new addresses and date.' : ' · Most work requests start from a lead (Leads → Convert). For a repeat customer, open them under Contacts.'}
           </>
         }
       />
       <Card>
-        <ActionForm action={createJobAction.bind(null, ctx.business.slug, ctx.environment)} submitLabel="Create job">
-          <Field label="Customer" htmlFor="nj-customer" help={<>Not listed? Add them under <Link className="underline" href={`/console/${ctx.business.slug}/${ctx.environment}/data/core.customer`}>Data → Customers</Link>, or add a lead.</>}>
-            <Select id="nj-customer" name="customerId" defaultValue="">
+        <ActionForm action={createJobAction.bind(null, ctx.business.slug, ctx.environment)} submitLabel="Create work request">
+          <Field label="Customer" htmlFor="nj-customer" help={<>Not listed? Add a lead, or add them under <Link className="underline" href={`/console/${ctx.business.slug}/${ctx.environment}/data/core.customer`}>Data → Customers</Link>.</>}>
+            <Select id="nj-customer" name="customerId" defaultValue={repeat?.customer.id ?? ''}>
               <option value="" disabled>Choose a customer…</option>
-              {rows.map((c) => <option key={c.id} value={c.id}>{`${customerName(c)}${c.email ? ` · ${c.email}` : ''}`}</option>)}
+              {choices.map((c) => <option key={c.id} value={c.id}>{`${customerName(c)}${c.email ? ` · ${c.email}` : ''}`}</option>)}
             </Select>
           </Field>
-          <JobFields />
+          {last ? (
+            <p className="text-xs text-zinc-500">{`Last move (${last.jobNumber}, ${formatDay(last.moveDate)}): ${[last.originAddress, last.destinationAddress].filter(Boolean).join(' → ') || 'no addresses'}`}</p>
+          ) : null}
+          <JobFields job={prefill} />
         </ActionForm>
       </Card>
     </>
   );
 }
-
-

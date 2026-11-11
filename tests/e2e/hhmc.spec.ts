@@ -17,7 +17,7 @@ test('a move from lead to Closed, with the customer signing and paying from thei
   const tag = Date.now().toString(36);
   await loginAs(page, SEED.hhmcAdmin);
   await page.goto(APP);
-  await expect(page.getByRole('navigation', { name: 'App sections' }).getByRole('link')).toHaveText(['Dashboard', 'Leads', 'Jobs', 'Schedule', 'Invoices', 'Settings']);
+  await expect(page.getByRole('navigation', { name: 'App sections' }).getByRole('link')).toHaveText(['Dashboard', 'Leads', 'Estimates', 'Work Requests', 'Contacts', 'Calendar', 'Invoices', 'Settings']);
 
   // Lead.
   await page.goto(`${APP}/leads/new`);
@@ -36,7 +36,7 @@ test('a move from lead to Closed, with the customer signing and paying from thei
   await expect(page.getByText('Qualified', { exact: true })).toBeVisible();
 
   // Quote: the default 16' truck is there; add 2 Men × 2.5 h. The total updates while typing.
-  await page.getByLabel('Item').selectOption({ label: '2 Men · $195.00/hour' });
+  await page.getByLabel('Item', { exact: true }).selectOption({ label: '2 Men · $195.00/hour' });
   await page.getByLabel('Qty (hour)').fill('2.5');
   await expect(page.getByTestId('quote-total')).toHaveText('$682.50');
   await expect(page.getByTestId('quote-card-total')).toHaveText('$709.80');
@@ -94,7 +94,7 @@ test('a move from lead to Closed, with the customer signing and paying from thei
   // It is on the schedule.
   const day = await asOwner(async (sql) => (await sql`select move_date::text as d from hhmc_jobs where job_number = ${jobNumber} and environment = 'live'`)[0].d as string);
   await page.goto(`${APP}/schedule?view=day&date=${day}`);
-  await expect(page.getByRole('link', { name: jobNumber })).toBeVisible();
+  await expect(page.getByRole('link', { name: jobNumber }).first()).toBeVisible();
 
   // After the move: 1 hour actually worked → invoice.
   await page.goto(jobUrl);

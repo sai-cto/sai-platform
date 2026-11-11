@@ -26,6 +26,7 @@ export const P = {
   catalogRead: 'hhmc.catalog.read',
   catalogWrite: 'hhmc.catalog.write',
   automationsRun: 'hhmc.automations.run',
+  importRun: 'hhmc.import.run',
   customerEstimate: 'hhmc.customer.estimate',
   customerInvoice: 'hhmc.customer.invoice',
 } as const;
@@ -57,6 +58,7 @@ export const permissions: PermissionDef[] = [
   { key: P.catalogRead, label: 'See the price catalog, discounts, templates and automation rules', kind: 'read', defaultForStaff: true },
   { key: P.catalogWrite, label: 'Change the price catalog, discounts, templates and automation rules', kind: 'write', defaultForStaff: false },
   { key: P.automationsRun, label: 'Send due automation emails now (tech team only; no scheduler yet)', kind: 'write', defaultForStaff: false },
+  { key: P.importRun, label: 'Import records from Movegistics (tech team; command line only)', kind: 'write', defaultForStaff: false },
   { key: P.customerEstimate, label: 'Customer link only: review, sign and pay the deposit on one estimate', kind: 'write', defaultForStaff: false },
   { key: P.customerInvoice, label: 'Customer link only: pay one invoice', kind: 'write', defaultForStaff: false },
 ];
