@@ -55,6 +55,7 @@ Dev login only exists when `AUTH_DEV_LOGIN=true` and the app is not running in p
 | `npm run db:reset` | Wipe the local dev database and re-seed it |
 | `npm run docs:permissions` | Regenerate `docs/PERMISSIONS.md` after changing permissions |
 | `npm run test:e2e:demo` | Browser tests of the hosted demo, locally (production build in demo mode) |
+| `npm run hhmc:import` | Hired Hands only, local only: import Movegistics' exports into the local live data and reconcile (see `docs/hhmc-analysis/PLAN.md`, Phase 5C) |
 | `npm run hhmc:automations` | Send Hired Hands' due automatic emails (no scheduler yet) |
 | `npm run demo:seed` | Hosted demo only: wipe and re-seed the demo database (see `docs/DEPLOY-DEMO.md`) |
 | `npm run secret-scan` | Check that no credential is about to be committed |

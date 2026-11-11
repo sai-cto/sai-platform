@@ -192,3 +192,65 @@ permission refusal, sandbox/live) → 5. Pages + actions → 6. E2E `tests/e2e/h
 (screenshots 1440 / 375 in `docs/screenshots/phase-5/`) → 9. README rules with ref § citations,
 DECISIONS (incl. every ref §11 question), BRIEF line, PROGRESS log, `docs:permissions` →
 **stop before merge**.
+
+---
+
+# Phase 5C — HHMC on real data, and the managers' own requirements (11 Nov 2026)
+
+Sources: the managers' written input ("Hired Hands Software Input", Nov 2026, kept by the CTO —
+not in the repo), Movegistics' own settings and list exports (read-only, 11 Nov 2026), and the
+CTO's Phase 5C prompt. **Where the managers' document conflicts with the Phase 5 build, the
+managers win** and the conservative choice is logged in DECISIONS (P5C-*), most as NEEDS JAI REVIEW.
+
+## What the managers asked for → where it is
+
+| Managers' requirement | Status | Where |
+|---|---|---|
+| **Must-have 1: Lead → Estimate → Invoice** | ✅ end to end, also on a real repeat customer (throw-away copy) | `scripts/hhmc-import/must-haves.ts`, `tests/integration/hhmc.test.ts` |
+| **Must-have 2: payments linked to jobs and invoices** | ✅ deposits on the estimate, balance on the invoice; 1,383 real payments imported and linked (19 had no single matching contact) | `services/estimates.ts`, `services/invoices.ts`, importer |
+| **Must-have 3: calendar of moves** | ✅ month first, colour-coded (booked moves, estimates, work requests, invoices due), legend with show/hide, week + day views | `pages/schedule-page.tsx`, `services/calendar.ts` |
+| Flow: lead → qualify → "no contact" = 3 follow-up emails over a week | ✅ "Couldn't reach" starts emails same day / day 3 / day 7 (NEEDS JAI REVIEW: exact days); "No contact" badge | `seed-data.ts RULES`, `pages/leads.tsx` |
+| 20% deposit; valuation $0.60/lb per article | ✅ (already; confirmed against Movegistics settings) | settings, catalog |
+| Final invoice = actual work − deposit | ✅ | `services/invoices.ts` |
+| Estimate builder: load/drive/unload as 1 or 3 lines at the hourly rate | ✅ | `services/builder.ts`, `pages/estimate-builder.tsx` |
+| Cornellian $20/hr off | ✅ as a lower hourly rate (setting); old 5% discount archived (migration 0009) | builder, settings |
+| Own truck (labor only) vs ours | ✅ | builder |
+| Local truck day fee ($195 for 16'); long distance (> ~150 mi) small day fee + per mile ~$0.10 under U-Haul | ✅ threshold is a setting (150); per-mile rates are line items | builder, Settings › Line items |
+| Materials (dollies, blankets, wrap, boxes), packing help | ✅ any line item with a quantity; packing labor $195/hr (NEEDS JAI REVIEW: no Movegistics item) | builder |
+| Notes on locations (stairs, elevator, split loading, fragile/unusual) | ✅ per end, ticks + text, on the job page | builder, job page |
+| Automatic mileage and drive time | ⚠️ adapter built; **NEEDS JAI REVIEW**: no `GOOGLE_MAPS_API_KEY` yet → manual entry with a clear note | `services/maps.ts` |
+| Cost categories with dropdowns of pre-generated line items, set up in Settings ("very important") | ✅ HHMC's real 32 Movegistics line items seeded; add/edit by cost category | `seed-data.ts CATALOG`, Settings › Line items |
+| "Created by" on every estimate | ✅ `created_by_name` (staff name when sent; Movegistics owner when imported) | Estimates list, job page |
+| Detailed estimates and work requests | ✅ (Phase 5); imported history carries totals only (see gaps) | |
+| Date-range dashboard; **every number clickable** to name, move date, amount, paid/unpaid | ✅ | `pages/dashboard-page.tsx`, `services/dashboard.ts` |
+| Sidebar in their words: Leads, Estimates, Work Requests, Contacts, Calendar, Invoices | ✅ "Jobs" is now "Work Requests", "Schedule" is "Calendar"; new Estimates list and Contacts (no duplicate screens) | `manifest.ts` |
+| Repeat customers: "New estimate / work request" on a contact | ✅ keeps contact details, prefills how they moved last time; only new addresses and dates | `pages/contacts.tsx`, `pages/jobs.tsx` |
+| Settings: one simple page per area; automations "when X → send Y", no tags | ✅ Line items · Discounts · Automatic emails · Documents and branding · Trucks | `pages/settings-page.tsx` |
+| Branding beyond a logo (colours, header/footer, company info) | ✅ module settings; customer estimate/invoice pages and stored estimate document | `settings.ts brandOf`, `customer-page.tsx`, `document.ts` |
+| Real Hired Hands history in the software | ✅ local only; reconciles to the cent (`~/Documents/SAI/hhmc-data/RECONCILIATION.md`) | `scripts/hhmc-import` |
+
+## Import design (`npm run hhmc:import`)
+
+Movegistics' list exports (Contacts, Leads, Work Requests, Estimates, Work Orders, Invoices,
+Payments) → `movegistics.ts` (pure mapping, every unlinked record counted) → `load.ts`
+(createRecord/updateRecord in batches of 250, `hhmc_import_refs` = Movegistics id → local id +
+content hash, so a re-run updates instead of duplicating) → `reconcile.ts` (Movegistics' numbers
+computed straight from its CSVs, independent of the mapping, against HHMC live, per month).
+Local database only, HHMC live only; the sandbox stays fake. Nothing is emailed, queued or
+charged: payments are recorded as already received (`manual` provider).
+
+**Known gaps of the export (NEEDS JAI REVIEW):** no estimate or invoice line items (totals only:
+imported estimates and invoices carry one line saying so — the Open API or the detail pages
+would give the lines); 74 estimates name no matching work request (not imported); 7 partial
+refunds have no amount; multi-day job dates and actual hours come only from work-order start dates;
+Terms & Conditions text and email templates still to be copied by hand.
+
+## Later (listed, not built now)
+
+- **Claims pipeline** (today it "mostly just lives in the email").
+- Integrations: **Homebase** (labor cost), **BILL** (expenses, mover reimbursements),
+  **RingCentral** (calls), **Outlook** (the HHMC mailbox), **SharePoint** (P&L and performance
+  dashboard). Until then the P&L is built from Movegistics revenue and payments only; labor and
+  expenses are empty (export them by hand into `~/Documents/SAI/hhmc-data/raw/other/`).
+- **Crew app** (the managers: "impossible to set up" in Movegistics; not used).
+- Movegistics Open API pull for line items, if the CTO provides `MOVEGISTICS_API_KEY`.
