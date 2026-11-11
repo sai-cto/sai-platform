@@ -16,6 +16,7 @@ import { SchedulePage } from './pages/schedule-page';
 import { SettingsPage } from './pages/settings-page';
 import { CORE, P, permissions } from './permissions';
 import { seedDemoData } from './seed';
+import { processDueAutomationsInScope } from './services/automations';
 import { estimateFunnel, invoiceTotals, leadsThisMonth, upcomingMoves } from './services/dashboard';
 import { settingsDefaults, settingsFields, settingsSchema } from './settings';
 
@@ -120,6 +121,19 @@ export const hhmcModule = defineModule({
   ],
 
   workItem: { label: 'Jobs', entityKey: jobEntity.key },
+
+  // Sends due automatic emails on the hosting's schedule, only where a manager switched
+  // "Send due automatic emails on a schedule" on (off by default, P5-15).
+  scheduledTasks: [
+    {
+      key: 'hhmc.due-emails',
+      settingKey: 'autoSendDueEmails',
+      run: async (s, now) => {
+        const r = await processDueAutomationsInScope(s, now);
+        return `sent ${r.sent}, cancelled ${r.cancelled}, deferred ${r.deferred}, failed ${r.failed}`;
+      },
+    },
+  ],
 
   settings: { schema: settingsSchema, defaults: settingsDefaults, fields: settingsFields },
 

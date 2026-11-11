@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { OAUTH_PROVIDERS, isDevLoginEnabled, listDevLoginUsers } from '@/core/auth/login';
 import { ROLE_LABELS } from '@/core/rbac/roles';
-import { devLoginAction } from '@/server/auth-actions';
+import { isDemoMode } from '@/core/demo/demo';
+import { demoLoginAction, devLoginAction } from '@/server/auth-actions';
 import { currentUserId } from '@/server/session';
 
 export const metadata: Metadata = { title: 'Sign in' };
@@ -31,7 +32,9 @@ export default async function LoginPage({
           role="alert"
           className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
         >
-          We could not sign you in. Ask the tech team to check that you have an account.
+          {isDemoMode()
+            ? 'Wrong email or password.'
+            : 'We could not sign you in. Ask the tech team to check that you have an account.'}
         </p>
       ) : null}
 
@@ -49,7 +52,25 @@ export default async function LoginPage({
         </div>
       ) : null}
 
-      {isDevLoginEnabled() ? (
+      {isDemoMode() ? (
+        <section aria-labelledby="demo-login" className="rounded-lg border border-neutral-200 bg-white p-4">
+          <h2 id="demo-login" className="text-sm font-semibold">
+            Sign in to the test site
+          </h2>
+          <p className="mt-0.5 text-xs text-neutral-500">Use the email and password you were sent.</p>
+          <form action={demoLoginAction} className="mt-3 space-y-3">
+            <div>
+              <label htmlFor="demo-email" className="block text-xs font-medium text-neutral-700">Email</label>
+              <input id="demo-email" name="email" type="email" autoComplete="username" required className="mt-1 h-9 w-full rounded-md border border-neutral-300 px-2.5 text-sm" />
+            </div>
+            <div>
+              <label htmlFor="demo-password" className="block text-xs font-medium text-neutral-700">Password</label>
+              <input id="demo-password" name="password" type="password" autoComplete="current-password" required className="mt-1 h-9 w-full rounded-md border border-neutral-300 px-2.5 text-sm" />
+            </div>
+            <button type="submit" className="h-9 w-full rounded-md bg-neutral-900 text-sm font-medium text-white">Sign in</button>
+          </form>
+        </section>
+      ) : isDevLoginEnabled() ? (
         <section
           aria-labelledby="dev-login"
           className="rounded-lg border border-neutral-200 bg-white"

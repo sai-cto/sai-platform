@@ -15,7 +15,8 @@ export interface FileStorage {
 }
 
 function storageRoot(): string {
-  return path.resolve(process.env.FILE_STORAGE_DIR || './storage');
+  // Serverless hosting (Vercel) can only write to /tmp: files there do not last (demo only).
+  return path.resolve(process.env.FILE_STORAGE_DIR || (process.env.VERCEL ? '/tmp/sai-files' : './storage'));
 }
 
 function resolveKey(key: string): string {

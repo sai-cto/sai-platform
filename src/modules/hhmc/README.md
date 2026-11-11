@@ -79,8 +79,8 @@ mock card provider (see "Before going live").
 |---|---|
 | Exactly one quote per job, 7 sections: Transportation Labor, Valuation, Packing Materials, Packing Labor, Crating, Additional Services, Storage | ref §3.4; prompt |
 | Line = Qty × Rate − discount (% or $); section = Σ lines; subtotal = Σ sections | ref §4.2 |
-| Grand total = subtotal + Service Tax (if on) + Card Convenience Fee (if on); the fee is on subtotal + tax | ref §4.2; prompt; DECISIONS P5-6 |
-| Deposit = 20% × (subtotal + tax); paid by card + the fee % on the deposit | ref §4.2; prompt |
+| Total = subtotal + Service Tax (if on). The Card Convenience Fee (if on) is added **only when paying by card**: "paid by card" = total + fee on (subtotal + tax). New quotes: tax OFF, card fee ON (manager settings) | ref §4.2; H4 / P5-15 (NEEDS JAI REVIEW) |
+| Deposit = 20% × (subtotal + tax); paid by card + the fee % on the deposit (only when the estimate has the card fee on) | ref §4.2; prompt |
 | Integer cents, half-up | prompt |
 | Examples A ($709.80; $141.96), B ($2,406.01; $481.20), C ($202.80 − $40.56 = $162.24) | ref §4.2 — acceptance tests in `hhmc-pricing.test.ts` |
 | Discounts Friends & Family / Cornellian / Repeat Customer, 5% each | ref §4.3 |
@@ -114,11 +114,17 @@ mock card provider (see "Before going live").
 | Rule | Source |
 |---|---|
 | Built from the signed estimate; hourly Transportation Labor replaced by actual hours (rounded up to 15 min) when entered | ref §2.1 step 12, §4.1; prompt |
-| Total − Deposit Received (incl. its card fee) − Payments = Balance Due | ref §4.2 example C, §7.1 |
+| Balance due = (subtotal + tax) − deposit received (its base, not the card fee paid on it) − payments credited; paying it by card adds the fee. Example C: $156.00 cash, $162.24 by card | ref §4.2 example C, §7.1; P5-15 |
 | Statuses Draft → Sent → Partially Paid → Paid, or Void (only without payments) | ref §2.2; prompt |
 | Terms Due On Receipt / Net 7 / 15 / 30 / 60 set the due date | ref §7.1 |
 | Creating the invoice marks the job Completed; paying it in full closes the job | prompt lifecycle; P5-7 |
 | Payments go through the core `takePayment` (mock provider) with an idempotency key per attempt; a declined card is recorded as failed | ARCHITECTURE; prompt |
+
+### Records that cannot be archived (P5-21)
+Through any path, the Data tab included (`entities.ts archiveGuard`): signed or live estimates
+(only void ones), sent or paid invoices (only void ones, or unpaid drafts), jobs in progress
+(only Qualified, Lost, Cancelled or Closed), quote lines once the quote is locked, job days of a
+booked job, lines of a sent invoice.
 
 ### Automations (rules are data, `seed-data.ts RULES`)
 | Email | Trigger | Delay | Respects opt-in | Source |
@@ -133,8 +139,9 @@ mock card provider (see "Before going live").
 A queued drip is cancelled when the job leaves Estimate Sent, when the estimate is signed or
 voided, and when opt-in is turned off (prompt). Every email is checked again when it is due
 (`rules.ts automationStillWanted`), so nothing goes out that is no longer wanted.
-No scheduler exists: due emails go out with Settings → "Run due emails" (tech team) or
-`npm run hhmc:automations`.
+Due emails go out with Settings → "Run due emails" (tech team), `npm run hhmc:automations`, or
+the hosting's daily scheduler when a manager switches on "Send due automatic emails on a
+schedule" (off by default, P5-20).
 
 ## Customer pages (no account)
 

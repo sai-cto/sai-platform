@@ -29,6 +29,8 @@ safest reversible option. They are collected in the first table so they are easy
 | R-17 | Every form in the console now keeps what was typed when the server refuses it (P4-6). | Found at the Phase 4 UI gate. | `src/ui/action-form.tsx` |
 | R-19 | **Customer links** (P5-1): a small core addition, approved by the CTO on 11 Nov 2026 — signed, expiring, single-purpose links for customers without an account. | The smallest way to let a customer sign and pay without deciding the sign-in provider. | `src/core/links/links.ts` |
 | R-20 | **HHMC: the choices in P5-5 … P5-14 and the ref §11 answers (H1–H14)** were made without an HHMC manager, each the safest reversible option. | No manager was available during the build. | Each row names where to change it |
+| R-21 | **HHMC go-live choices (P5-15 … P5-26) and the updated H4** were made autonomously, each the safest reversible option (never overcharge, never send a real message, never lose data). | The CTO asked for the loop to run without stopping for questions. | Each row names where to change it |
+| R-22 | **Phase 4 was merged into `main` before its own review gate had finished** (PROGRESS said "running"). | The CTO asked for Phase 4 and 5 on `main`; Phase 4 had passed its checks, e2e and UI gate, and HHMC's three review rounds covered the shared code it touches. | Run a review of `src/modules/brss` if wanted |
 | R-18 | Two small additions to the shared core for BRSS: `takeLock()` and `nextRecordNumber()` (P4-4). | A module cannot reach the database transaction itself, by design. | `src/core/db/lock.ts`, `src/core/records/numbering.ts` |
 
 ## Locked by the brief (not Claude's to change)
@@ -244,7 +246,7 @@ Further BRSS choices that also need review (each explained in the module README)
 | H1 | Where do crew scheduling, rosters and payroll happen? | Out of scope. Job days carry crew size and trucks only; capacity is a setting (movers per day). |
 | H2 | Crew App: do actual hours flow into invoices automatically? | Staff type actual hours per job day on the Job page; the invoice uses them, rounded up to 15 minutes. |
 | H3 | Booking trigger: manual or automatic? | Manual (prompt). Signed + deposit shows "Ready to book". |
-| H4 | The 4%: tax or card fee? Cash/check/ACH? | Both exist as separate settings (P5-6); the card fee on a deposit applies to card payments only. **A manager must decide which one HHMC actually charges.** |
+| H4 | The 4%: tax or card fee? Cash/check/ACH? | **Updated (P5-15):** two separate settings. New quotes default to **no service tax** and **the card fee on**, and the card fee is charged **only on card payments** (deposit, invoice balance, staff card payments). Cash and check never pay it. Totals show the cash/check amount, with "paid by card" next to it. Examples A/B/C still match to the cent. Managers can change both defaults in Settings. **A manager must confirm what HHMC actually charges.** |
 | H5 | Deposit page and invoice pay link; is a saved card charged later? | Built as customer link pages; no saved cards (each payment is its own card entry). |
 | H6 | BOL content; used by crews? | Not built (out of scope). |
 | H7 | QuickBooks: what should sync? | Not built (out of scope). |
@@ -255,3 +257,22 @@ Further BRSS choices that also need review (each explained in the module README)
 | H12 | Mailchimp, Open API, lead feeds, web forms | Not built. Leads are entered by staff; the UTM/GCLID/FBCLID fields are ready for a web form later. |
 | H13 | Surveys and structured inventory | Not built; scope of work is free text (ref §5). |
 | H14 | Top-bar shortcuts | Not rebuilt. |
+
+## Phase 5, part 2: HHMC prototype on `main` and the hosted test site (11 Nov 2026) — NEEDS JAI REVIEW
+
+| # | Decision | Why / how to change it |
+|---|---|---|
+| P5-15 | **H4 as instructed:** service tax OFF and card fee ON by default (`serviceTaxOnByDefault`, `cardFeeOnByDefault` module settings). The fee is added only when money is taken by card (`cardChargeCents`). Invoices credit the deposit at its base amount, and the balance is in cash/check money. | The CTO's instruction. Never overcharges a cash or check customer, and never shows revenue that includes a fee that may not be collected. `services/pricing.ts`, `services/invoices.ts`. |
+| P5-16 | **Hosting: Vercel (app) + Neon (Postgres), free plans.** Vercel runs Next.js with no configuration, deploys on every push, and has a free daily scheduler. Neon is free Postgres that allows the restricted `sai_app` role and row-level security, so the tenancy layers work unchanged. | The simplest free pair that fits the stack. No new dependency: only `vercel.json` (config). |
+| P5-17 | **Demo mode** (`DEMO_MODE=true`, `src/core/demo`): a shared access password in front of everything (`src/proxy.ts`), including customer links; demo accounts with email + password from `DEMO_ACCOUNTS`; a "TEST SITE" banner; mock payments and log-only email forced; dev login off whatever `AUTH_DEV_LOGIN` says. | The CTO's non-negotiables. Passwords are never stored in the database or the repository, only in the hosting's encrypted environment variables. |
+| P5-18 | The demo's app connection is **derived from `DATABASE_OWNER_URL`**: same server, role `sai_app`, and a password derived from the owner URL (HMAC). `npm run demo:prepare` gives the role that password on every deploy. So the owner URL is present at runtime on the demo. | One fewer secret for a first-time deployer, and the app still connects as the RLS-bound role. Set `DATABASE_URL` explicitly to stop deriving it. |
+| P5-19 | On Vercel, stored files go to `/tmp` and do not last (estimate documents in the Data tab). | Fine for a test site. A real deployment needs a file-storage adapter (HANDOFF). |
+| P5-20 | **Scheduler:** `vercel.json` calls `/api/cron/scheduled` daily (the free plan's limit), protected by `CRON_SECRET`. A module declares `scheduledTasks`; HHMC's due-emails task runs only where the manager setting "Send due automatic emails on a schedule" is on (**off by default**). "Run due emails" and `npm run hhmc:automations` stay. | The CTO asked for a free cron behind a setting that is off. Daily is coarse for the +2 h drip; a paid plan or another scheduler can call the same URL hourly. |
+| P5-21 | **Data-tab archive hole closed** (pre-approved core change): `EntityDef.archiveGuard`, checked inside `archiveRecord()`, so every path obeys it. HHMC refuses to archive signed or live estimates, sent or paid invoices, jobs in progress, locked quote lines, booked job days, and lines of a sent invoice. BRSS refuses orders in progress, paid charges, and articles with paid charges. | A rule in one place that no path can skip. Core entities (payments, customers) are not guarded yet, so archiving a payment row is still possible for those with `payments.write`: a candidate for the same treatment. |
+| P5-22 | Demo accounts: `gm` = HHMC business admin; `staff` = HHMC staff with **every grantable permission** (they can run the whole move); `tech` = the platform tech role. | Managers are testing the whole lifecycle, so a staff account missing "book" would only confuse. |
+| P5-23 | "Copy payment link" on a sent invoice (like the estimate's "Copy link"). | On the demo no email is sent, so staff need the link to play the customer. Useful for real use too (send it by text). |
+| P5-24 | The Book button is replaced by "Add a job day (the move date) before booking" when a job has no days. | Found by the demo e2e test: Book failed inside its dialog. |
+| P5-25 | Templates and terms are labelled "PLACEHOLDER – manager to replace". The customer's estimate has "Print or save as PDF" (the browser's print), with no PDF library. | The CTO's instructions. |
+| P5-26 | `npm run demo:seed` wipes and re-seeds the **demo** database (it refuses to run without `DEMO_MODE=true`). On Vercel the same happens on a deploy with `DEMO_RESET_ON_DEPLOY=yes`. | You can't run commands on Vercel. The variable is the no-terminal way. |
+
+No new dependencies were added.

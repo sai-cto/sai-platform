@@ -175,6 +175,15 @@ For a customer who must do one thing without signing in (sign an estimate, pay a
    action gets its context from `requireLinkContext(token)` (`@/server/session`), never from a
    session. See `src/modules/hhmc/services/estimates.ts` and `pages/customer-page.tsx`.
 
+## Rules about archiving, and scheduled work
+
+- **`archiveGuard`** on an entity: return a reason to refuse archiving a row (for example a
+  signed or paid record), or null. It applies to every archive, the Data tab's included.
+  Seed at least two rows the guard allows: the automatic tests archive one.
+- **`scheduledTasks`** in the manifest: `{ key, settingKey?, run(s, now) }`. It runs on the
+  hosting's schedule for every business and mode. Gate anything that sends or charges behind a
+  yes/no setting that is off by default.
+
 ## Common mistakes
 
 - **A query returns nothing.** It is not inside `withScope()`, or it lacks `s.where(table)`.

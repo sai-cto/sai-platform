@@ -5,6 +5,7 @@
  */
 import type { notifications } from '../db/schema';
 import type { Scope } from '../db/scope';
+import { isDemoMode } from '../demo/demo';
 import { authorize } from '../rbac/permissions';
 import { notificationEntity } from '../records/core-entities';
 import { createRecord } from '../records/records';
@@ -44,7 +45,8 @@ export async function sendNotification(
   // Permission first: nobody without notifications.write can make the platform send anything.
   authorize(s.ctx, 'notifications.write');
   // The sandbox never sends for real, whatever adapter is configured.
-  const channel = s.ctx.environment === 'sandbox' ? consoleEmailChannel : emailChannel;
+  // The sandbox and the hosted demo site never send for real, whatever adapter is configured.
+  const channel = s.ctx.environment === 'sandbox' || isDemoMode() ? consoleEmailChannel : emailChannel;
   const result = await channel.send({
     recipient: input.recipient,
     subject: input.subject,

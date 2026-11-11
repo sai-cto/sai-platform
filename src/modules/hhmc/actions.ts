@@ -37,6 +37,7 @@ import {
 import {
   addInvoiceLine,
   createInvoice,
+  invoiceLinkFor,
   payInvoiceByLink,
   recordInvoicePayment,
   removeInvoiceLine,
@@ -412,6 +413,11 @@ export async function sendInvoiceAction(slug: string, mode: string, id: string) 
     await sendInvoice(ctx, id);
     return 'Sent.';
   });
+}
+
+/** Returns the customer's payment link as the message, so the page can show and copy it. */
+export async function invoiceLinkAction(slug: string, mode: string, id: string) {
+  return run(slug, mode, (ctx) => invoiceLinkFor(ctx, id));
 }
 
 export async function voidInvoiceAction(slug: string, mode: string, id: string) {

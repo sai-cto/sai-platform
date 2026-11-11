@@ -90,6 +90,12 @@ export function validateRegistry(): string[] {
           );
       }
     }
+    for (const task of mod.scheduledTasks ?? []) {
+      if (!task.key.startsWith(`${mod.key}.`))
+        problems.push(`Scheduled task "${task.key}" must start with "${mod.key}.".`);
+      if (task.settingKey && typeof mod.settings?.defaults[task.settingKey] !== 'boolean')
+        problems.push(`Scheduled task "${task.key}" names setting "${task.settingKey}", which is not a yes/no setting of ${mod.key}.`);
+    }
     if (mod.workItem && !mod.entities.some((e) => e.key === mod.workItem?.entityKey)) {
       problems.push(
         `Module ${mod.key}: workItem.entityKey "${mod.workItem.entityKey}" is not one of its entities.`,

@@ -151,6 +151,12 @@ export type ModuleManifest = {
     /** Absent = this module has no field (mobile crew) portal yet. */
     field?: PortalDef;
   };
+  /**
+   * Work to run on a schedule (hosting's cron calls /api/cron/scheduled). Runs once per
+   * business and per mode (live, test) as the system actor. `settingKey` names a boolean
+   * module setting that must be on, so a business switches it on deliberately.
+   */
+  scheduledTasks?: { key: string; settingKey?: string; run: (s: Scope, now: Date) => Promise<string> }[];
   /** Customer links this module hands out. Served at /l/<token>/… from portals.customer. */
   linkPurposes?: LinkPurposeDef[];
   widgets: WidgetDef[];

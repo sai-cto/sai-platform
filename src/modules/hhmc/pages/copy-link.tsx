@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react';
 import type { ActionResult } from '@/ui/action-form';
 import { Button } from '@/ui/button';
 
-export function CopyLinkButton({ action }: { action: () => Promise<ActionResult> }) {
+export function CopyLinkButton({ action, label = 'Copy link' }: { action: () => Promise<ActionResult>; label?: string }) {
   const [link, setLink] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -28,7 +28,7 @@ export function CopyLinkButton({ action }: { action: () => Promise<ActionResult>
           })
         }
       >
-        {pending ? 'Working…' : 'Copy link'}
+        {pending ? 'Working…' : label}
       </Button>
       {link ? (
         <input readOnly value={link} aria-label="Customer link" onFocus={(e) => e.currentTarget.select()} className="h-7 w-56 rounded border border-zinc-300 px-2 text-xs" />

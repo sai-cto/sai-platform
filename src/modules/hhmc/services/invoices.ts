@@ -355,6 +355,16 @@ export async function payInvoiceByLink(ctx: BusinessContext, input: { cardToken?
   });
 }
 
+/** The customer's payment link, for "Copy payment link" on the invoice page. */
+export async function invoiceLinkFor(ctx: BusinessContext, invoiceId: string, now: Date = new Date()) {
+  return withScope(ctx, P.invoicesWrite, async (s) => {
+    const invoice = await loadInvoice(s, invoiceId);
+    if (invoice.status !== 'sent' && invoice.status !== 'partially_paid')
+      throw new ValidationError('Only a sent invoice with a balance has a payment link.');
+    return invoiceLink(s, invoice, now);
+  });
+}
+
 /** What the customer sees on their invoice link. */
 export async function openInvoiceByLink(ctx: BusinessContext) {
   const invoiceId = ctx.link?.subjectId ?? '';

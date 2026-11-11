@@ -178,6 +178,25 @@ must check `linkFor(ctx, purpose, id)` before acting. Pages are served at `/l/<t
 module's `portals.customer`. Nothing is stored; a link dies when it expires, when its record is
 no longer in the right state, or when the secret changes.
 
+## Archiving rules a module cannot be talked out of
+
+An entity may declare `archiveGuard(s, row)`: a reason to refuse archiving, or null.
+`archiveRecord()` calls it on every path (Data tab, imports, the module's own services), so a
+rule like "a signed estimate is never archived" holds everywhere.
+
+## Demo mode (`src/core/demo`, the hosted test site)
+
+`DEMO_MODE=true` puts a shared access password in front of the whole site (`src/proxy.ts`). It
+also turns on email + password sign-in for the accounts in `DEMO_ACCOUNTS` (passwords only in
+the environment, never in the database), a "TEST SITE" banner, forced mock payments and log-only
+email, and switches the dev login off. Deployment: `docs/DEPLOY-DEMO.md`.
+
+## Scheduled work
+
+A module may declare `scheduledTasks` (optionally gated by a yes/no module setting).
+`runScheduledTasks()` (`src/core/modules/scheduled.ts`) runs them for every business, live and
+test, as the system actor; the hosting's cron calls `/api/cron/scheduled` with `CRON_SECRET`.
+
 ## The console (`src/app/console`)
 
 ```

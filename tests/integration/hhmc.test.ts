@@ -189,7 +189,10 @@ describe('the whole life of one move', () => {
     expect(sent.status).toBe('sent');
     const pastDue = (await queueOf(ctx, job.id)).find((r) => r.trigger === 'invoice_sent');
     expect(pastDue?.q.status).toBe('queued');
-    expect(pastDue!.q.dueAt.getTime() - sent.sentAt!.getTime()).toBe(8 * DAY);
+    // The later of: 8 days after sending, or 9:00 the day after the due date (P5, review round 2).
+    expect(pastDue!.q.dueAt.getTime() - sent.sentAt!.getTime()).toBeGreaterThanOrEqual(8 * DAY);
+    const { addDays, localTime } = await import('@/modules/hhmc/rules');
+    expect(pastDue!.q.dueAt.getTime()).toBeGreaterThanOrEqual(localTime(addDays(sent.dueDate, 1), '09:00', 'America/New_York').getTime());
 
     // The customer pays the balance from the invoice link → Paid → job Closed.
     const invoiceCtx = await withScope(ctx, P.invoicesRead, async (s) => {

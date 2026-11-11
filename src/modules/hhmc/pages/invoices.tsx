@@ -11,6 +11,7 @@ import { Card, EmptyState, Field, PageHeader, Table, Td, Th, inputClass } from '
 import { Pagination } from '@/ui/pagination';
 import {
   addInvoiceLineAction,
+  invoiceLinkAction,
   invoiceOptionsAction,
   invoicePaymentAction,
   removeInvoiceLineAction,
@@ -24,6 +25,7 @@ import { balanceOf, cardBalanceOf, INVOICES_PAGE_SIZE, listInvoices } from '../s
 import { baseTotalCents, formatQty, lineTotalCents, SECTIONS, sectionLabel } from '../services/pricing';
 import { invoicePage } from '../services/views';
 import { AttemptKey } from './attempt-key';
+import { CopyLinkButton } from './copy-link';
 import { Disclosure } from './disclosure';
 import { Check, Fact, InvoiceStatusBadge, Select, formatDay, hrefWith } from './parts';
 
@@ -102,6 +104,9 @@ export async function InvoicePage({ ctx, params, basePath }: PortalPageProps) {
               <ConfirmButton action={sendInvoiceAction.bind(null, slug, mode, invoice.id)} variant={draft ? 'primary' : 'secondary'} confirmTitle={draft ? 'Send this invoice?' : 'Send it again?'} confirmBody={`The customer gets the invoice with a link to pay ${formatMoney(Math.max(balance, 0))}.${draft ? ' A past-due reminder is queued for 8 days later.' : ''}`} confirmLabel="Send">
                 {draft ? 'Send invoice' : 'Resend'}
               </ConfirmButton>
+            ) : null}
+            {canWrite && (invoice.status === 'sent' || invoice.status === 'partially_paid') ? (
+              <CopyLinkButton action={invoiceLinkAction.bind(null, slug, mode, invoice.id)} label="Copy payment link" />
             ) : null}
             {canWrite && invoice.paidCents === 0 && (draft || invoice.status === 'sent') ? (
               <ConfirmButton action={voidInvoiceAction.bind(null, slug, mode, invoice.id)} variant="danger" confirmTitle="Void this invoice?" confirmLabel="Void">Void</ConfirmButton>

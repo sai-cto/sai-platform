@@ -90,7 +90,10 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                 {liveEstimate ? 'Send new version' : 'Send estimate'}
               </ConfirmButton>
             ) : null}
-            {canBook && job.stage === 'estimate_sent' && signed ? (
+            {canBook && job.stage === 'estimate_sent' && signed && days.length === 0 ? (
+              <span className="text-xs text-amber-800">Add a job day (the move date) below before booking.</span>
+            ) : null}
+            {canBook && job.stage === 'estimate_sent' && signed && days.length > 0 ? (
               <ConfirmButton
                 action={bookJobAction.bind(null, slug, mode, job.id)}
                 variant="primary"

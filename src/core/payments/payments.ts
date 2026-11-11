@@ -18,6 +18,7 @@ import { customers } from '../db/schema';
 import { paymentEntity, refundEntity } from '../records/core-entities';
 import { createRecord, updateRecord } from '../records/records';
 import type { Row } from '../records/types';
+import { isDemoMode } from '../demo/demo';
 import { mockProvider } from './mock-provider';
 import type { PaymentProvider } from './provider';
 import { createStripeProvider } from './stripe-provider';
@@ -26,7 +27,8 @@ let stripeProvider: PaymentProvider | undefined;
 
 /** The sandbox ALWAYS uses the mock provider, whatever is configured. */
 export function providerFor(environment: 'live' | 'sandbox'): PaymentProvider {
-  if (environment === 'sandbox') return mockProvider;
+  // The sandbox and the hosted demo site ALWAYS use the mock provider.
+  if (environment === 'sandbox' || isDemoMode()) return mockProvider;
   if (process.env.PAYMENT_PROVIDER === 'stripe') {
     stripeProvider ??= createStripeProvider();
     return stripeProvider;
