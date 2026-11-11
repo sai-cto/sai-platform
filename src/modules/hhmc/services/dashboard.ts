@@ -3,13 +3,13 @@
  * Each function takes a Scope and checks its own permission (ARCHITECTURE: "read helpers that
  * take a scope check their own permission too").
  */
-import { and, eq, gte, inArray, isNotNull, lt, min } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, lt, min, sql } from 'drizzle-orm';
 import type { Scope } from '@/core/db/scope';
 import { authorize } from '@/core/rbac/permissions';
 import { P } from '../permissions';
 import { addDays, localDate, localTime } from '../rules';
 import { hhmcEstimates, hhmcInvoices, hhmcJobs, hhmcLeads, LEAD_SOURCES } from '../schema';
-import { balanceDueCents } from './pricing';
+import { balanceDueCents, baseTotalCents } from './pricing';
 
 function monthStart(now: Date, tz: string, monthsBack = 0): Date {
   const today = localDate(now, tz);
@@ -49,7 +49,8 @@ export async function bookedRevenue(s: Scope, months = 6, now: Date = new Date()
   const tz = s.ctx.business.timeZone;
   const from = monthStart(now, tz, months - 1);
   const rows = await s.db
-    .select({ bookedAt: hhmcJobs.bookedAt, source: hhmcJobs.source, total: hhmcEstimates.totalCents })
+    // Base totals (no card fee): revenue is never overstated by a fee that may not be charged.
+    .select({ bookedAt: hhmcJobs.bookedAt, source: hhmcJobs.source, total: sql<number>`${hhmcEstimates.subtotalCents} + ${hhmcEstimates.serviceTaxCents}` })
     .from(hhmcJobs)
     .innerJoin(hhmcEstimates, and(eq(hhmcEstimates.jobId, hhmcJobs.id), eq(hhmcEstimates.status, 'signed')))
     .where(
@@ -90,9 +91,9 @@ export async function invoiceTotals(s: Scope, now: Date = new Date()) {
   let paidThisMonthCents = 0;
   let pastDueCount = 0;
   for (const inv of rows) {
-    const balance = balanceDueCents(inv.totalCents, inv.depositReceivedCents, inv.paidCents);
+    const balance = balanceDueCents(baseTotalCents(inv), inv.depositReceivedCents, inv.paidCents);
     if (inv.status === 'paid') {
-      if (inv.paidAt && inv.paidAt >= from) paidThisMonthCents += inv.totalCents;
+      if (inv.paidAt && inv.paidAt >= from) paidThisMonthCents += baseTotalCents(inv);
       continue;
     }
     openCents += balance;

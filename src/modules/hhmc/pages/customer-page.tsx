@@ -18,10 +18,11 @@ import { SERVICE_TYPE_LABELS, TERMS_LABELS } from '../rules';
 import type { hhmcEstimates } from '../schema';
 import { PURPOSE } from '../services/common';
 import { depositDueByCard, openEstimateByLink } from '../services/estimates';
-import { balanceOf, openInvoiceByLink } from '../services/invoices';
-import { formatQty, lineTotalCents, SECTIONS } from '../services/pricing';
+import { balanceOf, cardBalanceOf, openInvoiceByLink } from '../services/invoices';
+import { baseTotalCents, formatQty, lineTotalCents, SECTIONS } from '../services/pricing';
 import { AttemptKey } from './attempt-key';
 import { formatDay } from './parts';
+import { PrintButton } from './print-button';
 
 const STEPS = [
   { key: 'summary', label: 'Summary' },
@@ -53,8 +54,10 @@ function Prices({ e }: { e: typeof hhmcEstimates.$inferSelect }) {
       ))}
       <div className="flex justify-between border-t border-zinc-200 pt-1"><dt>Subtotal</dt><dd>{formatMoney(e.subtotalCents)}</dd></div>
       {s.serviceTaxOn ? <div className="flex justify-between"><dt>{`Service tax ${pct(s.serviceTaxBp)}`}</dt><dd>{formatMoney(e.serviceTaxCents)}</dd></div> : null}
-      {s.convenienceFeeOn ? <div className="flex justify-between"><dt>{`Card convenience fee ${pct(s.convenienceFeeBp)}`}</dt><dd>{formatMoney(e.convenienceFeeCents)}</dd></div> : null}
-      <div className="flex justify-between text-base font-semibold"><dt>Grand total</dt><dd>{formatMoney(e.totalCents)}</dd></div>
+      <div className="flex justify-between text-base font-semibold"><dt>Total</dt><dd>{formatMoney(baseTotalCents(e))}</dd></div>
+      {s.convenienceFeeOn ? (
+        <div className="flex justify-between text-zinc-700"><dt>{`If you pay by card (+${pct(s.convenienceFeeBp)} card fee)`}</dt><dd>{formatMoney(e.totalCents)}</dd></div>
+      ) : null}
     </dl>
   );
 }
@@ -96,7 +99,7 @@ async function EstimateReview({ ctx, searchParams, basePath }: PortalPageProps) 
 
   return (
     <Shell business={business} title={s.title}>
-      <ol aria-label="Steps" className="flex flex-wrap gap-1 text-xs">
+      <ol aria-label="Steps" className="flex flex-wrap gap-1 text-xs print:hidden">
         {STEPS.map((st, i) => (
           <li key={st.key} aria-current={st.key === step ? 'step' : undefined} className={cn('rounded-full px-2.5 py-1', st.key === step ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-600')}>
             {`${i + 1}. ${st.label}`}
@@ -152,8 +155,9 @@ async function EstimateReview({ ctx, searchParams, basePath }: PortalPageProps) 
           <p className="text-sm whitespace-pre-wrap text-zinc-700">{s.valuation}</p>
           <h2 className="mt-5 text-sm font-semibold">{s.termsTitle}</h2>
           <p className="max-h-80 overflow-y-auto rounded border border-zinc-200 p-3 text-sm whitespace-pre-wrap text-zinc-700">{s.termsBody}</p>
-          <div className="mt-4 flex justify-between">
+          <div className="mt-4 flex flex-wrap justify-between gap-2 print:hidden">
             <Link className="rounded-md border border-zinc-300 px-3 py-2 text-sm" href={go('summary')}>Back</Link>
+            <PrintButton />
             {e.status !== 'signed' && !expired ? <Link className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white" href={go('sign')}>Next: sign</Link> : <Link className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white" href={go('confirm')}>Confirmation</Link>}
           </div>
         </Card>
@@ -172,7 +176,7 @@ async function EstimateReview({ ctx, searchParams, basePath }: PortalPageProps) 
               <span>I have reviewed and initialed each section of this estimate and agree to the terms, pricing and services described in it.</span>
             </label>
             <Field label="Type your full name to sign" htmlFor="signature"><input id="signature" name="signatureName" autoComplete="name" className={inputClass} /></Field>
-            <p className="text-xs text-zinc-500">{`We record the time you sign, your IP address and your browser. Total: ${formatMoney(e.totalCents)}.`}</p>
+            <p className="text-xs text-zinc-500">{`We record the time you sign, your IP address and your browser. Total: ${formatMoney(baseTotalCents(e))}${e.snapshot.convenienceFeeOn ? ` (${formatMoney(e.totalCents)} if paid by card)` : ''}.`}</p>
           </ActionForm>
           <div className="mt-3"><Link className="text-sm underline" href={go('estimate')}>Back to the estimate</Link></div>
         </Card>
@@ -215,6 +219,7 @@ function tokenFrom(basePath: string): string {
 async function InvoicePay({ ctx, basePath }: PortalPageProps) {
   const { invoice, lines } = await openInvoiceByLink(ctx);
   const balance = balanceOf(invoice);
+  const byCard = cardBalanceOf(invoice);
   const pctOf = (bp: number) => `${bp / 100}%`;
   return (
     <Shell business={ctx.business.name} title={`Invoice ${invoice.invoiceNumber}`}>
@@ -227,11 +232,13 @@ async function InvoicePay({ ctx, basePath }: PortalPageProps) {
         </ul>
         <dl className="mt-3 space-y-1 border-t border-zinc-200 pt-2 text-sm tabular-nums">
           {invoice.serviceTaxOn ? <div className="flex justify-between"><dt>{`Service tax ${pctOf(invoice.serviceTaxBp)}`}</dt><dd>{formatMoney(invoice.serviceTaxCents)}</dd></div> : null}
-          {invoice.convenienceFeeOn ? <div className="flex justify-between"><dt>{`Card fee ${pctOf(invoice.convenienceFeeBp)}`}</dt><dd>{formatMoney(invoice.convenienceFeeCents)}</dd></div> : null}
-          <div className="flex justify-between font-semibold"><dt>Total</dt><dd>{formatMoney(invoice.totalCents)}</dd></div>
+          <div className="flex justify-between font-semibold"><dt>Total</dt><dd>{formatMoney(baseTotalCents(invoice))}</dd></div>
           <div className="flex justify-between"><dt>Deposit received</dt><dd>{`− ${formatMoney(invoice.depositReceivedCents)}`}</dd></div>
           <div className="flex justify-between"><dt>Payments received</dt><dd>{`− ${formatMoney(invoice.paidCents)}`}</dd></div>
           <div className="flex justify-between text-base font-semibold"><dt>Balance due</dt><dd>{formatMoney(Math.max(balance, 0))}</dd></div>
+          {invoice.convenienceFeeOn && balance > 0 ? (
+            <div className="flex justify-between text-zinc-700"><dt>{`Paid by card (+${pctOf(invoice.convenienceFeeBp)} card fee)`}</dt><dd>{formatMoney(byCard)}</dd></div>
+          ) : null}
         </dl>
       </Card>
       {invoice.status === 'paid' || balance <= 0 ? (
@@ -240,7 +247,7 @@ async function InvoicePay({ ctx, basePath }: PortalPageProps) {
         <Card><p className="text-sm">This invoice was cancelled.</p></Card>
       ) : (
         <Card title="Pay now">
-          <ActionForm action={payInvoiceLinkAction.bind(null, tokenFrom(basePath))} submitLabel={`Pay ${formatMoney(balance)}`}>
+          <ActionForm action={payInvoiceLinkAction.bind(null, tokenFrom(basePath))} submitLabel={`Pay ${formatMoney(byCard)} by card`}>
             <AttemptKey />
             <TestCardChoice />
           </ActionForm>

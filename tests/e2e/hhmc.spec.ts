@@ -38,10 +38,11 @@ test('a move from lead to Closed, with the customer signing and paying from thei
   // Quote: the default 16' truck is there; add 2 Men × 2.5 h. The total updates while typing.
   await page.getByLabel('Item').selectOption({ label: '2 Men · $195.00/hour' });
   await page.getByLabel('Qty (hour)').fill('2.5');
-  await expect(page.getByTestId('quote-total')).toHaveText('$709.80');
+  await expect(page.getByTestId('quote-total')).toHaveText('$682.50');
+  await expect(page.getByTestId('quote-card-total')).toHaveText('$709.80');
   await page.getByRole('button', { name: 'Add line' }).click();
   await expect(page.getByText('Line added.')).toBeVisible();
-  await expect(page.getByTestId('quote-total')).toHaveText('$709.80');
+  await expect(page.getByTestId('quote-card-total')).toHaveText('$709.80');
   await expect(page.getByText('$136.50 + $5.46 = $141.96')).toBeVisible();
 
   // Send the estimate, then copy the customer's link.
@@ -101,8 +102,9 @@ test('a move from lead to Closed, with the customer signing and paying from thei
   await page.getByRole('button', { name: 'Save', exact: true }).first().click();
   await page.getByRole('button', { name: 'Create invoice' }).click();
   await expect(page).toHaveURL(/\/app\/invoices\/[0-9a-f-]{36}$/);
-  // 2 Men 1 h $195 + truck $195 = $390 + 4% = $405.60 − $141.96 deposit = $263.64.
-  await expect(page.getByTestId('balance-due')).toHaveText('$263.64');
+  // 2 Men 1 h $195 + truck $195 = $390 − $136.50 deposit = $253.50; by card + 4% = $263.64.
+  await expect(page.getByTestId('balance-due')).toHaveText('$253.50');
+  await expect(page.getByTestId('balance-due-card')).toHaveText('$263.64');
   await page.getByRole('button', { name: 'Send invoice' }).click();
   await confirm(page, 'Send');
   await expect(page.getByText('Sent', { exact: true }).first()).toBeVisible();
@@ -114,7 +116,7 @@ test('a move from lead to Closed, with the customer signing and paying from thei
   );
   const invoicePath = new URL(body.match(/https?:\/\/\S+\/l\/\S+/)![0]).pathname;
   await customer.goto(invoicePath);
-  await customer.getByRole('button', { name: 'Pay $263.64' }).click();
+  await customer.getByRole('button', { name: 'Pay $263.64 by card' }).click();
   await expect(customer.getByText('Paid in full. Thank you!')).toBeVisible();
 
   await page.goto(jobUrl);

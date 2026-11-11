@@ -191,7 +191,7 @@ export async function createJobInScope(
     ownerName: input.ownerName ?? s.ctx.actor.name,
     stage: 'qualified',
   });
-  const quote = await createRecord(s, quoteEntity, { jobId: job.id, serviceTaxOn: false, convenienceFeeOn: true });
+  const quote = await createRecord(s, quoteEntity, { jobId: job.id, serviceTaxOn: settings.serviceTaxOnByDefault, convenienceFeeOn: settings.cardFeeOnByDefault });
   if (input.serviceType === 'local') {
     const defaults = await s.db
       .select()

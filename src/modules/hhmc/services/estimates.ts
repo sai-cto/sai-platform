@@ -37,7 +37,7 @@ import {
 } from './common';
 import { estimateDocument } from './document';
 import { moveStage } from './jobs';
-import { computeDeposit, lineTotalCents } from './pricing';
+import { baseTotalCents, computeDeposit, lineTotalCents } from './pricing';
 import { quoteSummary } from './quote';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -198,7 +198,7 @@ async function emailEstimate(
     customerName: personName(customer),
     estimateTitle: estimate.snapshot.title,
     estimateNumber: estimate.estimateNumber,
-    estimateTotal: money(estimate.totalCents),
+    estimateTotal: money(baseTotalCents(estimate)),
     link: estimateLink(s, estimate),
   });
   return sendNotification(s, {

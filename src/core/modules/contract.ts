@@ -52,6 +52,13 @@ export type EntityDef<T extends TenantTable = TenantTable> = {
   /** Fields that are set when the record is created and can never be changed afterwards. */
   immutableFields?: string[];
   /**
+   * Module rules about archiving ("delete"). Return a reason to refuse, or null to allow.
+   * archiveRecord() calls it for EVERY archive — the Data tab, imports, the module's own
+   * services — so a rule like "a signed estimate is never archived" cannot be bypassed.
+   * Absent = always archivable.
+   */
+  archiveGuard?: (s: Scope, row: Record<string, unknown>) => Promise<string | null>;
+  /**
    * Clean-up outside the database after a row is permanently deleted (for example removing
    * a stored file's bytes). Most entities do not need this.
    */

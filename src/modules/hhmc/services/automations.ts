@@ -35,7 +35,7 @@ import {
   personName,
   renderEmail,
 } from './common';
-import { balanceDueCents } from './pricing';
+import { balanceDueCents, baseTotalCents } from './pricing';
 
 export type QueueRefs = {
   leadId?: string | null;
@@ -175,11 +175,11 @@ async function processRow(s: Scope, row: QueueRow, now: Date): Promise<'sent' | 
     jobNumber: job?.jobNumber ?? '',
     moveDate: job?.moveDate ?? lead?.moveDate ?? '',
     estimateNumber: estimate?.estimateNumber ?? '',
-    estimateTotal: estimate ? money(estimate.totalCents) : '',
+    estimateTotal: estimate ? money(baseTotalCents(estimate)) : '',
     invoiceNumber: invoice?.invoiceNumber ?? '',
-    invoiceTotal: invoice ? money(invoice.totalCents) : '',
+    invoiceTotal: invoice ? money(baseTotalCents(invoice)) : '',
     balanceDue: invoice
-      ? money(balanceDueCents(invoice.totalCents, invoice.depositReceivedCents, invoice.paidCents))
+      ? money(balanceDueCents(baseTotalCents(invoice), invoice.depositReceivedCents, invoice.paidCents))
       : '',
     link: estimate ? estimateLink(s, estimate) : invoice ? invoiceLink(s, invoice, now) : '',
   };

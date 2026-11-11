@@ -41,8 +41,8 @@ ${sections}
 <table>
 <tr><td>Subtotal</td><td>${usd(e.subtotalCents)}</td></tr>
 ${snap.serviceTaxOn ? `<tr><td>Service tax ${pct(snap.serviceTaxBp)}</td><td>${usd(e.serviceTaxCents)}</td></tr>` : ''}
-${snap.convenienceFeeOn ? `<tr><td>Card convenience fee ${pct(snap.convenienceFeeBp)}</td><td>${usd(e.convenienceFeeCents)}</td></tr>` : ''}
-<tr><td><b>Grand total</b></td><td><b>${usd(e.totalCents)}</b></td></tr>
+<tr><td><b>Total</b></td><td><b>${usd(e.subtotalCents + e.serviceTaxCents)}</b></td></tr>
+${snap.convenienceFeeOn ? `<tr><td>If paid by card (+${pct(snap.convenienceFeeBp)} card convenience fee)</td><td>${usd(e.totalCents)}</td></tr>` : ''}
 </table>
 <h2>Deposit</h2>
 <p>Deposit ${pct(snap.depositBp)}: ${usd(deposit.depositCents)}.${snap.convenienceFeeOn ? ` Paid by card, a ${pct(snap.convenienceFeeBp)} convenience fee of ${usd(deposit.cardFeeCents)} is added: ${usd(deposit.totalDueCents)}.` : ''}</p>

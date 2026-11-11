@@ -30,10 +30,10 @@ import {
   templateEntity,
 } from './entities';
 import { addDays, dueDateFor, localDate, localTime } from './rules';
-import type { EstimateSnapshot, LeadSource, ServiceType, Stage } from './schema';
+import type { EstimateSnapshot, InvoiceStatus, LeadSource, ServiceType, Stage } from './schema';
 import { CATALOG, DISCOUNTS, RULES, TEMPLATES } from './seed-data';
 import { bp, settingsDefaults } from './settings';
-import { computeDeposit, computeTotals, lineTotalCents, type PriceLine } from './services/pricing';
+import { baseTotalCents, cardChargeCents, computeDeposit, computeTotals, lineTotalCents, type PriceLine } from './services/pricing';
 
 const DAY = 24 * 60 * 60 * 1000;
 const STREETS = ['Maple Ave', 'College Ave', 'Dryden Rd', 'Stewart Ave', 'Buffalo St', 'Cayuga St', 'Linden Ave', 'Elm St', 'Hudson St', 'Aurora St'];
@@ -188,7 +188,7 @@ export async function seedDemoData(s: Scope): Promise<void> {
     }),
   );
 
-  const quotes = await seedRecords(s, quoteEntity, jobs.map((job, i) => ({ jobId: job.id, serviceTaxOn: JOBS[i].service !== 'local', convenienceFeeOn: JOBS[i].service === 'local' })));
+  const quotes = await seedRecords(s, quoteEntity, jobs.map((job) => ({ jobId: job.id, serviceTaxOn: settings.serviceTaxOnByDefault, convenienceFeeOn: settings.cardFeeOnByDefault })));
 
   const linesFor = (i: number): (PriceLine & { name: string; unit: string; catalogItemId: string })[] => {
     const job = JOBS[i];
@@ -259,7 +259,7 @@ export async function seedDemoData(s: Scope): Promise<void> {
   for (const { job, i } of estimatedJobs) {
     const demo = JOBS[i];
     const lines = linesFor(i).map((l, n) => ({ ...l, discountType: i === 4 && n === 0 ? ('percent' as const) : null, discountValue: i === 4 && n === 0 ? 500 : null }));
-    const opts = { ...options, serviceTaxOn: demo.service !== 'local', convenienceFeeOn: demo.service === 'local' };
+    const opts = { ...options, serviceTaxOn: settings.serviceTaxOnByDefault, convenienceFeeOn: settings.cardFeeOnByDefault };
     const totals = computeTotals(lines, opts);
     const sentAt = new Date(job.createdAt.getTime() + (6 + i) * 3600 * 1000);
     const signed = ['booked', 'completed', 'closed'].includes(demo.stage) || (demo.stage === 'estimate_sent' && i === 5);
@@ -356,7 +356,8 @@ export async function seedDemoData(s: Scope): Promise<void> {
     const lines = linesFor(i).map((l) => (l.unit === 'hour' ? { ...l, qtyHundredths: Math.round(JOBS[i].hours * 100) + 25 } : l));
     const totals = computeTotals(lines, { ...options, serviceTaxOn: estimate.snapshot.serviceTaxOn, convenienceFeeOn: estimate.snapshot.convenienceFeeOn });
     const closed = JOBS[i].stage === 'closed';
-    const balance = totals.totalCents - estimate.depositPaidCents;
+    const depositBase = estimate.depositPaidCents > 0 ? estimate.depositCents : 0;
+    const balance = baseTotalCents(totals) - depositBase; // base money (H4)
     return {
       lines,
       row: {
@@ -364,7 +365,8 @@ export async function seedDemoData(s: Scope): Promise<void> {
         jobId: job.id,
         estimateId: estimate.id,
         customerId: job.customerId,
-        status: closed ? ('paid' as const) : ('sent' as const),
+        // One completed job still has a draft invoice (not sent yet).
+        status: (closed ? 'paid' : n === 1 ? 'draft' : 'sent') as InvoiceStatus,
         terms,
         invoiceDate,
         dueDate: dueDateFor(invoiceDate, terms),
@@ -376,17 +378,26 @@ export async function seedDemoData(s: Scope): Promise<void> {
         serviceTaxCents: totals.serviceTaxCents,
         convenienceFeeCents: totals.convenienceFeeCents,
         totalCents: totals.totalCents,
-        depositReceivedCents: estimate.depositPaidCents,
+        depositReceivedCents: depositBase,
         paidCents: closed ? balance : 0,
-        sentAt: localTime(invoiceDate, '10:00', tz),
+        sentAt: !closed && n === 1 ? null : localTime(invoiceDate, '10:00', tz),
         paidAt: closed ? localTime(addDays(invoiceDate, 2), '12:00', tz) : null,
         createdAt: localTime(invoiceDate, '09:30', tz),
+        voidedAt: null as Date | null,
       },
       balance,
       closed,
       i,
     };
   });
+  // Two closed jobs also have an earlier invoice that was voided and replaced.
+  for (const [k, r] of invoiceRows.filter((x) => x.closed).slice(0, 2).entries()) {
+    invoiceRows.push({
+      ...r,
+      row: { ...r.row, invoiceNumber: `I-${String(100 + k).padStart(6, '0')}`, status: 'void' as const, paidCents: 0, paidAt: null, voidedAt: r.row.sentAt, createdAt: new Date(r.row.createdAt.getTime() - 3600 * 1000) },
+      closed: false,
+    });
+  }
   const invoices = await seedRecords(s, invoiceEntity, invoiceRows.map((r) => r.row));
   await seedRecords(
     s,
@@ -401,7 +412,7 @@ export async function seedDemoData(s: Scope): Promise<void> {
         ? [{
             customerId: r.row.customerId,
             kind: 'charge' as const,
-            amountCents: r.balance,
+            amountCents: cardChargeCents(r.balance, r.row),
             status: 'succeeded' as const,
             method: 'card' as const,
             provider: 'mock' as const,

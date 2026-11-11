@@ -3,6 +3,8 @@
  * the Data tab (browse, search, export, archive, restore, permanent delete), in test-mode
  * resets, and in the automatic isolation and audit tests.
  */
+import { and, eq } from 'drizzle-orm';
+import type { Scope } from '@/core/db/scope';
 import type { EntityDef } from '@/core/modules/contract';
 import { P } from './permissions';
 import {
@@ -21,6 +23,11 @@ import {
   hhmcQuotes,
   hhmcTemplates,
 } from './schema';
+
+async function jobOf(s: Scope, jobId: string) {
+  const [job] = await s.db.select().from(hhmcJobs).where(and(s.where(hhmcJobs, 'include'), eq(hhmcJobs.id, jobId))).limit(1);
+  return job ?? null;
+}
 
 const text = (value: unknown) => (value === null || value === undefined ? '' : String(value));
 const catalog = { readPermission: P.catalogRead, writePermission: P.catalogWrite };
@@ -121,6 +128,11 @@ export const jobEntity: EntityDef<typeof hhmcJobs> = {
   labelPlural: 'Jobs',
   table: hhmcJobs,
   ...jobs,
+  // A job in progress has a live estimate, a booking or an open invoice.
+  archiveGuard: async (_s, row) =>
+    ['qualified', 'lost', 'cancelled', 'closed'].includes(String(row.stage))
+      ? null
+      : 'Only a Qualified, Lost, Cancelled or Closed job can be archived. Release the booking, mark it lost or cancel it first.',
   titleOf: (row) => text(row.jobNumber),
   listColumns: [
     { key: 'jobNumber', label: 'Job' },
@@ -141,6 +153,10 @@ export const jobDayEntity: EntityDef<typeof hhmcJobDays> = {
   labelPlural: 'Job days',
   table: hhmcJobDays,
   ...jobs,
+  archiveGuard: async (s, row) => {
+    const job = await jobOf(s, String(row.jobId));
+    return job && !['qualified', 'estimate_sent'].includes(job.stage) ? 'Release the booking before removing a job day.' : null;
+  },
   titleOf: (row) => text(row.dayDate),
   listColumns: [
     { key: 'dayDate', label: 'Day', format: 'date' },
@@ -174,6 +190,19 @@ export const quoteLineEntity: EntityDef<typeof hhmcQuoteLines> = {
   labelPlural: 'Quote lines',
   table: hhmcQuoteLines,
   ...jobs,
+  // Same rule as the quote editor: locked once an estimate is signed or the job is booked.
+  archiveGuard: async (s, row) => {
+    const [quote] = await s.db.select().from(hhmcQuotes).where(and(s.where(hhmcQuotes, 'include'), eq(hhmcQuotes.id, String(row.quoteId)))).limit(1);
+    if (!quote) return null;
+    const job = await jobOf(s, quote.jobId);
+    if (job && !['qualified', 'estimate_sent'].includes(job.stage)) return 'The quote is locked.';
+    const [signed] = await s.db
+      .select({ id: hhmcEstimates.id })
+      .from(hhmcEstimates)
+      .where(and(s.where(hhmcEstimates, 'include'), eq(hhmcEstimates.jobId, quote.jobId), eq(hhmcEstimates.status, 'signed')))
+      .limit(1);
+    return signed ? 'The customer has signed the estimate: the quote is locked.' : null;
+  },
   titleOf: (row) => text(row.name),
   listColumns: [
     { key: 'section', label: 'Section' },
@@ -192,6 +221,9 @@ export const estimateEntity: EntityDef<typeof hhmcEstimates> = {
   table: hhmcEstimates,
   readPermission: P.jobsRead,
   writePermission: P.estimatesWrite,
+  // What a customer saw or signed is kept: void it first (signed ones are never archived).
+  archiveGuard: async (_s, row) =>
+    row.status === 'void' || row.status === 'draft' ? null : 'Only a void estimate can be archived. A signed estimate is kept for good.',
   titleOf: (row) => `${text(row.estimateNumber)} v${text(row.version)}`,
   listColumns: [
     { key: 'estimateNumber', label: 'Estimate' },
@@ -212,6 +244,11 @@ export const invoiceEntity: EntityDef<typeof hhmcInvoices> = {
   labelPlural: 'Invoices',
   table: hhmcInvoices,
   ...invoices,
+  // Money: only a void invoice, or a draft nobody has paid, can be archived.
+  archiveGuard: async (_s, row) =>
+    row.status === 'void' || (row.status === 'draft' && Number(row.paidCents) === 0)
+      ? null
+      : 'Only a void invoice, or an unpaid draft, can be archived. Void it first.',
   titleOf: (row) => text(row.invoiceNumber),
   listColumns: [
     { key: 'invoiceNumber', label: 'Invoice' },
@@ -231,6 +268,10 @@ export const invoiceLineEntity: EntityDef<typeof hhmcInvoiceLines> = {
   labelPlural: 'Invoice lines',
   table: hhmcInvoiceLines,
   ...invoices,
+  archiveGuard: async (s, row) => {
+    const [invoice] = await s.db.select({ status: hhmcInvoices.status }).from(hhmcInvoices).where(and(s.where(hhmcInvoices, 'include'), eq(hhmcInvoices.id, String(row.invoiceId)))).limit(1);
+    return invoice && invoice.status !== 'draft' && invoice.status !== 'void' ? 'Only a draft invoice can be changed.' : null;
+  },
   titleOf: (row) => text(row.name),
   listColumns: [
     { key: 'section', label: 'Section' },

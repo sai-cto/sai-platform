@@ -180,7 +180,8 @@ describe('the whole life of one move', () => {
     // 2 Men 1.25 h × $195 = $243.75 + truck $195 = $438.75; + 4% = $17.55 → $456.30.
     expect(invoice.subtotalCents).toBe(43875);
     expect(invoice.totalCents).toBe(45630);
-    expect(invoice.depositReceivedCents).toBe(14196);
+    // The deposit is credited at its base ($136.50); the $5.46 card fee was a fee, not a credit (H4).
+    expect(invoice.depositReceivedCents).toBe(13650);
     expect(invoice.status).toBe('draft');
 
     // Send → past-due reminder queued for +8 days.
@@ -200,7 +201,8 @@ describe('the whole life of one move', () => {
     const paid = await payInvoiceByLink(invoiceCtx, { attemptKey: `t${tag()}` });
     expect(paid.ok).toBe(true);
     if (!paid.ok) return;
-    expect(paid.payment.amountCents).toBe(45630 - 14196);
+    // Balance $438.75 − $136.50 = $302.25, paid by card + 4% = $314.34.
+    expect(paid.payment.amountCents).toBe(31434);
     expect(paid.invoice.status).toBe('paid');
     const closed = await loadJobAs(ctx, job.id);
     expect(closed.stage).toBe('closed');
@@ -438,7 +440,7 @@ describe('jobs, booking and the schedule', () => {
 });
 
 describe('invoices', () => {
-  it('Example C: $202.80 total less a $40.56 deposit leaves $162.24; part payments then Paid', async () => {
+  it('Example C: $202.80 by card less a $40.56 deposit leaves $162.24 by card ($156.00 cash); part payments then Paid', async () => {
     const ctx = await admin();
     const lead = await newLead(ctx);
     const { job } = await convertLead(ctx, lead.id, { serviceType: 'local', jobType: 'Onsite Labor Only', crewSize: 2, trucks: 0 });
@@ -455,14 +457,21 @@ describe('invoices', () => {
     await bookJob(ctx, job.id);
     const invoice = await createInvoice(ctx, job.id);
     expect(invoice.totalCents).toBe(20280);
-    expect(invoice.totalCents - invoice.depositReceivedCents).toBe(16224);
+    // H4: credits are in base money; the card fee is added to card payments only.
+    const { balanceOf, cardBalanceOf } = await import('@/modules/hhmc/services/invoices');
+    expect(invoice.depositReceivedCents).toBe(3900);
+    expect(balanceOf(invoice)).toBe(15600);
+    expect(cardBalanceOf(invoice)).toBe(16224); // ref §4.2 example C: $202.80 − $40.56 = $162.24 by card
     await expect(createInvoice(ctx, job.id)).rejects.toThrow(/already has an invoice/);
     await sendInvoice(ctx, invoice.id);
-    await expect(recordInvoicePayment(ctx, invoice.id, { amount: '200', method: 'cash', attemptKey: `t${tag()}` })).rejects.toThrow(/balance due is \$162\.24/);
+    await expect(recordInvoicePayment(ctx, invoice.id, { amount: '200', method: 'cash', attemptKey: `t${tag()}` })).rejects.toThrow(/balance due is \$156\.00/);
     const part = await recordInvoicePayment(ctx, invoice.id, { amount: '100', method: 'check', attemptKey: `t${tag()}` });
     expect(part.ok && part.invoice.status).toBe('partially_paid');
-    const rest = await recordInvoicePayment(ctx, invoice.id, { amount: '62.24', method: 'cash', attemptKey: `t${tag()}` });
+    // The rest by card: $56.00 credited, $58.24 charged (cash or check would never pay the fee).
+    const rest = await recordInvoicePayment(ctx, invoice.id, { amount: '56', method: 'card', attemptKey: `t${tag()}` });
     expect(rest.ok && rest.invoice.status).toBe('paid');
+    expect(rest.ok && rest.payment.amountCents).toBe(5824);
+    expect(part.ok && part.payment.amountCents).toBe(10000);
     expect((await loadJobAs(ctx, job.id)).stage).toBe('closed');
   });
 });
@@ -747,5 +756,22 @@ describe('review gate round 3: regressions', () => {
     const rows = (await queueOf(ctx, job.id)).filter((r) => r.trigger === 'invoice_sent');
     expect(rows.every((r) => r.q.status === 'queued')).toBe(true);
     expect(rows.every((r) => r.q.dueAt.getTime() > sent.sentAt!.getTime() + 60 * DAY)).toBe(true);
+  });
+});
+
+describe('H4: the card fee is charged on card payments only', () => {
+  it('new quotes default to no service tax and the card fee on; cash and check never pay the fee', async () => {
+    const ctx = await admin();
+    const lead = await newLead(ctx);
+    const { job } = await convertLead(ctx, lead.id, {});
+    const q = await withScope(ctx, P.jobsRead, (s) => quoteSummary(s, job.id));
+    expect(q.quote.serviceTaxOn).toBe(false);
+    expect(q.quote.convenienceFeeOn).toBe(true);
+    const est = await sendEstimate(ctx, job.id);
+    const customer = await buildLinkContext(tokenOf(await customerLinkFor(ctx, est.id)));
+    await signEstimateByLink(customer, { valuationInitials: 'AL', signatureName: 'Avery Signer', agree: true, ip: null, userAgent: null });
+    const { recordDeposit } = await import('@/modules/hhmc/services/estimates');
+    const cash = await recordDeposit(ctx, est.id, { method: 'cash', attemptKey: `c${tag()}x` });
+    expect(cash.ok && cash.payment.amountCents).toBe(est.depositCents); // no fee on cash
   });
 });

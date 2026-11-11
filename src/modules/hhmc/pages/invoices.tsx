@@ -20,8 +20,8 @@ import {
 import { CORE, P } from '../permissions';
 import { INVOICE_STATUS_LABELS, isPastDue, localDate, TERMS_LABELS } from '../rules';
 import { INVOICE_TERMS, type InvoiceStatus } from '../schema';
-import { balanceOf, INVOICES_PAGE_SIZE, listInvoices } from '../services/invoices';
-import { formatQty, lineTotalCents, SECTIONS, sectionLabel } from '../services/pricing';
+import { balanceOf, cardBalanceOf, INVOICES_PAGE_SIZE, listInvoices } from '../services/invoices';
+import { baseTotalCents, formatQty, lineTotalCents, SECTIONS, sectionLabel } from '../services/pricing';
 import { invoicePage } from '../services/views';
 import { AttemptKey } from './attempt-key';
 import { Disclosure } from './disclosure';
@@ -66,7 +66,7 @@ export async function InvoicesPage({ ctx, searchParams, basePath }: PortalPagePr
                   <Td>{customerName(customer)}</Td>
                   <Td className="whitespace-nowrap">{formatDay(invoice.invoiceDate)}</Td>
                   <Td className="whitespace-nowrap">{formatDay(invoice.dueDate)}</Td>
-                  <Td className="text-right tabular-nums">{formatMoney(invoice.totalCents)}</Td>
+                  <Td className="text-right tabular-nums">{formatMoney(baseTotalCents(invoice))}</Td>
                   <Td className="text-right tabular-nums">{formatMoney(Math.max(balanceOf(invoice), 0))}</Td>
                   <Td><InvoiceStatusBadge status={invoice.status} pastDue={isPastDue(invoice.status, invoice.dueDate, today)} /></Td>
                 </tr>
@@ -134,7 +134,7 @@ export async function InvoicePage({ ctx, params, basePath }: PortalPageProps) {
                     <Field label="Remarks" htmlFor="io-remarks"><input id="io-remarks" name="remarks" defaultValue={invoice.remarks ?? ''} className={inputClass} /></Field>
                   </div>
                   <Check name="serviceTaxOn" label={`Service tax ${pct(invoice.serviceTaxBp)}`} defaultChecked={invoice.serviceTaxOn} />
-                  <Check name="convenienceFeeOn" label={`Card convenience fee ${pct(invoice.convenienceFeeBp)}`} defaultChecked={invoice.convenienceFeeOn} />
+                  <Check name="convenienceFeeOn" label={`Card convenience fee ${pct(invoice.convenienceFeeBp)} on card payments`} defaultChecked={invoice.convenienceFeeOn} />
                 </ActionForm>
               </Disclosure>
             ) : null}
@@ -182,11 +182,13 @@ export async function InvoicePage({ ctx, params, basePath }: PortalPageProps) {
             <dl aria-label="Invoice totals" className="ml-auto max-w-sm space-y-1 p-4 text-sm tabular-nums">
               <div className="flex justify-between"><dt>Subtotal</dt><dd>{formatMoney(invoice.subtotalCents)}</dd></div>
               {invoice.serviceTaxOn ? <div className="flex justify-between"><dt>{`Service tax ${pct(invoice.serviceTaxBp)}`}</dt><dd>{formatMoney(invoice.serviceTaxCents)}</dd></div> : null}
-              {invoice.convenienceFeeOn ? <div className="flex justify-between"><dt>{`Card fee ${pct(invoice.convenienceFeeBp)}`}</dt><dd>{formatMoney(invoice.convenienceFeeCents)}</dd></div> : null}
-              <div className="flex justify-between font-semibold"><dt>Total</dt><dd>{formatMoney(invoice.totalCents)}</dd></div>
+              <div className="flex justify-between font-semibold"><dt>Total</dt><dd>{formatMoney(baseTotalCents(invoice))}</dd></div>
               <div className="flex justify-between"><dt>Deposit received</dt><dd>{`− ${formatMoney(invoice.depositReceivedCents)}`}</dd></div>
               <div className="flex justify-between"><dt>Payments</dt><dd>{`− ${formatMoney(invoice.paidCents)}`}</dd></div>
               <div className="flex justify-between border-t border-zinc-200 pt-1 font-semibold"><dt>Balance due</dt><dd data-testid="balance-due">{formatMoney(Math.max(balance, 0))}</dd></div>
+              {invoice.convenienceFeeOn && balance > 0 ? (
+                <div className="flex justify-between text-zinc-700"><dt>{`Paid by card (+${pct(invoice.convenienceFeeBp)} card fee)`}</dt><dd data-testid="balance-due-card">{formatMoney(cardBalanceOf(invoice))}</dd></div>
+              ) : null}
             </dl>
           </Card>
         </div>
@@ -196,7 +198,7 @@ export async function InvoicePage({ ctx, params, basePath }: PortalPageProps) {
             <Card title="Receive a payment">
               <ActionForm action={invoicePaymentAction.bind(null, slug, mode, invoice.id)} submitLabel="Record payment">
                 <AttemptKey />
-                <Field label="Amount ($)" htmlFor="ip-amount"><input id="ip-amount" name="amount" inputMode="decimal" defaultValue={(balance / 100).toFixed(2)} className={inputClass} /></Field>
+                <Field label="Amount credited ($)" htmlFor="ip-amount" help={invoice.convenienceFeeOn ? `A card payment is charged this plus the ${pct(invoice.convenienceFeeBp)} card fee.` : undefined}><input id="ip-amount" name="amount" inputMode="decimal" defaultValue={(balance / 100).toFixed(2)} className={inputClass} /></Field>
                 <Field label="Paid by" htmlFor="ip-method">
                   <Select id="ip-method" name="method" defaultValue="check">
                     <option value="check">Check</option>

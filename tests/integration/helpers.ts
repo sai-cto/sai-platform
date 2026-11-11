@@ -188,12 +188,22 @@ export const FIXTURES: Record<string, Fixture> = {
 export async function ensureRow(s: Scope, entity: EntityDef, not?: string): Promise<string> {
   const fixture = FIXTURES[entity.key];
   if (fixture) return String((await createRecord(s, entity, (await fixture(s)) as never)).id);
-  const [existing] = await s.db
-    .select({ id: entity.table.id })
+  const candidates = await s.db
+    .select()
     .from(entity.table)
     .where(and(s.where(entity.table), not ? ne(entity.table.id, not) : undefined))
     .orderBy(asc(entity.table.id))
-    .limit(1);
+    .limit(200);
+  // Prefer a row the module allows to be archived (tests archive the row they get).
+  let existing = candidates[0] as { id: unknown } | undefined;
+  if (entity.archiveGuard) {
+    for (const row of candidates) {
+      if (!(await entity.archiveGuard(s, row as Record<string, unknown>))) {
+        existing = row as { id: unknown };
+        break;
+      }
+    }
+  }
   if (!existing)
     throw new Error(
       `Not enough rows for entity "${entity.key}" in ${s.ctx.business.slug}/${s.ctx.environment}. Add fake rows in the module's seedDemoData (at least two).`,

@@ -180,7 +180,7 @@ export function QuoteEditor({
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="convenienceFeeOn" checked={feeOn} onChange={(e) => setFeeOn(e.target.checked)} className="size-4" />
-                Card convenience fee {pct(options.convenienceFeeBp)}
+                Card convenience fee {pct(options.convenienceFeeBp)} on card payments
               </label>
             </ActionForm>
           ) : (
@@ -192,8 +192,10 @@ export function QuoteEditor({
         <dl aria-label="Quote totals" className="space-y-1 text-sm tabular-nums">
           <div className="flex justify-between"><dt>Subtotal</dt><dd>{usd(totals.subtotalCents)}</dd></div>
           {taxOn ? <div className="flex justify-between"><dt>Service tax {pct(options.serviceTaxBp)}</dt><dd>{usd(totals.serviceTaxCents)}</dd></div> : null}
-          {feeOn ? <div className="flex justify-between"><dt>Card fee {pct(options.convenienceFeeBp)}</dt><dd>{usd(totals.convenienceFeeCents)}</dd></div> : null}
-          <div className="flex justify-between border-t border-zinc-200 pt-1 font-semibold"><dt>Grand total</dt><dd data-testid="quote-total">{usd(totals.totalCents)}</dd></div>
+          <div className="flex justify-between border-t border-zinc-200 pt-1 font-semibold"><dt>Total (cash or check)</dt><dd data-testid="quote-total">{usd(totals.subtotalCents + totals.serviceTaxCents)}</dd></div>
+          {feeOn ? (
+            <div className="flex justify-between text-zinc-700"><dt>Paid by card (+{pct(options.convenienceFeeBp)} card fee)</dt><dd data-testid="quote-card-total">{usd(totals.totalCents)}</dd></div>
+          ) : null}
           <div className="flex justify-between text-xs text-zinc-600">
             <dt>Deposit {pct(options.depositBp)}{feeOn ? ` (by card +${pct(options.convenienceFeeBp)})` : ''}</dt>
             <dd>{feeOn ? `${usd(deposit.depositCents)} + ${usd(deposit.cardFeeCents)} = ${usd(deposit.totalDueCents)}` : usd(deposit.depositCents)}</dd>

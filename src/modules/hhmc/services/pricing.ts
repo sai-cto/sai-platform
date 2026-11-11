@@ -139,13 +139,30 @@ export function computeDeposit(
   return { depositCents, cardFeeCents, totalDueCents: depositCents + cardFeeCents };
 }
 
-/** Invoice: Total − Deposit Received (including the card fee paid on it) − Payments = Balance Due. */
+/**
+ * The total WITHOUT the card fee: what a customer paying by cash or check owes (subtotal + tax).
+ * DECISIONS P5-6 / H4: the card convenience fee applies to card payments only.
+ */
+export function baseTotalCents(totals: Pick<Totals, 'subtotalCents' | 'serviceTaxCents'>): number {
+  return totals.subtotalCents + totals.serviceTaxCents;
+}
+
+/** What is charged to a card for `baseCents` owed: + the card fee % when the fee is on. */
+export function cardChargeCents(baseCents: number, fee: { convenienceFeeOn: boolean; convenienceFeeBp: number }): number {
+  return baseCents + (fee.convenienceFeeOn ? percentOf(baseCents, fee.convenienceFeeBp) : 0);
+}
+
+/**
+ * Invoice balance, in base money (no card fee): base total − deposit received (its base, not the
+ * card fee paid on it) − payments credited. Paying it by card adds the fee: cardChargeCents().
+ * ref §4.2 example C: base $195.00 − $39.00 = $156.00; by card + 4% = $162.24.
+ */
 export function balanceDueCents(
-  totalCents: number,
+  baseTotal: number,
   depositReceivedCents: number,
   paymentsCents: number,
 ): number {
-  return totalCents - depositReceivedCents - paymentsCents;
+  return baseTotal - depositReceivedCents - paymentsCents;
 }
 
 /** Rounds a duration in minutes UP to the next step (15-minute billing, ref §4.1). */

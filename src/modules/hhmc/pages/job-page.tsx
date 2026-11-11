@@ -40,6 +40,7 @@ import { CALL_OUTCOME_LABELS, quoteEditable, SERVICE_TYPE_LABELS, TERMS_LABELS }
 import { INVOICE_TERMS } from '../schema';
 import { depositDueByCard } from '../services/estimates';
 import { balanceOf } from '../services/invoices';
+import { baseTotalCents } from '../services/pricing';
 import { jobActivity, jobPage } from '../services/views';
 import { CopyLinkButton } from './copy-link';
 import { AttemptKey } from './attempt-key';
@@ -80,7 +81,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                 confirmTitle={liveEstimate ? `Send version ${liveEstimate.version + 1}?` : 'Send the estimate?'}
                 confirmBody={
                   <>
-                    The customer gets a &quot;Please Sign&quot; email with their link, for {formatMoney(quote.totals.totalCents)}.
+                    The customer gets a &quot;Please Sign&quot; email with their link, for {formatMoney(baseTotalCents(quote.totals))}{quote.options.convenienceFeeOn ? ` (${formatMoney(quote.totals.totalCents)} by card)` : ''}.
                     {liveEstimate ? ` Version ${liveEstimate.version} will be voided.` : ''} Follow-up emails are queued{job.automationOptIn ? '' : ' (opt-in is off: none will be sent)'}.
                   </>
                 }
@@ -211,7 +212,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium">{`${e.estimateNumber} v${e.version}`}</span>
                         <EstimateStatusBadge status={e.status} />
-                        <span className="tabular-nums">{formatMoney(e.totalCents)}</span>
+                        <span className="tabular-nums">{formatMoney(baseTotalCents(e))}{e.snapshot.convenienceFeeOn ? <span className="text-xs text-zinc-500">{` (card ${formatMoney(e.totalCents)})`}</span> : null}</span>
                         <span className="text-xs text-zinc-500">
                           {[`Sent ${formatDateTime(e.sentAt)}`, e.viewedAt ? `viewed ${formatDateTime(e.viewedAt)}` : null, e.signedAt ? `signed ${formatDateTime(e.signedAt)} by ${e.signatureName}` : null, e.expiresAt && waiting ? `expires ${formatDateTime(e.expiresAt)}` : null].filter(Boolean).join(' · ')}
                         </span>
@@ -329,7 +330,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                     <li key={i.id} className="flex flex-wrap items-center gap-2 px-4 py-3 text-sm">
                       <Link className="font-medium hover:underline" href={`${basePath}/invoices/${i.id}`}>{i.invoiceNumber}</Link>
                       <InvoiceStatusBadge status={i.status} />
-                      <span className="tabular-nums">{formatMoney(i.totalCents)}</span>
+                      <span className="tabular-nums">{formatMoney(baseTotalCents(i))}</span>
                       <span className="text-xs text-zinc-500">{`Balance ${formatMoney(Math.max(balanceOf(i), 0))} · due ${formatDay(i.dueDate)}`}</span>
                     </li>
                   ))}

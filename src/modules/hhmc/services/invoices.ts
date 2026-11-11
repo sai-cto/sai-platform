@@ -42,7 +42,7 @@ import {
 } from './common';
 import { jobDaysOf } from './booking';
 import { moveStage } from './jobs';
-import { balanceDueCents, computeTotals, minutesToQtyHundredths, parseMoney, parseQty, SECTION_KEYS } from './pricing';
+import { balanceDueCents, baseTotalCents, cardChargeCents, computeTotals, minutesToQtyHundredths, parseMoney, parseQty, SECTION_KEYS } from './pricing';
 
 export const INVOICES_PAGE_SIZE = 25;
 
@@ -54,8 +54,16 @@ export async function invoiceLines(s: Scope, invoiceId: string) {
     .orderBy(asc(hhmcInvoiceLines.sortOrder), asc(hhmcInvoiceLines.createdAt));
 }
 
-export function balanceOf(invoice: Pick<typeof hhmcInvoices.$inferSelect, 'totalCents' | 'depositReceivedCents' | 'paidCents'>) {
-  return balanceDueCents(invoice.totalCents, invoice.depositReceivedCents, invoice.paidCents);
+type Money = Pick<typeof hhmcInvoices.$inferSelect, 'subtotalCents' | 'serviceTaxCents' | 'depositReceivedCents' | 'paidCents' | 'convenienceFeeOn' | 'convenienceFeeBp'>;
+
+/** Balance due in base money (cash or check). */
+export function balanceOf(invoice: Money) {
+  return balanceDueCents(baseTotalCents(invoice), invoice.depositReceivedCents, invoice.paidCents);
+}
+
+/** What paying the whole balance by card costs (balance + card fee when the fee is on). */
+export function cardBalanceOf(invoice: Money) {
+  return cardChargeCents(Math.max(balanceOf(invoice), 0), invoice);
 }
 
 /** Re-prices a draft invoice from its lines and options. */
@@ -138,7 +146,8 @@ export async function createInvoice(
       convenienceFeeOn: estimate.snapshot.convenienceFeeOn,
       serviceTaxBp: estimate.snapshot.serviceTaxBp,
       convenienceFeeBp: estimate.snapshot.convenienceFeeBp,
-      depositReceivedCents: estimate.depositPaidCents,
+      // The deposit's base amount: the card fee paid on it was a fee, not a credit (H4).
+      depositReceivedCents: estimate.depositPaidCents > 0 ? estimate.depositCents : 0,
     });
     for (const [i, l] of lines.entries()) {
       await createRecord(s, invoiceLineEntity, {
@@ -255,8 +264,9 @@ export async function sendInvoice(ctx: BusinessContext, invoiceId: string, now: 
       firstName: customer.firstName,
       customerName: personName(customer),
       invoiceNumber: invoice.invoiceNumber,
-      invoiceTotal: money(invoice.totalCents),
+      invoiceTotal: money(baseTotalCents(invoice)),
       balanceDue: money(Math.max(balance, 0)),
+      balanceDueByCard: money(cardBalanceOf(invoice)),
       dueDate: invoice.dueDate,
       link: balance > 0 ? invoiceLink(s, invoice, now) : '',
     });
@@ -292,8 +302,10 @@ async function applyPayment(
   if (input.amountCents > balance) throw new ValidationError(`The balance due is ${money(balance)}; the payment cannot be more.`);
   if (!/^[A-Za-z0-9_-]{8,80}$/.test(input.attemptKey)) throw new ValidationError('Reload the page and try again.');
   const job = await loadJob(s, invoice.jobId);
+  // input.amountCents is what is credited; a card pays the card fee on top (H4).
+  const chargeCents = input.method === 'card' ? cardChargeCents(input.amountCents, invoice) : input.amountCents;
   const payment = await takePayment(s, {
-    amountCents: input.amountCents,
+    amountCents: chargeCents,
     description: `Payment on ${invoice.invoiceNumber} (${job.jobNumber})`,
     idempotencyKey: `hhmc-invoice:${invoice.id}:${input.attemptKey}`,
     customerId: invoice.customerId,
@@ -304,8 +316,8 @@ async function applyPayment(
   });
   if (payment.status !== 'succeeded')
     return { ok: false as const, message: payment.failureReason ?? 'The payment did not go through.' };
-  const paidCents = invoice.paidCents + payment.amountCents;
-  const status = invoiceStatusAfterPayment(balanceDueCents(invoice.totalCents, invoice.depositReceivedCents, paidCents), true);
+  const paidCents = invoice.paidCents + input.amountCents;
+  const status = invoiceStatusAfterPayment(balanceDueCents(baseTotalCents(invoice), invoice.depositReceivedCents, paidCents), true);
   const updated = await updateRecord(s, invoiceEntity, invoice.id, { paidCents, status, paidAt: status === 'paid' ? now : null });
   const customer = await loadCustomer(s, invoice.customerId);
   await enqueue(s, 'payment_received', { jobId: job.id, invoiceId: invoice.id, paymentId: payment.id, recipient: customer.email, optIn: job.automationOptIn }, now);

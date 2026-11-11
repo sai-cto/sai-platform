@@ -190,6 +190,9 @@ export async function archiveRecord<T extends TenantTable>(
 ): Promise<void> {
   authorize(s.ctx, entity.writePermission);
   const before = await findInScope(s, entity.table, id, 'exclude');
+  // The module's own rules about archiving apply on every path (Data tab included).
+  const refusal = entity.archiveGuard ? await entity.archiveGuard(s, before) : null;
+  if (refusal) throw new ValidationError(refusal);
   const now = new Date();
   await txOf(s)
     .update(entity.table)
