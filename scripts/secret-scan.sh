@@ -36,7 +36,9 @@ PII=""
 while IFS= read -r line; do
   [ -z "$line" ] && continue
   loc=${line%%:*}; rest=${line#*:}; ln=${rest%%:*}; text=${rest#*:}
-  for m in $(printf '%s\n' "$text" | grep -oE "$EMAIL" | grep -viE "$SAFE_EMAIL"); do PII+="$loc:$ln (email)"$'\n'; done
+  # user:password@host inside a URL (postgres://…, https://…) is not an email address.
+  noUrl=$(printf '%s\n' "$text" | sed -E "s#[A-Za-z][A-Za-z0-9+.-]*://[^[:space:]'\"\\\`]+##g")
+  for m in $(printf '%s\n' "$noUrl" | grep -oE "$EMAIL" | grep -viE "$SAFE_EMAIL"); do PII+="$loc:$ln (email)"$'\n'; done
   for m in $(printf '%s\n' "$text" | grep -oE "$PHONE" | tr ' ' '_' ); do
     printf '%s\n' "${m//_/ }" | grep -qE "$SAFE_PHONE" || PII+="$loc:$ln (phone)"$'\n'
   done
