@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { accessGateEnabled } from '@/core/demo/demo';
-import { accessAction } from '@/server/auth-actions';
+import { accessAction } from '@/server/access-actions';
 
 export const metadata: Metadata = { title: 'Test site', robots: { index: false, follow: false } };
 

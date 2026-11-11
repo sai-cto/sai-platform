@@ -17,7 +17,7 @@ import { authorize } from '@/core/rbac/permissions';
 import { nextRecordNumber } from '@/core/records/numbering';
 import { archiveRecord, createRecord, updateRecord } from '@/core/records/records';
 import type { BusinessContext } from '@/core/tenancy/context';
-import { invoiceEntity, invoiceLineEntity } from '../entities';
+import { invoiceEntity, invoiceLineEntity, repriceDraftInvoice } from '../entities';
 import { CORE, P } from '../permissions';
 import { addDays, dueDateFor, invoiceStatusAfterPayment, isDateText, localDate, localTime } from '../rules';
 import {
@@ -66,21 +66,9 @@ export function cardBalanceOf(invoice: Money) {
   return cardChargeCents(Math.max(balanceOf(invoice), 0), invoice);
 }
 
-/** Re-prices a draft invoice from its lines and options. */
+/** Re-prices a draft invoice from its lines and options (entities.ts repriceDraftInvoice). */
 async function recalculate(s: Scope, invoice: typeof hhmcInvoices.$inferSelect) {
-  const lines = await invoiceLines(s, invoice.id);
-  const totals = computeTotals(lines, {
-    serviceTaxOn: invoice.serviceTaxOn,
-    convenienceFeeOn: invoice.convenienceFeeOn,
-    serviceTaxBp: invoice.serviceTaxBp,
-    convenienceFeeBp: invoice.convenienceFeeBp,
-  });
-  return updateRecord(s, invoiceEntity, invoice.id, {
-    subtotalCents: totals.subtotalCents,
-    serviceTaxCents: totals.serviceTaxCents,
-    convenienceFeeCents: totals.convenienceFeeCents,
-    totalCents: totals.totalCents,
-  });
+  return (await repriceDraftInvoice(s, invoice.id)) ?? invoice;
 }
 
 /**
@@ -245,9 +233,11 @@ export async function sendInvoice(ctx: BusinessContext, invoiceId: string, now: 
     authorize(ctx, CORE.notificationsWrite);
     authorize(ctx, P.jobsWrite);
     await takeLock(s, `hhmc-invoice-pay:${invoiceId}`);
-    const invoice = await loadInvoice(s, invoiceId);
-    if (invoice.status !== 'draft' && invoice.status !== 'sent' && invoice.status !== 'partially_paid')
+    const loaded = await loadInvoice(s, invoiceId);
+    if (loaded.status !== 'draft' && loaded.status !== 'sent' && loaded.status !== 'partially_paid')
       throw new ValidationError('This invoice cannot be sent.');
+    // A draft is priced again from its lines right before it goes out.
+    const invoice = loaded.status === 'draft' ? ((await repriceDraftInvoice(s, invoiceId)) ?? loaded) : loaded;
     const job = await loadJob(s, invoice.jobId);
     const customer = await loadCustomer(s, invoice.customerId);
     if (!customer.email) throw new ValidationError('The customer has no email address.');

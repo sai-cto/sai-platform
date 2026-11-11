@@ -17,7 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div
             role="note"
             data-testid="demo-banner"
-            className="sticky top-0 z-[60] bg-amber-400 px-3 py-1 text-center text-xs font-semibold tracking-wide text-amber-950 print:hidden"
+            className="sticky top-0 z-[60] bg-amber-400 px-3 py-1 text-center text-xs font-semibold tracking-wide text-amber-950"
           >
             TEST SITE – not real data. Payments are fake and no email is sent.
           </div>

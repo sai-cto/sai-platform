@@ -3,7 +3,9 @@
  * the Data tab (browse, search, export, archive, restore, permanent delete), in test-mode
  * resets, and in the automatic isolation and audit tests.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
+import { updateRecord } from '@/core/records/records';
+import { computeTotals } from './services/pricing';
 import type { Scope } from '@/core/db/scope';
 import type { EntityDef } from '@/core/modules/contract';
 import { P } from './permissions';
@@ -27,6 +29,19 @@ import {
 async function jobOf(s: Scope, jobId: string) {
   const [job] = await s.db.select().from(hhmcJobs).where(and(s.where(hhmcJobs, 'include'), eq(hhmcJobs.id, jobId))).limit(1);
   return job ?? null;
+}
+
+async function quoteLineLocked(s: Scope, row: Record<string, unknown>): Promise<string | null> {
+  const [quote] = await s.db.select().from(hhmcQuotes).where(and(s.where(hhmcQuotes, 'include'), eq(hhmcQuotes.id, String(row.quoteId)))).limit(1);
+  if (!quote) return null;
+  const job = await jobOf(s, quote.jobId);
+  if (job && !['qualified', 'estimate_sent'].includes(job.stage)) return 'The quote is locked once the job is booked.';
+  const [signed] = await s.db
+    .select({ id: hhmcEstimates.id })
+    .from(hhmcEstimates)
+    .where(and(s.where(hhmcEstimates, 'include'), eq(hhmcEstimates.jobId, quote.jobId), eq(hhmcEstimates.status, 'signed')))
+    .limit(1);
+  return signed ? 'The customer has signed the estimate: the quote is locked.' : null;
 }
 
 const text = (value: unknown) => (value === null || value === undefined ? '' : String(value));
@@ -157,6 +172,10 @@ export const jobDayEntity: EntityDef<typeof hhmcJobDays> = {
     const job = await jobOf(s, String(row.jobId));
     return job && !['qualified', 'estimate_sent'].includes(job.stage) ? 'Release the booking before removing a job day.' : null;
   },
+  restoreGuard: async (s, row) => {
+    const job = await jobOf(s, String(row.jobId));
+    return job && !['qualified', 'estimate_sent'].includes(job.stage) ? 'A day cannot be brought back on a booked or finished job.' : null;
+  },
   titleOf: (row) => text(row.dayDate),
   listColumns: [
     { key: 'dayDate', label: 'Day', format: 'date' },
@@ -191,18 +210,8 @@ export const quoteLineEntity: EntityDef<typeof hhmcQuoteLines> = {
   table: hhmcQuoteLines,
   ...jobs,
   // Same rule as the quote editor: locked once an estimate is signed or the job is booked.
-  archiveGuard: async (s, row) => {
-    const [quote] = await s.db.select().from(hhmcQuotes).where(and(s.where(hhmcQuotes, 'include'), eq(hhmcQuotes.id, String(row.quoteId)))).limit(1);
-    if (!quote) return null;
-    const job = await jobOf(s, quote.jobId);
-    if (job && !['qualified', 'estimate_sent'].includes(job.stage)) return 'The quote is locked.';
-    const [signed] = await s.db
-      .select({ id: hhmcEstimates.id })
-      .from(hhmcEstimates)
-      .where(and(s.where(hhmcEstimates, 'include'), eq(hhmcEstimates.jobId, quote.jobId), eq(hhmcEstimates.status, 'signed')))
-      .limit(1);
-    return signed ? 'The customer has signed the estimate: the quote is locked.' : null;
-  },
+  archiveGuard: (s, row) => quoteLineLocked(s, row),
+  restoreGuard: (s, row) => quoteLineLocked(s, row),
   titleOf: (row) => text(row.name),
   listColumns: [
     { key: 'section', label: 'Section' },
@@ -244,11 +253,18 @@ export const invoiceEntity: EntityDef<typeof hhmcInvoices> = {
   labelPlural: 'Invoices',
   table: hhmcInvoices,
   ...invoices,
-  // Money: only a void invoice, or a draft nobody has paid, can be archived.
-  archiveGuard: async (_s, row) =>
-    row.status === 'void' || (row.status === 'draft' && Number(row.paidCents) === 0)
-      ? null
-      : 'Only a void invoice, or an unpaid draft, can be archived. Void it first.',
+  // Money: only a void invoice can be archived (void a draft first).
+  archiveGuard: async (_s, row) => (row.status === 'void' ? null : 'Only a void invoice can be archived. Void it first.'),
+  // Bringing one back must not give a job two invoices.
+  restoreGuard: async (s, row) => {
+    if (row.status === 'void') return null;
+    const [other] = await s.db
+      .select({ id: hhmcInvoices.id })
+      .from(hhmcInvoices)
+      .where(and(s.where(hhmcInvoices), eq(hhmcInvoices.jobId, String(row.jobId)), ne(hhmcInvoices.status, 'void')))
+      .limit(1);
+    return other ? 'This job already has another invoice.' : null;
+  },
   titleOf: (row) => text(row.invoiceNumber),
   listColumns: [
     { key: 'invoiceNumber', label: 'Invoice' },
@@ -268,9 +284,11 @@ export const invoiceLineEntity: EntityDef<typeof hhmcInvoiceLines> = {
   labelPlural: 'Invoice lines',
   table: hhmcInvoiceLines,
   ...invoices,
-  archiveGuard: async (s, row) => {
-    const [invoice] = await s.db.select({ status: hhmcInvoices.status }).from(hhmcInvoices).where(and(s.where(hhmcInvoices, 'include'), eq(hhmcInvoices.id, String(row.invoiceId)))).limit(1);
-    return invoice && invoice.status !== 'draft' && invoice.status !== 'void' ? 'Only a draft invoice can be changed.' : null;
+  archiveGuard: (s, row) => invoiceLineLocked(s, row),
+  restoreGuard: (s, row) => invoiceLineLocked(s, row),
+  // Whatever path removed or restored the line, the draft's totals follow (review: no stale total).
+  afterArchiveOrRestore: async (s, row) => {
+    await repriceDraftInvoice(s, String(row.invoiceId));
   },
   titleOf: (row) => text(row.name),
   listColumns: [
@@ -282,6 +300,28 @@ export const invoiceLineEntity: EntityDef<typeof hhmcInvoiceLines> = {
   searchColumns: ['name'],
   immutableFields: ['invoiceId'],
 };
+
+async function invoiceLineLocked(s: Scope, row: Record<string, unknown>): Promise<string | null> {
+  const [invoice] = await s.db.select({ status: hhmcInvoices.status }).from(hhmcInvoices).where(and(s.where(hhmcInvoices, 'include'), eq(hhmcInvoices.id, String(row.invoiceId)))).limit(1);
+  return invoice && invoice.status !== 'draft' ? 'Only the lines of a draft invoice can be changed.' : null;
+}
+
+/**
+ * Re-prices a DRAFT invoice from its current lines (sent invoices never change). Used after any
+ * line change, whatever the path, and before an invoice is sent.
+ */
+export async function repriceDraftInvoice(s: Scope, invoiceId: string) {
+  const [invoice] = await s.db.select().from(hhmcInvoices).where(and(s.where(hhmcInvoices), eq(hhmcInvoices.id, invoiceId))).limit(1);
+  if (!invoice || invoice.status !== 'draft') return invoice ?? null;
+  const lines = await s.db.select().from(hhmcInvoiceLines).where(and(s.where(hhmcInvoiceLines), eq(hhmcInvoiceLines.invoiceId, invoiceId)));
+  const totals = computeTotals(lines, invoice);
+  return updateRecord(s, invoiceEntity, invoiceId, {
+    subtotalCents: totals.subtotalCents,
+    serviceTaxCents: totals.serviceTaxCents,
+    convenienceFeeCents: totals.convenienceFeeCents,
+    totalCents: totals.totalCents,
+  });
+}
 
 export const noteEntity: EntityDef<typeof hhmcNotes> = {
   key: 'hhmc.note',

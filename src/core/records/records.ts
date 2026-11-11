@@ -206,6 +206,7 @@ export async function archiveRecord<T extends TenantTable>(
     before: { archivedAt: null },
     after: { archivedAt: now.toISOString() },
   });
+  if (entity.afterArchiveOrRestore) await entity.afterArchiveOrRestore(s, before);
 }
 
 export async function restoreRecord<T extends TenantTable>(
@@ -215,6 +216,8 @@ export async function restoreRecord<T extends TenantTable>(
 ): Promise<void> {
   authorize(s.ctx, entity.writePermission);
   const before = await findInScope(s, entity.table, id, 'only');
+  const refusal = entity.restoreGuard ? await entity.restoreGuard(s, before) : null;
+  if (refusal) throw new ValidationError(refusal);
   await txOf(s)
     .update(entity.table)
     .set({ archivedAt: null, archivedBy: null } as never)
@@ -230,6 +233,7 @@ export async function restoreRecord<T extends TenantTable>(
     },
     after: { archivedAt: null },
   });
+  if (entity.afterArchiveOrRestore) await entity.afterArchiveOrRestore(s, before);
 }
 
 /** When an archived record becomes eligible for permanent deletion. */

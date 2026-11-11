@@ -15,13 +15,13 @@ switched off. (Why these choices: `docs/DECISIONS.md`, P5-16 to P5-19.)
 
 ## Before you start: make up some passwords
 
-Open a note and write these down. Use your password manager's generator, or just type long
-random letters. Every one needs **at least 12 characters**, and longer is better.
+Open a note and write these down. Use your password manager's **generator** (not a phrase
+someone could guess). Every one needs **at least 12 characters**; 16 or more is better.
 
 | Write down | Example of the format (do not use these) |
 |---|---|
-| A. Site access password (you'll give it to the managers) | `moving-day-orange-42` |
-| B. A password for each manager account | `Pianos-Need-4-Movers!` |
+| A. Site access password (you'll give it to the managers) | `Tq7v-Ks9e-Wm2r-Hx4p` |
+| B. A password for each manager account | `Rb3n-Vz8q-Lc6y-Pd1t` |
 | C. Link secret (40+ random characters, nobody types it) | `k3J9xQ...` (40+ characters) |
 | D. Scheduler secret (20+ random characters, nobody types it) | `p8Wm2...` |
 
@@ -36,7 +36,7 @@ run every step of a move). Add `tech` for yourself if you want the "Run due emai
 Example (made-up people):
 
 ```
-gm@hhmc.example|Pat Rivera|gm|Pianos-Need-4-Movers!;sam@hhmc.example|Sam Lee|staff|Boxes-Boxes-Boxes-9
+gm@hhmc.example|Pat Rivera|gm|Rb3n-Vz8q-Lc6y-Pd1t;sam@hhmc.example|Sam Lee|staff|Jm5w-Qe2k-Nf7s-Gu9a
 ```
 
 ## The steps
@@ -58,7 +58,8 @@ gm@hhmc.example|Pat Rivera|gm|Pianos-Need-4-Movers!;sam@hhmc.example|Sam Lee|sta
    `vercel.json` already says how to build.
 
 5. **Add the settings.** On the same screen open **Environment Variables**. Add each row below:
-   type the name, paste the value, click **Add**.
+   type the name, paste the value, click **Add**. (Leave the environment ticks as they are:
+   only the **Production** deploy ever touches the database.)
 
    | Name | Value |
    |---|---|
@@ -99,7 +100,8 @@ gm@hhmc.example|Pat Rivera|gm|Pianos-Need-4-Movers!;sam@hhmc.example|Sam Lee|sta
   1. In Vercel, open **Settings → Environment Variables** and add `DEMO_RESET_ON_DEPLOY` = `yes`.
   2. Go to **Deployments → ⋯ → Redeploy**.
   3. Then change it back to `no`, or the next deploy wipes the data again.
-- **Add or remove a manager:** edit `DEMO_ACCOUNTS` and redeploy.
+- **Add or remove a manager:** edit `DEMO_ACCOUNTS` and redeploy. Someone removed is
+  switched off and signed out by that deploy.
 - **Change the shared password:** edit `DEMO_ACCESS_PASSWORD` and redeploy. Everyone has to
   type the new one.
 - **Automatic emails:** the hosting runs the scheduler once a day, and it does nothing unless
@@ -108,5 +110,7 @@ gm@hhmc.example|Pat Rivera|gm|Pianos-Need-4-Movers!;sam@hhmc.example|Sam Lee|sta
 - **Uploaded or stored files** (such as the saved estimate document) do not last on this
   hosting. That's fine for a test site.
 - **Cost:** both services are free at this size. Neither asks for a card on these plans.
+- **Safety:** the build only ever touches a database that was empty or that it set up itself,
+  so pointing it at the wrong database by mistake makes the deploy fail instead of erasing anything.
 - **New code reaches the site** by itself: every push to `main` deploys again. The data is kept
   unless `DEMO_RESET_ON_DEPLOY` is `yes`.

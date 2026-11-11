@@ -80,6 +80,11 @@ export const customerEntity: EntityDef<typeof customers> = {
 };
 
 export const paymentEntity: EntityDef<typeof payments> = {
+  // Money taken for a module record stays visible: refund it instead.
+  archiveGuard: async (_s, row) =>
+    row.subjectType && row.status === 'succeeded'
+      ? `This payment belongs to a ${String(row.subjectType)} record. Refund it instead of archiving it.`
+      : null,
   key: 'core.payment',
   label: 'payment',
   labelPlural: 'Payments',
@@ -133,7 +138,15 @@ export const resourceEntity: EntityDef<typeof resources> = {
   searchColumns: ['name', 'kind'],
 };
 
+/**
+ * A core row that belongs to a module record (subject_type set: a booked job day, a deposit)
+ * is changed only through that record's own page, never archived on its own from the Data tab.
+ */
+const ownedBySubject = (what: string) => async (_s: unknown, row: Record<string, unknown>) =>
+  row.subjectType ? `This ${what} belongs to a ${String(row.subjectType)} record: change it from that record's page.` : null;
+
 export const appointmentEntity: EntityDef<typeof appointments> = {
+  archiveGuard: ownedBySubject('appointment'),
   key: 'core.appointment',
   label: 'appointment',
   labelPlural: 'Appointments',

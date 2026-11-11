@@ -43,9 +43,11 @@ describe('HHMC: the Data tab cannot archive around the rules', () => {
     await dataTabArchive(ctx, 'hhmc.job', closed);
     const voidInvoice = await firstId(ctx, hhmcInvoices, eq(hhmcInvoices.status, 'void'));
     await dataTabArchive(ctx, 'hhmc.invoice', voidInvoice);
-    // Restoring brings them back as they were.
-    const entity = entitiesFor('hhmc').find((e) => e.key === 'hhmc.job')!;
-    await withScope(ctx, 'business.data.read', (s) => restoreRecord(s, entity, closed));
+    // Restoring brings them back as they were (and leaves the shared test data as it was).
+    for (const [key, id] of [['hhmc.job', closed], ['hhmc.estimate', voided], ['hhmc.invoice', voidInvoice]] as const) {
+      const entity = entitiesFor('hhmc').find((e) => e.key === key)!;
+      await withScope(ctx, 'business.data.read', (s) => restoreRecord(s, entity, id));
+    }
   });
 
   it('quote lines of a signed estimate and lines of a sent invoice are refused', async () => {
@@ -57,6 +59,8 @@ describe('HHMC: the Data tab cannot archive around the rules', () => {
         .from(hhmcQuoteLines)
         .innerJoin(hhmcQuotes, eq(hhmcQuotes.id, hhmcQuoteLines.quoteId))
         .innerJoin(hhmcEstimates, and(eq(hhmcEstimates.jobId, hhmcQuotes.jobId), eq(hhmcEstimates.status, 'signed')))
+        // A job still at Estimate Sent: only the signed estimate locks its quote.
+        .innerJoin(hhmcJobs, and(eq(hhmcJobs.id, hhmcQuotes.jobId), eq(hhmcJobs.stage, 'estimate_sent')))
         .where(s.where(hhmcQuoteLines))
         .limit(1);
       const [invLine] = await s.db
@@ -67,7 +71,7 @@ describe('HHMC: the Data tab cannot archive around the rules', () => {
         .limit(1);
       return { line: line.id, invLine: invLine.id };
     });
-    await expect(dataTabArchive(ctx, 'hhmc.quote_line', ids.line)).rejects.toThrow(/locked/);
+    await expect(dataTabArchive(ctx, 'hhmc.quote_line', ids.line)).rejects.toThrow(/signed the estimate/);
     await expect(dataTabArchive(ctx, 'hhmc.invoice_line', ids.invLine)).rejects.toThrow(/draft/);
   });
 });
@@ -81,5 +85,62 @@ describe('BRSS: the Data tab cannot archive around the rules', () => {
     await expect(dataTabArchive(ctx, 'brss.order_item', paid)).rejects.toThrow(/paid charge/);
     const closed = await firstId(ctx, brssOrders, inArray(brssOrders.status, ['closed', 'cancelled']));
     await dataTabArchive(ctx, 'brss.order', closed);
+    const order = entitiesFor('brss').find((e) => e.key === 'brss.order')!;
+    await withScope(ctx, 'business.data.read', (s) => restoreRecord(s, order, closed));
+  });
+});
+
+describe('restore and core records follow the same rules', () => {
+  it('a draft invoice re-prices itself when a line is archived or restored from the Data tab', async () => {
+    const ctx = await ctxFor(USERS.superAdmin, 'hhmc', 'sandbox');
+    const { hhmcInvoiceLines } = await import('@/modules/hhmc/schema');
+    const draft = await firstId(ctx, hhmcInvoices, eq(hhmcInvoices.status, 'draft'));
+    const totalOf = () => withScope(ctx, 'business.overview.read', async (s) => (await s.db.select().from(hhmcInvoices).where(eq(hhmcInvoices.id, draft)))[0].subtotalCents);
+    const line = await withScope(ctx, 'business.overview.read', async (s) => (await s.db.select().from(hhmcInvoiceLines).where(and(s.where(hhmcInvoiceLines), eq(hhmcInvoiceLines.invoiceId, draft))).limit(1))[0]);
+    const before = await totalOf();
+    await dataTabArchive(ctx, 'hhmc.invoice_line', line.id);
+    expect(await totalOf()).toBeLessThan(before);
+    const entity = entitiesFor('hhmc').find((e) => e.key === 'hhmc.invoice_line')!;
+    await withScope(ctx, 'business.data.read', (s) => restoreRecord(s, entity, line.id));
+    expect(await totalOf()).toBe(before);
+    // A draft invoice itself cannot be archived (void it first).
+    await expect(dataTabArchive(ctx, 'hhmc.invoice', draft)).rejects.toThrow(/Void it first/);
+  });
+
+  it('a booked appointment and a deposit belonging to an HHMC record cannot be archived on their own', async () => {
+    const ctx = await ctxFor(USERS.superAdmin, 'hhmc', 'sandbox');
+    const { appointments, payments } = await import('@/core/db/schema');
+    const appt = await firstId(ctx, appointments, eq(appointments.kind, 'hhmc.job_day'));
+    await expect(dataTabArchive(ctx, 'core.appointment', appt)).rejects.toThrow(/belongs to/);
+    const deposit = await firstId(ctx, payments, and(eq(payments.subjectType, 'hhmc.estimate'), eq(payments.status, 'succeeded')));
+    await expect(dataTabArchive(ctx, 'core.payment', deposit)).rejects.toThrow(/Refund it instead/);
+  });
+
+  it('a charge cannot be restored onto a closed BRSS order', async () => {
+    const ctx = await ctxFor(USERS.superAdmin, 'brss', 'sandbox');
+    const { arrange } = await import('./helpers');
+    const itemEntity = entitiesFor('brss').find((e) => e.key === 'brss.order_item')!;
+    const orderEntity = entitiesFor('brss').find((e) => e.key === 'brss.order')!;
+    // An unpaid charge on an open order: archive it, close the order, then try to restore it.
+    const item = await withScope(ctx, 'business.overview.read', async (s) => {
+      const [row] = await s.db
+        .select({ id: brssOrderItems.id, orderId: brssOrderItems.orderId, status: brssOrders.status })
+        .from(brssOrderItems)
+        .innerJoin(brssOrders, eq(brssOrders.id, brssOrderItems.orderId))
+        .where(and(s.where(brssOrderItems), eq(brssOrderItems.status, 'new'), inArray(brssOrders.status, ['open', 'activated'])))
+        .limit(1);
+      return row;
+    });
+    expect(item).toBeTruthy();
+    const { updateRecord } = await import('@/core/records/records');
+    await arrange('brss', 'sandbox', async (s) => {
+      await archiveRecord(s, itemEntity, item.id);
+      await updateRecord(s, orderEntity, item.orderId, { status: 'closed' });
+    });
+    await expect(withScope(ctx, 'business.data.read', (s) => restoreRecord(s, itemEntity, item.id))).rejects.toThrow(/reopen it first/);
+    await arrange('brss', 'sandbox', async (s) => {
+      await updateRecord(s, orderEntity, item.orderId, { status: item.status });
+      await restoreRecord(s, itemEntity, item.id);
+    });
   });
 });

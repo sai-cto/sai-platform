@@ -9,7 +9,12 @@
  *   4. seeds the fake businesses and data if the database is empty;
  *   5. creates or updates the demo accounts from DEMO_ACCOUNTS (passwords stay in the env).
  *
- * Refuses to run unless DEMO_MODE=true: it must never touch a real database.
+ * Safety, because it can change roles and wipe data:
+ *   - refuses unless DEMO_MODE=true;
+ *   - on Vercel, does nothing except for PRODUCTION builds (preview builds of other branches
+ *     never touch the demo database);
+ *   - touches only a database that is empty or carries the demo marker
+ *     (platform_settings 'demo_database'), which it sets when it first seeds one.
  */
 import postgres from 'postgres';
 import { loadEnv, requireEnv } from './lib/env';
@@ -18,6 +23,10 @@ import { migrateDatabase } from './lib/db';
 async function main() {
   loadEnv();
   if (process.env.DEMO_MODE !== 'true') throw new Error('demo:prepare only runs with DEMO_MODE=true.');
+  if (process.env.VERCEL && process.env.VERCEL_ENV !== 'production') {
+    console.log(`  Not a production deploy (${process.env.VERCEL_ENV}): the demo database is left alone.`);
+    return;
+  }
   const ownerUrl = requireEnv('DATABASE_OWNER_URL');
   const reset = process.argv.includes('--reset') || process.env.DEMO_RESET_ON_DEPLOY === 'yes';
   const { derivedAppPassword, closeDb, getDb } = await import('../src/core/db/client');
@@ -31,6 +40,13 @@ async function main() {
 
   const sql = postgres(ownerUrl, { max: 1, onnotice: () => {} });
   try {
+    // Only an empty database, or one this script set up, may be touched.
+    const [table] = await sql`select to_regclass('public.platform_settings') as t`;
+    if (table.t) {
+      const [marker] = await sql`select 1 from platform_settings where key = 'demo_database'`;
+      if (!marker)
+        throw new Error('This database is not empty and is not marked as the demo database. Refusing to touch it. Use a new, empty database for the demo.');
+    }
     const [role] = await sql`select 1 from pg_roles where rolname = 'sai_app'`;
     if (!process.env.DATABASE_URL) {
       const password = derivedAppPassword(ownerUrl);
@@ -61,8 +77,15 @@ async function main() {
   } else {
     console.log('  Demo data already there (use npm run demo:seed to start again).');
   }
+  // Mark this database as the demo one (lets later deploys and resets touch it).
+  const marker = postgres(ownerUrl, { max: 1, onnotice: () => {} });
+  try {
+    await marker`insert into platform_settings (key, value) values ('demo_database', 'true'::jsonb) on conflict (key) do nothing`;
+  } finally {
+    await marker.end();
+  }
   const { upsertDemoAccounts } = await import('../src/seed/demo-accounts');
-  for (const line of await upsertDemoAccounts(accounts.accounts)) console.log(`  Demo account ready: ${line}`);
+  for (const line of await upsertDemoAccounts(accounts.accounts, { switchOffOthers: true })) console.log(`  Demo account ready: ${line}`);
   await closeDb();
 }
 

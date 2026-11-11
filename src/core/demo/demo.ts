@@ -62,8 +62,10 @@ export function checkDemoPassword(email: string, password: string): DemoAccount 
   let found: DemoAccount | null = null;
   // Check every account (no early return), so timing does not reveal which emails exist.
   for (const account of demoAccounts()) {
-    const match = sameSecret(account.email, wanted) && sameSecret(password, account.password);
-    if (match) found = account;
+    // Both comparisons always run (no short-circuit), so timing does not reveal emails.
+    const emailMatches = sameSecret(account.email, wanted);
+    const passwordMatches = sameSecret(password, account.password);
+    if (emailMatches && passwordMatches) found = account;
   }
   return found;
 }
@@ -93,6 +95,21 @@ export function accessCookieValid(value: string | undefined): boolean {
 export function accessPasswordMatches(given: string): boolean {
   const expected = process.env.DEMO_ACCESS_PASSWORD ?? '';
   return accessGateEnabled() && sameSecret(given, expected);
+}
+
+/**
+ * A path on this site to go back to after the access password: never another site.
+ * "/\\evil.com", "//evil.com" or a full URL all become "/".
+ */
+export function safeLocalPath(next: string): string {
+  if (!next.startsWith('/') || next.startsWith('//') || /[\\\u0000-\u001f]/.test(next)) return '/';
+  const url = new URL(next, 'http://local.invalid');
+  return url.origin === 'http://local.invalid' ? `${url.pathname}${url.search}` : '/';
+}
+
+/** A pause after a wrong password: slows down guessing (there is no account lockout). */
+export function slowDown(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, process.env.NODE_ENV === 'test' ? 0 : 800));
 }
 
 /** Paths that skip the access gate: health check, the gate itself, the scheduler (own secret), static files. */

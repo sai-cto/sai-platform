@@ -7,13 +7,17 @@
  */
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/core/db/client';
-import { businesses, membershipPermissions, memberships, users } from '@/core/db/schema';
+import { businesses, membershipPermissions, memberships, sessions, users } from '@/core/db/schema';
+import { SEED_USERS } from './users';
 import type { DemoAccount } from '@/core/demo/demo';
 import { grantableActions } from '@/core/rbac/permissions';
 
 export const DEMO_BUSINESS = 'hhmc';
 
-export async function upsertDemoAccounts(accounts: DemoAccount[]): Promise<string[]> {
+export async function upsertDemoAccounts(
+  accounts: DemoAccount[],
+  options: { switchOffOthers?: boolean } = {},
+): Promise<string[]> {
   const db = getDb();
   const [business] = await db.select().from(businesses).where(eq(businesses.slug, DEMO_BUSINESS)).limit(1);
   if (!business) throw new Error(`Business ${DEMO_BUSINESS} is not seeded.`);
@@ -41,6 +45,16 @@ export async function upsertDemoAccounts(accounts: DemoAccount[]): Promise<strin
         await db.insert(membershipPermissions).values(staffGrants.map((permissionKey) => ({ membershipId: membership.id, permissionKey })));
     }
     done.push(`${account.email} (${account.role})`);
+  }
+  // Anyone who is neither a demo account now nor one of the fixed fake users is switched off
+  // and signed out (a manager removed from DEMO_ACCOUNTS loses access at the next deploy).
+  if (!options.switchOffOthers) return done;
+  const keep = new Set([...accounts.map((a) => a.email), ...SEED_USERS.map((u) => u.email)]);
+  for (const user of await db.select().from(users).where(eq(users.isActive, true))) {
+    if (keep.has(user.email)) continue;
+    await db.update(users).set({ isActive: false }).where(eq(users.id, user.id));
+    await db.delete(sessions).where(eq(sessions.userId, user.id));
+    done.push(`${user.email} switched off (no longer in DEMO_ACCOUNTS)`);
   }
   return done;
 }

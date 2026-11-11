@@ -78,6 +78,15 @@ export function percentOf(amountCents: number, bp: number): number {
   return mulDivRound(amountCents, bp, 10_000);
 }
 
+/**
+ * The card fee on an amount actually CHARGED, rounded down: several card payments (deposit,
+ * then balance in parts) can then never add up to more than the "paid by card" total shown,
+ * which rounds half-up once (review: no 1-cent overcharge). ref §4.2's examples are exact.
+ */
+export function cardFeeOnPayment(amountCents: number, bp: number): number {
+  return Math.floor((amountCents * bp) / 10_000);
+}
+
 /** The line's gross before discount: qty × rate, half-up. */
 export function lineGrossCents(line: Pick<PriceLine, 'qtyHundredths' | 'rateCents'>): number {
   return mulDivRound(line.qtyHundredths, line.rateCents, 100);
@@ -135,7 +144,7 @@ export function computeDeposit(
   options: { byCard: boolean; convenienceFeeBp: number },
 ): Deposit {
   const depositCents = percentOf(totals.subtotalCents + totals.serviceTaxCents, depositBp);
-  const cardFeeCents = options.byCard ? percentOf(depositCents, options.convenienceFeeBp) : 0;
+  const cardFeeCents = options.byCard ? cardFeeOnPayment(depositCents, options.convenienceFeeBp) : 0;
   return { depositCents, cardFeeCents, totalDueCents: depositCents + cardFeeCents };
 }
 
@@ -149,7 +158,7 @@ export function baseTotalCents(totals: Pick<Totals, 'subtotalCents' | 'serviceTa
 
 /** What is charged to a card for `baseCents` owed: + the card fee % when the fee is on. */
 export function cardChargeCents(baseCents: number, fee: { convenienceFeeOn: boolean; convenienceFeeBp: number }): number {
-  return baseCents + (fee.convenienceFeeOn ? percentOf(baseCents, fee.convenienceFeeBp) : 0);
+  return baseCents + (fee.convenienceFeeOn ? cardFeeOnPayment(baseCents, fee.convenienceFeeBp) : 0);
 }
 
 /**

@@ -58,6 +58,13 @@ export type EntityDef<T extends TenantTable = TenantTable> = {
    * Absent = always archivable.
    */
   archiveGuard?: (s: Scope, row: Record<string, unknown>) => Promise<string | null>;
+  /** The same for restoring an archived row (a restore can break rules too). */
+  restoreGuard?: (s: Scope, row: Record<string, unknown>) => Promise<string | null>;
+  /**
+   * Runs after this row is archived or restored, in the same transaction, for anything that
+   * depends on it (for example re-pricing the invoice a line belongs to).
+   */
+  afterArchiveOrRestore?: (s: Scope, row: Record<string, unknown>) => Promise<void>;
   /**
    * Clean-up outside the database after a row is permanently deleted (for example removing
    * a stored file's bytes). Most entities do not need this.
