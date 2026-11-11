@@ -1,118 +1,155 @@
-# Put the HHMC test site online
+# Put the Hired Hands site online (pilot, Microsoft sign-in)
 
-This puts the platform on the internet **in demo mode** so HHMC's managers can try it. It uses
-two free services:
+This puts the platform on the internet as a **pilot**: HHMC's managers use it with real jobs and
+sign in with their **SAI Microsoft 365 account**. Nobody else can get in.
+
+What "pilot" means (`docs/DECISIONS.md`, P5-31):
+
+- **Sign-in:** only with an SAI Microsoft account, and only for people who have been given access.
+  There is no password of our own and no test login.
+- **Your real jobs:** the live side starts **empty**, ready for real jobs. No deploy ever erases
+  it.
+- **Practice data:** **Test mode** (switch at the top right) has fake practice moves for
+  learning the app.
+- **Not live yet (on purpose):** no email reaches a customer, and cards can't be charged. Cash
+  and check can be recorded. A blue **PILOT** bar on every page says so. The steps to go fully
+  live are listed at the end.
+
+It uses three services, all free to start:
 
 - **Neon**: the database
 - **Vercel**: runs the app
+- **Microsoft Entra**: SAI's Microsoft 365 sign-in
 
-You need no credit card. It takes about 20 minutes.
+It takes about 30 minutes. You need to be able to sign in to SAI's Microsoft 365 admin
+(Entra) to register the app. If you can't, ask whoever manages SAI's Microsoft 365.
 
-What demo mode does: the whole site sits behind one shared password. Each manager signs in with
-their own email and password. All data is fake, payments are pretend, and no email is sent.
-A yellow **TEST SITE** bar shows on every page. The fake-user "dev login" used on laptops is
-switched off. (Why these choices: `docs/DECISIONS.md`, P5-16 to P5-19.)
+> **Free plans, for now.** Vercel's free plan is for non-commercial use, and free databases have
+> limited backups. That's acceptable for a short pilot. Upgrade both before the site replaces
+> Movegistics (see "Going fully live").
 
-## Before you start: make up some passwords
+## Before you start: write two things down
 
-Open a note and write these down. Use your password manager's **generator** (not a phrase
-someone could guess). Every one needs **at least 12 characters**; 16 or more is better.
+1. **Who may sign in.** One line, people separated by `;`, each `email|Full name|role`. The email
+   is the person's Microsoft 365 email address (usually the one they sign in with). Roles:
+   - `cto`: you; everything.
+   - `gm`: HHMC general manager; can add more people and change what staff may do.
+   - `staff`: the usual staff access (leads, jobs, quotes, estimates). The GM switches on
+     booking and invoicing per person in **People and access**.
+   - `tech`: the tech team.
 
-| Write down | Example of the format (do not use these) |
-|---|---|
-| A. Site access password (you'll give it to the managers) | `Tq7v-Ks9e-Wm2r-Hx4p` |
-| B. A password for each manager account | `Rb3n-Vz8q-Lc6y-Pd1t` |
-| C. Link secret (40+ random characters, nobody types it) | `k3J9xQ...` (40+ characters) |
-| D. Scheduler secret (20+ random characters, nobody types it) | `p8Wm2...` |
+   This list only **creates** people the first time. After that, change someone's role or
+   access in the site itself (People and access), not here.
 
-Then write the manager accounts as **one line**, separated by `;`, in this shape:
+   ```
+   jai@studentagencies.example|Jai|cto;manager@studentagencies.example|Pat Rivera|gm
+   ```
 
-```
-email|Full name|role|password;email|Full name|role|password
-```
-
-`role` is `gm` (general manager: can do everything, including adding people) or `staff` (can
-run every step of a move). Add `tech` for yourself if you want the "Run due emails" button.
-Example (made-up people):
-
-```
-gm@hhmc.example|Pat Rivera|gm|Rb3n-Vz8q-Lc6y-Pd1t;sam@hhmc.example|Sam Lee|staff|Jm5w-Qe2k-Nf7s-Gu9a
-```
+2. **Two long random strings** from your password manager's generator. Nobody types them:
+   - C. Link secret (40+ characters)
+   - D. Scheduler secret (20+ characters)
 
 ## The steps
 
-1. **Create the database.** Go to <https://neon.tech> → **Sign up** → **Continue with GitHub**.
-   When it asks, create a project named `sai-demo` in the region **AWS US East (N. Virginia)**,
-   with the newest Postgres version.
+1. **Create the database.** Go to <https://neon.tech>, then **Sign up → Continue with GitHub**.
+   Create a project named `sai-hhmc` in **AWS US East (N. Virginia)**, with the newest
+   Postgres version.
 
-2. **Copy the database address.** On the project page click **Connect**. Turn **Connection
-   pooling** **off**. Copy the whole string that starts with `postgresql://`. Paste it into your
-   note as **E**.
+2. **Copy the database address.** On the project page click **Connect**, turn **Connection
+   pooling** off, and copy the string that starts with `postgresql://` (call it **E**).
 
-3. **Create the app host.** Go to <https://vercel.com/signup> → choose **Hobby** →
-   **Continue with GitHub**. Allow Vercel to see the `sai-cto/sai-platform` repository when
-   GitHub asks. ("Only select repositories" is fine.)
+3. **Create the app host.** Go to <https://vercel.com/signup>, choose **Hobby**, then
+   **Continue with GitHub**. Let Vercel see the `sai-cto/sai-platform` repository.
 
-4. **Import the project.** In Vercel click **Add New… → Project**. Next to
-   `sai-platform` click **Import**. Leave every build setting as it is: the repository's
-   `vercel.json` already says how to build.
+4. **Import the project.** **Add New… → Project**, then **Import** next to `sai-platform`.
+   Leave the build settings alone.
 
-5. **Add the settings.** On the same screen open **Environment Variables**. Add each row below:
-   type the name, paste the value, click **Add**. (Leave the environment ticks as they are:
-   only the **Production** site ever uses the database. If Vercel ever shows you a "preview"
-   deploy of other code, an error page there is expected and harmless.)
+5. **Add the settings.** Open **Environment Variables** and add each row (name, value, **Add**):
 
    | Name | Value |
    |---|---|
-   | `DEMO_MODE` | `true` |
-   | `DATABASE_OWNER_URL` | E (the Neon string) |
-   | `DEMO_ACCESS_PASSWORD` | A |
-   | `DEMO_ACCOUNTS` | your one-line list of accounts |
+   | `PILOT_MODE` | `true` |
+   | `DATABASE_OWNER_URL` | E |
+   | `PILOT_ACCOUNTS` | your one-line list |
    | `LINK_SIGNING_SECRET` | C |
    | `CRON_SECRET` | D |
    | `DATABASE_POOL_MAX` | `3` |
 
-6. **Deploy.** Click **Deploy**. Wait for the confetti (2–4 minutes). The first build also sets
-   up the database and the fake data. If it fails, open the build log, copy the last 30 lines,
-   and send them to Claude.
+   Click **Deploy** and wait 2–4 minutes. Then click **Continue to Dashboard** and note the
+   address under **Domains**, for example `sai-platform-xyz.vercel.app` (call it **S**). The
+   site works now but says no sign-in is configured. That's expected until step 9.
 
-7. **Find the address.** Click **Continue to Dashboard**. Under **Domains** you'll see an
-   address like `sai-platform-xyz.vercel.app`. That is the test site.
+6. **Register the app with Microsoft.** Go to <https://entra.microsoft.com> and sign in with
+   your SAI admin account. Open **Applications → App registrations → New registration**:
+   - Name: `SAI Platform`
+   - Supported account types: **Accounts in this organizational directory only**
+   - Redirect URI: choose **Web** and enter `https://S/api/auth/microsoft/callback`, with S
+     replaced by your address.
 
-8. **Try it yourself.** Open the address. You should see:
-   1. "Test site": type password A.
-   2. The sign-in page: use one of your accounts.
-   3. The yellow TEST SITE bar on every page.
+   Click **Register**.
 
-   Open **Hired Hands Moving Company → App**.
+7. **Copy two IDs.** On the app's **Overview** page, copy:
+   - **Application (client) ID** → **F**
+   - **Directory (tenant) ID** → **G**
 
-9. **Tell Claude** "deployed" and paste the address. Claude then signs in with the browser,
-   runs one move from start to finish, and fixes anything that breaks. To do that, Claude needs
-   the access password and one account's email and password. Share them in the chat only if
-   you're comfortable doing so; otherwise ask Claude for a checklist to run yourself.
+8. **Create the app's secret.** Open **Certificates & secrets → New client secret**. Use
+   description `Vercel`, expiry **24 months**, then **Add**. Copy the **Value** right away
+   (call it **H**). Microsoft shows it only once.
 
-10. **Send the managers the message** in `docs/hhmc-analysis/MANAGER-MESSAGE.md`. It has the
-    address, and the guide `docs/hhmc-analysis/MANAGER-TESTING-GUIDE.md`. Give each manager
-    their password separately (in person or by text), not in the same message.
+9. **Give Vercel the Microsoft settings.** In Vercel: **Settings → Environment Variables**. Add
+   `MICROSOFT_CLIENT_ID` = F, `MICROSOFT_TENANT_ID` = G and `MICROSOFT_CLIENT_SECRET` = H. Then
+   **Deployments → ⋯ (on the newest) → Redeploy**.
 
-## Later
+10. **Sign in.** Open S and click **Sign in with Microsoft 365**. Use your SAI account and accept
+    the permission prompt (it asks only for your name and email). You land in the console.
+    - If Microsoft says an administrator must approve: go back to the app in Entra, then **API
+      permissions → Grant admin consent for SAI**.
+    - If the site says it can't sign you in: your email in `PILOT_ACCOUNTS` doesn't match the
+      one Microsoft uses. Fix it and redeploy.
 
-- **Start the demo data again** (for example before a new round of testing):
-  1. In Vercel, open **Settings → Environment Variables** and add `DEMO_RESET_ON_DEPLOY` = `yes`.
-  2. Go to **Deployments → ⋯ → Redeploy**.
-  3. Then change it back to `no`, or the next deploy wipes the data again.
-- **Add or remove a manager:** edit `DEMO_ACCOUNTS` and redeploy. Someone removed is
-  switched off and signed out by that deploy.
-- **Change the shared password:** edit `DEMO_ACCESS_PASSWORD` and redeploy. Everyone has to
-  type the new one.
-- **Automatic emails:** the hosting runs the scheduler once a day, and it does nothing unless
-  an HHMC admin switches on **Settings → "Send due automatic emails on a schedule"**. Even then,
-  emails on the test site are only logged, never sent.
-- **Uploaded or stored files** (such as the saved estimate document) do not last on this
-  hosting. That's fine for a test site.
-- **Cost:** both services are free at this size. Neither asks for a card on these plans.
-- **Safety:** the build only ever touches a database that has no tables at all, or one it set
-  up itself (it leaves a mark on it). Pointing it at the wrong database by mistake makes the
-  deploy fail instead of erasing anything.
-- **New code reaches the site** by itself: every push to `main` deploys again. The data is kept
-  unless `DEMO_RESET_ON_DEPLOY` is `yes`.
+11. **Add the managers.** Either add them to `PILOT_ACCOUNTS` and redeploy, or as the GM open
+    **Hired Hands Moving Company → People and access → Add**, using their SAI Microsoft email.
+    They sign in the same way as in step 10.
+
+12. **Tell Claude** "deployed" with the address S. Claude checks the sign-in page, the Microsoft
+    redirect and the PILOT bar. Signing in needs a real SAI account, so for the full walk
+    through a move you either sign in on a shared screen or run the checklist Claude gives you.
+
+Then send the managers `docs/hhmc-analysis/MANAGER-MESSAGE.md`, with
+`docs/hhmc-analysis/MANAGER-TESTING-GUIDE.md` attached.
+
+## Good to know
+
+- **Real data is protected.** The build refuses to touch a database that has other tables in it
+  or that holds the fake demo. It never wipes the pilot, and the reset option is refused in
+  pilot mode.
+- **Removing someone:** in **People and access**, remove them or switch them off. Or turn them
+  off in Microsoft 365: then they can't sign in at all.
+- **A different web address later** (your own domain): set `APP_URL` to it in Vercel, add
+  `https://<new address>/api/auth/microsoft/callback` as a redirect URI in Entra (step 6), and
+  redeploy.
+- **Previews:** if Vercel ever builds a "preview" of other code, it has no database. An error
+  page there is expected and harmless.
+- **Stored files** (saved estimate documents) don't last on this hosting yet.
+
+## Going fully live (replacing Movegistics): not built yet
+
+The pilot stops short of these on purpose. Each needs a decision, and some need an account:
+
+1. **An email service** so estimates, receipts and reminders actually reach customers.
+2. **A card processor** (the code has a Stripe adapter that refuses live keys today, so it needs
+   a small change and review).
+3. **File storage** that keeps the signed estimate documents.
+4. **Paid plans**: Vercel Pro (commercial use) and a database plan with daily backups.
+5. **Real terms and email wording** in Settings → Templates (now marked PLACEHOLDER).
+6. **The open business questions** in `docs/DECISIONS.md` (H1–H14, P5-15 …), especially what
+   the 4% is.
+7. Switch off `PILOT_MODE` once 1–4 are in place.
+
+## Alternative: a fake-data test site (no Microsoft)
+
+Set `DEMO_MODE=true` instead of `PILOT_MODE`, and use `DEMO_ACCESS_PASSWORD` and `DEMO_ACCOUNTS`
+(`email|Full name|gm or staff|password`, separated by `;`). That site is all fake data behind a
+shared password, with a yellow TEST SITE bar. It needs its own empty database; it can never use
+the pilot's. To start its data over: set `DEMO_RESET_ON_DEPLOY` = `yes`, redeploy, then set it
+back to `no`.

@@ -10,7 +10,10 @@ import { getDb } from '@/core/db/client';
 import { businesses, membershipPermissions, memberships, sessions, users } from '@/core/db/schema';
 import { SEED_USERS } from './users';
 import type { DemoAccount } from '@/core/demo/demo';
+import type { PilotAccount } from '@/core/demo/pilot';
 import { grantableActions } from '@/core/rbac/permissions';
+import { getModule } from '@/core/modules/registry';
+import { DEFAULT_STAFF_GRANTS } from '@/core/people/memberships';
 
 export const DEMO_BUSINESS = 'hhmc';
 
@@ -58,6 +61,49 @@ export async function upsertDemoAccounts(
       await tx.update(sessions).set({ revokedAt: new Date() }).where(and(eq(sessions.userId, user.id), isNull(sessions.revokedAt)));
     });
     done.push(`${user.email} switched off (no longer in DEMO_ACCOUNTS)`);
+  }
+  return done;
+}
+
+/**
+ * The pilot's accounts (PILOT_ACCOUNTS, src/core/demo/pilot.ts). People sign in with their
+ * Microsoft account, matched by email: nothing secret is stored. Existing accounts are only
+ * updated; nobody is switched off here (on a real-data site, People and access does that).
+ */
+export async function upsertPilotAccounts(accounts: PilotAccount[]): Promise<string[]> {
+  const db = getDb();
+  const [business] = await db.select().from(businesses).where(eq(businesses.slug, DEMO_BUSINESS)).limit(1);
+  if (!business) throw new Error(`Business ${DEMO_BUSINESS} is not seeded.`);
+  const done: string[] = [];
+  for (const account of accounts) {
+    // An account that already exists is never changed here: its role, access and status are
+    // managed in the console (and logged there). This list only creates people the first time.
+    const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, account.email)).limit(1);
+    if (existing) {
+      done.push(`${account.email} (already exists: unchanged)`);
+      continue;
+    }
+    const platformRole = account.role === 'cto' ? 'super_admin' : account.role === 'tech' ? 'tech' : null;
+    const [user] = await db
+      .insert(users)
+      .values({ email: account.email, name: account.name, platformRole, isActive: true })
+      .returning();
+    if (account.role === 'gm' || account.role === 'staff') {
+      const role = account.role === 'gm' ? 'business_admin' : 'business_staff';
+      const [membership] = await db.insert(memberships).values({ userId: user.id, businessId: business.id, role }).returning();
+      if (role === 'business_staff') {
+        // The same starting access as someone added in People and access.
+        const allowed = new Set(grantableActions(DEMO_BUSINESS).map((a) => a.key));
+        const mod = getModule(DEMO_BUSINESS);
+        const grants = [
+          ...DEFAULT_STAFF_GRANTS,
+          ...(mod?.permissions.filter((p) => p.defaultForStaff).map((p) => p.key) ?? []),
+        ].filter((key) => allowed.has(key));
+        if (grants.length > 0)
+          await db.insert(membershipPermissions).values(grants.map((permissionKey) => ({ membershipId: membership.id, permissionKey })));
+      }
+    }
+    done.push(`${account.email} (${account.role}, created)`);
   }
   return done;
 }

@@ -4,6 +4,7 @@ import { customers } from '@/core/db/schema/tenant';
 import type { Scope } from '@/core/db/scope';
 import { NotFoundError } from '@/core/errors';
 import { isUuid } from '@/core/ids';
+import { siteUrl } from '@/core/demo/pilot';
 import { signLink } from '@/core/links/links';
 import { customerName } from '@/core/records/core-entities';
 import { formatMoney } from '@/ui/format';
@@ -124,8 +125,7 @@ export function personName(c: { kind: string; firstName: string; lastName: strin
 /** Where the app is reached from outside (links in emails). */
 export function appUrl(): string {
   // On Vercel the site's own address is known without configuration.
-  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL;
-  return (process.env.APP_URL || (vercel ? `https://${vercel}` : 'http://localhost:3000')).replace(/\/$/, '');
+  return siteUrl();
 }
 
 export const PURPOSE = { estimate: 'hhmc.estimate', invoice: 'hhmc.invoice' } as const;

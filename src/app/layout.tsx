@@ -1,18 +1,21 @@
 import type { Metadata } from 'next';
 import { isDemoMode } from '@/core/demo/demo';
+import { isPilotMode } from '@/core/demo/pilot';
+import { PilotBanner } from './_components/pilot-banner';
 import './globals.css';
 
 export const metadata: Metadata = {
   title: { default: 'SAI Console', template: '%s · SAI Console' },
   description: 'Student Agencies Inc. — one platform for every business.',
   // The hosted demo is never indexed by search engines.
-  robots: isDemoMode() ? { index: false, follow: false } : undefined,
+  robots: isDemoMode() || isPilotMode() ? { index: false, follow: false } : undefined,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="h-full">
       <body className="min-h-full font-sans">
+        {isPilotMode() ? <PilotBanner /> : null}
         {isDemoMode() ? (
           <div
             role="note"

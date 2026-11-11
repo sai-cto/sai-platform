@@ -1,6 +1,7 @@
 /** Invoices (ref §7.1): the list with open / past due / paid, and one invoice. */
 import Link from 'next/link';
 import type { PortalPageProps } from '@/core/modules/contract';
+import { isPilotMode } from '@/core/demo/pilot';
 import { can } from '@/core/rbac/permissions';
 import { customerName } from '@/core/records/core-entities';
 import { ActionForm } from '@/ui/action-form';
@@ -203,12 +204,12 @@ export async function InvoicePage({ ctx, params, basePath }: PortalPageProps) {
             <Card title="Receive a payment">
               <ActionForm action={invoicePaymentAction.bind(null, slug, mode, invoice.id)} submitLabel="Record payment">
                 <AttemptKey />
-                <Field label="Amount credited ($)" htmlFor="ip-amount" help={invoice.convenienceFeeOn ? `A card payment is charged this plus the ${pct(invoice.convenienceFeeBp)} card fee.` : undefined}><input id="ip-amount" name="amount" inputMode="decimal" defaultValue={(balance / 100).toFixed(2)} className={inputClass} /></Field>
+                <Field label="Amount credited ($)" htmlFor="ip-amount" help={invoice.convenienceFeeOn && !(isPilotMode() && ctx.environment === 'live') ? `A card payment is charged this plus the ${pct(invoice.convenienceFeeBp)} card fee.` : undefined}><input id="ip-amount" name="amount" inputMode="decimal" defaultValue={(balance / 100).toFixed(2)} className={inputClass} /></Field>
                 <Field label="Paid by" htmlFor="ip-method">
                   <Select id="ip-method" name="method" defaultValue="check">
                     <option value="check">Check</option>
                     <option value="cash">Cash</option>
-                    <option value="card">Card (test card)</option>
+                    {isPilotMode() && ctx.environment === 'live' ? null : <option value="card">Card (test card)</option>}
                   </Select>
                 </Field>
               </ActionForm>

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { OAUTH_PROVIDERS, isDevLoginEnabled, listDevLoginUsers } from '@/core/auth/login';
 import { ROLE_LABELS } from '@/core/rbac/roles';
 import { isDemoMode } from '@/core/demo/demo';
+import { isPilotMode } from '@/core/demo/pilot';
 import { demoLoginAction, devLoginAction } from '@/server/auth-actions';
 import { currentUserId } from '@/server/session';
 
@@ -38,6 +39,9 @@ export default async function LoginPage({
         </p>
       ) : null}
 
+      {isPilotMode() ? (
+        <p className="mb-3 text-sm text-neutral-600">Sign in with your SAI Microsoft 365 account. Ask your manager or the tech team if you don&apos;t have access yet.</p>
+      ) : null}
       {providers.length > 0 ? (
         <div className="mb-6 space-y-2">
           {providers.map((p) => (

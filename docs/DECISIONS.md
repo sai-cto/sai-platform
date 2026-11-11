@@ -31,6 +31,7 @@ safest reversible option. They are collected in the first table so they are easy
 | R-20 | **HHMC: the choices in P5-5 … P5-14 and the ref §11 answers (H1–H14)** were made without an HHMC manager, each the safest reversible option. | No manager was available during the build. | Each row names where to change it |
 | R-21 | **HHMC go-live choices (P5-15 … P5-26) and the updated H4** were made autonomously, each the safest reversible option (never overcharge, never send a real message, never lose data). | The CTO asked for the loop to run without stopping for questions. | Each row names where to change it |
 | R-22 | **Phase 4 was merged into `main` before its own review gate had finished** (PROGRESS said "running"). | The CTO asked for Phase 4 and 5 on `main`; Phase 4 had passed its checks, e2e and UI gate, and HHMC's three review rounds covered the shared code it touches. | Run a review of `src/modules/brss` if wanted |
+| R-23 | **Pilot mode** (P5-31 … P5-37): the hosted site runs with real HHMC data, Microsoft sign-in only, no customer email and no live card payments, on free plans. | The CTO chose "real data, staged" on 11 Nov 2026; hosting plans to be decided later. | `PILOT_MODE`, `src/core/demo/pilot.ts` |
 | R-18 | Two small additions to the shared core for BRSS: `takeLock()` and `nextRecordNumber()` (P4-4). | A module cannot reach the database transaction itself, by design. | `src/core/db/lock.ts`, `src/core/records/numbering.ts` |
 
 ## Locked by the brief (not Claude's to change)
@@ -280,3 +281,22 @@ Further BRSS choices that also need review (each explained in the module README)
 | P5-30 | Review round 2 of this part: the "paid by card" totals use the same round-down as a real card charge, so the figure shown is exactly what paying by card costs; a void invoice's lines may be archived (so it can be purged in the end); core appointments that belong to a module record cannot be restored on their own either. | Found by the review gate. |
 
 No new dependencies were added.
+
+## Phase 5, part 3: the real-data pilot with Microsoft sign-in (11 Nov 2026) — NEEDS JAI REVIEW
+
+The CTO asked for Microsoft-only sign-in and real company data, and chose "real data, staged"
+(not live until email and a card processor are connected) and "decide hosting later".
+
+| # | Decision | Why / how to change it |
+|---|---|---|
+| P5-31 | **Pilot mode** (`PILOT_MODE=true`, `src/core/demo/pilot.ts`): sign-in only through Microsoft (dev login off whatever `AUTH_DEV_LOGIN` says, no passwords, no shared site password); a blue "PILOT – not live yet" bar; search engines told not to index. `DEMO_MODE` and `PILOT_MODE` together are refused. | The CTO's instruction. Microsoft keeps the directory: someone switched off in Microsoft 365 can no longer sign in. Sign-in still only works for an existing account (R-6); guests of SAI's directory are accepted as before (R-11). |
+| P5-32 | **Pilot accounts** come from `PILOT_ACCOUNTS` (`email\|Full name\|cto/tech/gm/staff`, no passwords): `cto` = super admin, `tech` = tech, `gm` = HHMC business admin, `staff` = HHMC staff with the same starting access as someone added in People and access (no booking, invoicing, export or catalog changes until the GM switches them on). The list only **creates** accounts: an existing account is never changed by it, and removing a line switches no one off (do that in People and access or in Microsoft 365). | Real data: least access by default, and every later change goes through the console, where it is checked and logged. `upsertPilotAccounts()` in `src/seed/demo-accounts.ts`. |
+| P5-33 | **Real data is never wiped.** `demo:prepare` marks the database `sai-pilot-database`, refuses `DEMO_RESET_ON_DEPLOY` in pilot mode, refuses a database marked for the demo (and the demo refuses the pilot's), and only starts on a database with no tables. The live side starts empty; only **Test mode** gets the fake practice moves, and no fake users are created. | Mixing fake and real moves in Live would corrupt the revenue figures. `scripts/demo-prepare.ts`, `seedAll({ fakeUsers, demoEnvironments })`. |
+| P5-34 | **No email reaches anyone** in pilot mode: the log-only channel is forced (messages still appear in Data → Notifications). Staff send customers the link with "Copy link". | No email service is chosen yet, and test messages must never reach real customers. `src/core/notifications/notifications.ts`. |
+| P5-35 | **Card payments are refused in Live** in pilot mode (core `takePayment()`), the card option is hidden on the job and invoice pages, and the customer page says "We'll arrange payment with you directly". Cash and check work. Test mode keeps the test card. | No card processor is connected (the Stripe adapter refuses live keys). A refusal in the core means no page can get round it. |
+| P5-36 | The site's own address comes from `APP_URL`, else Vercel's production address (`siteUrl()`), for links and the Microsoft redirect. | One fewer setting for a first-time deployer, and the Microsoft redirect must match the registered one exactly. |
+| P5-38 | Review round 1 of this part: the dev login and `npm run db:seed` refuse a database that is not on this machine (`isLocalDatabaseUrl()`), so a pilot address pulled into a local `.env` can't be seeded with fake users or signed into as anyone; Google sign-in is off in pilot mode; a sign-in started on another address of the site is sent to the site's own address first (the state cookie must be on the host Microsoft returns to). | Found by the review gate. The PILOT bar is hidden on customer link pages. Stored notifications read "sent" though only logged: noted, not changed (minor). |
+| P5-37 | **Free plans for the pilot**: Vercel Hobby is for non-commercial use, and Neon's free plan has limited backups. Both must be upgraded before the site replaces Movegistics (HANDOFF, "Before replacing Movegistics"). | The CTO asked to decide hosting later. |
+
+No new dependencies were added.
+

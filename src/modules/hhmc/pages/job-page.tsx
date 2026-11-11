@@ -5,6 +5,7 @@
  */
 import Link from 'next/link';
 import type { PortalPageProps } from '@/core/modules/contract';
+import { isPilotMode } from '@/core/demo/pilot';
 import { can } from '@/core/rbac/permissions';
 import { customerName } from '@/core/records/core-entities';
 import { ActionForm } from '@/ui/action-form';
@@ -255,8 +256,8 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                               <ActionForm action={recordDepositAction.bind(null, slug, mode, e.id)} submitLabel="Record deposit" submitVariant="secondary">
                                 <AttemptKey />
                                 <Field label="Paid by" htmlFor={`dep-${e.id}`}>
-                                  <Select id={`dep-${e.id}`} name="method" defaultValue="card">
-                                    <option value="card">{`Card (test card) · ${formatMoney(due.totalDueCents)}`}</option>
+                                  <Select id={`dep-${e.id}`} name="method" defaultValue={isPilotMode() && ctx.environment === 'live' ? 'cash' : 'card'}>
+                                    {isPilotMode() && ctx.environment === 'live' ? null : <option value="card">{`Card (test card) · ${formatMoney(due.totalDueCents)}`}</option>}
                                     <option value="cash">{`Cash · ${formatMoney(due.depositCents)}`}</option>
                                     <option value="check">{`Check · ${formatMoney(due.depositCents)}`}</option>
                                   </Select>

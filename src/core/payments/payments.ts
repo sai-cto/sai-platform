@@ -19,6 +19,7 @@ import { paymentEntity, refundEntity } from '../records/core-entities';
 import { createRecord, updateRecord } from '../records/records';
 import type { Row } from '../records/types';
 import { isDemoMode } from '../demo/demo';
+import { isPilotMode } from '../demo/pilot';
 import { mockProvider } from './mock-provider';
 import type { PaymentProvider } from './provider';
 import { createStripeProvider } from './stripe-provider';
@@ -111,6 +112,10 @@ export async function takePayment(
   }
 
   const method = input.method ?? 'card';
+  // Pilot (real data, not yet live): no card processor is connected, so a live card payment
+  // would only pretend. Refused before anything is recorded. Test mode still uses test cards.
+  if (isPilotMode() && method === 'card' && s.ctx.environment === 'live')
+    throw new ValidationError('Card payments are not connected yet. Record a cash or check payment instead.');
   const kind = input.kind ?? 'charge';
   const common = {
     customerId: input.customerId ?? null,

@@ -6,6 +6,7 @@
 import type { notifications } from '../db/schema';
 import type { Scope } from '../db/scope';
 import { isDemoMode } from '../demo/demo';
+import { isPilotMode } from '../demo/pilot';
 import { authorize } from '../rbac/permissions';
 import { notificationEntity } from '../records/core-entities';
 import { createRecord } from '../records/records';
@@ -46,7 +47,8 @@ export async function sendNotification(
   authorize(s.ctx, 'notifications.write');
   // The sandbox never sends for real, whatever adapter is configured.
   // The sandbox and the hosted demo site never send for real, whatever adapter is configured.
-  const channel = s.ctx.environment === 'sandbox' || isDemoMode() ? consoleEmailChannel : emailChannel;
+  // The pilot (real data, not yet live) never emails customers either: P5-31.
+  const channel = s.ctx.environment === 'sandbox' || isDemoMode() || isPilotMode() ? consoleEmailChannel : emailChannel;
   const result = await channel.send({
     recipient: input.recipient,
     subject: input.subject,

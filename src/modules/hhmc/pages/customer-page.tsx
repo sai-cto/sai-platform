@@ -7,6 +7,7 @@
  */
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { isPilotMode } from '@/core/demo/pilot';
 import { NotFoundError } from '@/core/errors';
 import type { PortalPageProps } from '@/core/modules/contract';
 import { ActionForm } from '@/ui/action-form';
@@ -34,6 +35,11 @@ const STEPS = [
 type Step = (typeof STEPS)[number]['key'];
 
 const pct = (bp: number) => `${bp / 100}%`;
+
+/** The pilot (real data, not yet live) takes no card payments in live mode (P5-31). */
+function cardsOff(ctx: PortalPageProps['ctx']): boolean {
+  return isPilotMode() && ctx.environment === 'live';
+}
 
 function TestCardChoice() {
   return (
@@ -208,10 +214,14 @@ async function EstimateReview({ ctx, searchParams, basePath }: PortalPageProps) 
                 {deposit.cardFeeCents > 0 ? <div className="flex justify-between"><dt>{`Card convenience fee (${pct(e.snapshot.convenienceFeeBp)})`}</dt><dd>{formatMoney(deposit.cardFeeCents)}</dd></div> : null}
                 <div className="flex justify-between font-semibold"><dt>Total deposit required</dt><dd>{formatMoney(deposit.totalDueCents)}</dd></div>
               </dl>
-              <ActionForm action={payDepositLinkAction.bind(null, tokenFrom(basePath))} submitLabel={`Pay deposit ${formatMoney(deposit.totalDueCents)}`}>
-                <AttemptKey />
-                <TestCardChoice />
-              </ActionForm>
+              {cardsOff(ctx) ? (
+                <p className="text-sm text-zinc-700">Online card payment isn&apos;t available yet. We&apos;ll arrange payment with you directly.</p>
+              ) : (
+                <ActionForm action={payDepositLinkAction.bind(null, tokenFrom(basePath))} submitLabel={`Pay deposit ${formatMoney(deposit.totalDueCents)}`}>
+                  <AttemptKey />
+                  <TestCardChoice />
+                </ActionForm>
+              )}
               <p className="mt-3 text-xs text-zinc-500">{`The deposit holds your date (${settings.depositPercent}% of the price before any card fee). The rest is invoiced after your move.`}</p>
             </>
           )}
@@ -257,10 +267,14 @@ async function InvoicePay({ ctx, basePath }: PortalPageProps) {
         <Card><p className="text-sm">This invoice was cancelled.</p></Card>
       ) : (
         <Card title="Pay now">
-          <ActionForm action={payInvoiceLinkAction.bind(null, tokenFrom(basePath))} submitLabel={`Pay ${formatMoney(byCard)} by card`}>
-            <AttemptKey />
-            <TestCardChoice />
-          </ActionForm>
+          {cardsOff(ctx) ? (
+            <p className="text-sm text-zinc-700">Online card payment isn&apos;t available yet. We&apos;ll arrange payment with you directly.</p>
+          ) : (
+            <ActionForm action={payInvoiceLinkAction.bind(null, tokenFrom(basePath))} submitLabel={`Pay ${formatMoney(byCard)} by card`}>
+              <AttemptKey />
+              <TestCardChoice />
+            </ActionForm>
+          )}
         </Card>
       )}
     </Shell>

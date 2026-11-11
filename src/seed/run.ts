@@ -33,7 +33,15 @@ function defaultGrantsFor(moduleKey: string): string[] {
   return [...DEFAULT_STAFF_GRANTS, ...fromModule].filter((key) => allowed.has(key));
 }
 
-export async function seedAll(options: { demoData: boolean }): Promise<void> {
+/**
+ * fakeUsers (default true): the fake test users of every role. Off on a site with real data.
+ * demoEnvironments (default both): where fake demo data goes. ['sandbox'] keeps live empty.
+ */
+export async function seedAll(options: {
+  demoData: boolean;
+  fakeUsers?: boolean;
+  demoEnvironments?: ('live' | 'sandbox')[];
+}): Promise<void> {
   const db = getDb();
 
   // Businesses and their module rows.
@@ -75,7 +83,7 @@ export async function seedAll(options: { demoData: boolean }): Promise<void> {
     .onConflictDoNothing();
 
   // Users, memberships and staff grants.
-  for (const u of SEED_USERS) {
+  for (const u of options.fakeUsers === false ? [] : SEED_USERS) {
     const [user] = await db
       .insert(users)
       .values({ email: u.email, name: u.name, platformRole: u.platformRole ?? null })
@@ -111,7 +119,7 @@ export async function seedAll(options: { demoData: boolean }): Promise<void> {
 
   if (!options.demoData) return;
   for (const b of SEED_BUSINESSES) {
-    for (const environment of ['live', 'sandbox'] as const) {
+    for (const environment of options.demoEnvironments ?? (['live', 'sandbox'] as const)) {
       const ctx = await systemContext(b.slug, environment);
       await withScope(ctx, 'customers.read', async (s) => {
         const existing = await s.db.$count(customers, s.where(customers, 'include'));
