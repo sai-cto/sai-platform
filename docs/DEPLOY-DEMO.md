@@ -31,11 +31,15 @@ It takes about 30 minutes. You need to be able to sign in to SAI's Microsoft 365
 ## Before you start: write two things down
 
 1. **Who may sign in.** One line, people separated by `;`, each `email|Full name|role`. The email
-   must be the exact address the person signs in to Microsoft with. Roles:
+   is the person's Microsoft 365 email address (usually the one they sign in with). Roles:
    - `cto`: you; everything.
-   - `gm`: HHMC general manager; can add more people later.
-   - `staff`: can run every step of a move.
+   - `gm`: HHMC general manager; can add more people and change what staff may do.
+   - `staff`: the usual staff access (leads, jobs, quotes, estimates). The GM switches on
+     booking and invoicing per person in **People and access**.
    - `tech`: the tech team.
+
+   This list only **creates** people the first time. After that, change someone's role or
+   access in the site itself (People and access), not here.
 
    ```
    jai@studentagencies.example|Jai|cto;manager@studentagencies.example|Pat Rivera|gm
@@ -121,6 +125,9 @@ Then send the managers `docs/hhmc-analysis/MANAGER-MESSAGE.md`, with
   pilot mode.
 - **Removing someone:** in **People and access**, remove them or switch them off. Or turn them
   off in Microsoft 365: then they can't sign in at all.
+- **A different web address later** (your own domain): set `APP_URL` to it in Vercel, add
+  `https://<new address>/api/auth/microsoft/callback` as a redirect URI in Entra (step 6), and
+  redeploy.
 - **Previews:** if Vercel ever builds a "preview" of other code, it has no database. An error
   page there is expected and harmless.
 - **Stored files** (saved estimate documents) don't last on this hosting yet.

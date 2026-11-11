@@ -204,7 +204,7 @@ export async function InvoicePage({ ctx, params, basePath }: PortalPageProps) {
             <Card title="Receive a payment">
               <ActionForm action={invoicePaymentAction.bind(null, slug, mode, invoice.id)} submitLabel="Record payment">
                 <AttemptKey />
-                <Field label="Amount credited ($)" htmlFor="ip-amount" help={invoice.convenienceFeeOn ? `A card payment is charged this plus the ${pct(invoice.convenienceFeeBp)} card fee.` : undefined}><input id="ip-amount" name="amount" inputMode="decimal" defaultValue={(balance / 100).toFixed(2)} className={inputClass} /></Field>
+                <Field label="Amount credited ($)" htmlFor="ip-amount" help={invoice.convenienceFeeOn && !(isPilotMode() && ctx.environment === 'live') ? `A card payment is charged this plus the ${pct(invoice.convenienceFeeBp)} card fee.` : undefined}><input id="ip-amount" name="amount" inputMode="decimal" defaultValue={(balance / 100).toFixed(2)} className={inputClass} /></Field>
                 <Field label="Paid by" htmlFor="ip-method">
                   <Select id="ip-method" name="method" defaultValue="check">
                     <option value="check">Check</option>

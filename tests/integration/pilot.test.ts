@@ -45,7 +45,14 @@ describe('pilot accounts', () => {
     const gm = await ctxFor(`gm.${t}@sai.example`, 'hhmc');
     expect(gm.role).toBe('business_admin');
     const staff = await ctxFor(`staff.${t}@sai.example`, 'hhmc');
-    expect(staff.permissions.has('hhmc.jobs.book')).toBe(true);
+    // The same starting access as someone added in People and access: no booking, export or catalog.
+    expect(staff.permissions.has('hhmc.jobs.write')).toBe(true);
+    expect(staff.permissions.has('hhmc.jobs.book')).toBe(false);
+    expect(staff.permissions.has('business.data.export')).toBe(false);
+    // An account that already exists is never changed by the list.
+    await upsertPilotAccounts([{ email: `gm.${t}@sai.example`, name: 'Renamed', role: 'cto' }]);
+    const stillGm = await ctxFor(`gm.${t}@sai.example`, 'hhmc');
+    expect(stillGm.role).toBe('business_admin');
     const cto = await ctxFor(`cto.${t}@sai.example`, 'brss');
     expect(cto.role).toBe('super_admin');
 
@@ -62,6 +69,11 @@ describe('pilot safety', () => {
     expect(isDevLoginEnabled()).toBe(true);
     process.env.PILOT_MODE = 'true';
     expect(isDevLoginEnabled()).toBe(false);
+    delete process.env.PILOT_MODE;
+    const local = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = 'postgres://u:p@ep-x.us-east-1.aws.neon.tech/neondb';
+    expect(isDevLoginEnabled()).toBe(false);
+    process.env.DATABASE_URL = local;
   });
 
   it('live card payments are refused before anything is recorded; cash works; test mode keeps test cards', async () => {

@@ -51,7 +51,8 @@ calls and notes.
 Switch to **Live** and do the same steps with a real customer. The differences are:
 
 - send the estimate link to the customer yourself;
-- take the deposit and the balance as **cash or check** with **Receive a payment**.
+- take the deposit as **cash or check** with **Record deposit** on the Job page, and the
+  balance with **Receive a payment** on the invoice.
 
 Please keep Movegistics running alongside for now: this pilot doesn't replace it yet.
 
@@ -63,7 +64,8 @@ Please keep Movegistics running alongside for now: this pilot doesn't replace it
   which HHMC actually charges.
 - **Emails** the system would have sent are listed under the **Data** tab → Notifications.
 - **Adding a colleague** (general manager): **People and access** → **Add person**, with their
-  SAI Microsoft email.
+  SAI Microsoft email. New staff can't book moves or send invoices until you switch those on
+  for them there.
 
 ## Found a problem or have an idea?
 

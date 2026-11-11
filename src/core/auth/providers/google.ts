@@ -12,7 +12,7 @@
  */
 import { Google, decodeIdToken } from 'arctic';
 import type { ExternalIdentity, OAuthProvider } from './types';
-import { siteUrl } from '../../demo/pilot';
+import { isPilotMode, siteUrl } from '../../demo/pilot';
 
 function client(): Google {
   return new Google(
@@ -49,7 +49,9 @@ export const googleProvider: OAuthProvider = {
       process.env.GOOGLE_CLIENT_ID &&
       process.env.GOOGLE_CLIENT_SECRET &&
       process.env.GOOGLE_WORKSPACE_DOMAIN &&
-      siteUrl(''),
+      siteUrl('') &&
+      // The pilot is Microsoft-only.
+      !isPilotMode(),
     ),
   createAuthorizationUrl: (state, codeVerifier) =>
     client().createAuthorizationURL(state, codeVerifier, ['openid', 'profile', 'email']),
