@@ -1,18 +1,28 @@
 import type { Metadata } from 'next';
 import { isDemoMode } from '@/core/demo/demo';
+import { isPilotMode } from '@/core/demo/pilot';
 import './globals.css';
 
 export const metadata: Metadata = {
   title: { default: 'SAI Console', template: '%s · SAI Console' },
   description: 'Student Agencies Inc. — one platform for every business.',
   // The hosted demo is never indexed by search engines.
-  robots: isDemoMode() ? { index: false, follow: false } : undefined,
+  robots: isDemoMode() || isPilotMode() ? { index: false, follow: false } : undefined,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="h-full">
       <body className="min-h-full font-sans">
+        {isPilotMode() ? (
+          <div
+            role="note"
+            data-testid="pilot-banner"
+            className="sticky top-0 z-[60] bg-sky-700 px-3 py-1 text-center text-xs font-semibold tracking-wide text-white"
+          >
+            PILOT – not live yet: no email reaches customers and cards can&apos;t be charged. Test mode has practice data.
+          </div>
+        ) : null}
         {isDemoMode() ? (
           <div
             role="note"

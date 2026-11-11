@@ -13,13 +13,14 @@
 import { MicrosoftEntraId, decodeIdToken } from 'arctic';
 import { isUuid } from '../../ids';
 import type { ExternalIdentity, OAuthProvider } from './types';
+import { siteUrl } from '../../demo/pilot';
 
 function client(): MicrosoftEntraId {
   return new MicrosoftEntraId(
     process.env.MICROSOFT_TENANT_ID ?? '',
     process.env.MICROSOFT_CLIENT_ID ?? '',
     process.env.MICROSOFT_CLIENT_SECRET ?? '',
-    `${process.env.APP_URL ?? ''}/api/auth/microsoft/callback`,
+    `${siteUrl('')}/api/auth/microsoft/callback`,
   );
 }
 
@@ -52,7 +53,7 @@ export const microsoftProvider: OAuthProvider = {
   label: 'Microsoft 365',
   isEnabled: () =>
     Boolean(
-      process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET && process.env.APP_URL,
+      process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET && siteUrl(''),
     ) && isUuid(process.env.MICROSOFT_TENANT_ID),
   createAuthorizationUrl: (state, codeVerifier) =>
     client().createAuthorizationURL(state, codeVerifier, ['openid', 'profile', 'email']),

@@ -17,6 +17,7 @@ import type { ExternalIdentity, OAuthProvider } from './providers/types';
 import { createSession, revokeSession, type NewSession } from './session';
 import { isUuid } from '../ids';
 import { checkDemoPassword, isDemoMode } from '../demo/demo';
+import { isPilotMode } from '../demo/pilot';
 
 export const OAUTH_PROVIDERS: OAuthProvider[] = [microsoftProvider, googleProvider];
 
@@ -27,7 +28,7 @@ export function getOAuthProvider(id: string): OAuthProvider | undefined {
 /** The pick-a-user login exists for local development only. It can never be on in production. */
 export function isDevLoginEnabled(): boolean {
   // Never on the hosted demo, never in production, whatever AUTH_DEV_LOGIN says.
-  return process.env.AUTH_DEV_LOGIN === 'true' && process.env.NODE_ENV !== 'production' && !isDemoMode();
+  return process.env.AUTH_DEV_LOGIN === 'true' && process.env.NODE_ENV !== 'production' && !isDemoMode() && !isPilotMode();
 }
 
 export type DevLoginUser = { id: string; name: string; email: string; platformRole: string | null };

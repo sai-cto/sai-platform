@@ -191,6 +191,11 @@ also turns on email + password sign-in for the accounts in `DEMO_ACCOUNTS` (pass
 the environment, never in the database), a "TEST SITE" banner, forced mock payments and log-only
 email, and switches the dev login off. Deployment: `docs/DEPLOY-DEMO.md`.
 
+`PILOT_MODE=true` (`src/core/demo/pilot.ts`) is the real-data alternative: Microsoft sign-in only
+for the accounts in `PILOT_ACCOUNTS`, no access password, a "PILOT" banner, log-only email, and
+`takePayment()` refuses card payments in Live (Test mode keeps the mock). `demo:prepare` never
+wipes a pilot database and only seeds practice data into Test mode (DECISIONS P5-31 …).
+
 ## Scheduled work
 
 A module may declare `scheduledTasks` (optionally gated by a yes/no module setting).

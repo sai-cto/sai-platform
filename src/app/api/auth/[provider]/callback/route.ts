@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import { siteUrl } from '@/core/demo/pilot';
 import { NextResponse } from 'next/server';
 import { getOAuthProvider, loginWithIdentity, recordFailedSignIn } from '@/core/auth/login';
 import { SESSION_COOKIE } from '@/core/auth/session';
@@ -17,7 +18,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ prov
   store.delete('sai_oauth_verifier');
   const code = url.searchParams.get('code');
   const failed = NextResponse.redirect(
-    new URL('/login?error=1', process.env.APP_URL ?? url.origin),
+    new URL('/login?error=1', siteUrl(url.origin)),
   );
   if (!code || !expectedState || !codeVerifier || url.searchParams.get('state') !== expectedState)
     return failed;
@@ -25,7 +26,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ prov
     const identity = await provider.exchangeCode(code, codeVerifier);
     const session = await loginWithIdentity(identity);
     store.set(SESSION_COOKIE, session.token, sessionCookieOptions(session.expiresAt));
-    return NextResponse.redirect(new URL('/console', process.env.APP_URL ?? url.origin));
+    return NextResponse.redirect(new URL('/console', siteUrl(url.origin)));
   } catch (error) {
     // loginWithIdentity logs its own refusals; anything else (the code exchange) is logged here.
     if (!(error instanceof UnauthenticatedError))

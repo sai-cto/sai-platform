@@ -34,7 +34,7 @@ export function getDb(): Db {
 export function appDatabaseUrl(): string | undefined {
   if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
   const owner = process.env.DATABASE_OWNER_URL;
-  if (process.env.DEMO_MODE !== 'true' || !owner) return undefined;
+  if ((process.env.DEMO_MODE !== 'true' && process.env.PILOT_MODE !== 'true') || !owner) return undefined;
   // Only the production site uses the demo database: a preview of another branch must not.
   if (process.env.VERCEL && process.env.VERCEL_ENV !== 'production') return undefined;
   const url = new URL(owner);

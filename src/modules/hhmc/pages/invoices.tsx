@@ -1,6 +1,7 @@
 /** Invoices (ref §7.1): the list with open / past due / paid, and one invoice. */
 import Link from 'next/link';
 import type { PortalPageProps } from '@/core/modules/contract';
+import { isPilotMode } from '@/core/demo/pilot';
 import { can } from '@/core/rbac/permissions';
 import { customerName } from '@/core/records/core-entities';
 import { ActionForm } from '@/ui/action-form';
@@ -208,7 +209,7 @@ export async function InvoicePage({ ctx, params, basePath }: PortalPageProps) {
                   <Select id="ip-method" name="method" defaultValue="check">
                     <option value="check">Check</option>
                     <option value="cash">Cash</option>
-                    <option value="card">Card (test card)</option>
+                    {isPilotMode() && ctx.environment === 'live' ? null : <option value="card">Card (test card)</option>}
                   </Select>
                 </Field>
               </ActionForm>
