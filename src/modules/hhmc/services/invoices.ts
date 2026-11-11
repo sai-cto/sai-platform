@@ -42,7 +42,7 @@ import {
 } from './common';
 import { jobDaysOf } from './booking';
 import { moveStage } from './jobs';
-import { balanceDueCents, baseTotalCents, cardChargeCents, computeTotals, minutesToQtyHundredths, parseMoney, parseQty, SECTION_KEYS } from './pricing';
+import { balanceDueCents, baseTotalCents, cardChargeCents, minutesToQtyHundredths, parseMoney, parseQty, SECTION_KEYS } from './pricing';
 
 export const INVOICES_PAGE_SIZE = 25;
 

@@ -13,12 +13,15 @@
  *   - refuses unless DEMO_MODE=true;
  *   - on Vercel, does nothing except for PRODUCTION builds (preview builds of other branches
  *     never touch the demo database);
- *   - touches only a database that is empty or carries the demo marker
- *     (platform_settings 'demo_database'), which it sets when it first seeds one.
+ *   - touches only a database that is EMPTY (no tables) or carries its mark (the database
+ *     comment 'sai-demo-database', set the first time it prepares an empty database).
  */
 import postgres from 'postgres';
 import { loadEnv, requireEnv } from './lib/env';
 import { migrateDatabase } from './lib/db';
+
+/** The comment on the demo database that lets this script touch it (see the safety notes above). */
+const DEMO_MARK = 'sai-demo-database';
 
 async function main() {
   loadEnv();
@@ -38,14 +41,24 @@ async function main() {
   if ((process.env.DEMO_ACCESS_PASSWORD ?? '').length < 12)
     throw new Error('DEMO_ACCESS_PASSWORD must be set (at least 12 characters). See docs/DEPLOY-DEMO.md.');
 
+  // The app's connection (DATABASE_URL, when given) must be the SAME database as the owner's.
+  if (process.env.DATABASE_URL) {
+    const a = new URL(process.env.DATABASE_URL);
+    const b = new URL(ownerUrl);
+    if (a.hostname.replace('-pooler.', '.') !== b.hostname.replace('-pooler.', '.') || a.port !== b.port || a.pathname !== b.pathname)
+      throw new Error('DATABASE_URL and DATABASE_OWNER_URL point at different databases. Refusing to continue.');
+  }
   const sql = postgres(ownerUrl, { max: 1, onnotice: () => {} });
   try {
-    // Only an empty database, or one this script set up, may be touched.
-    const [table] = await sql`select to_regclass('public.platform_settings') as t`;
-    if (table.t) {
-      const [marker] = await sql`select 1 from platform_settings where key = 'demo_database'`;
-      if (!marker)
+    // Only an EMPTY database, or one this script marked as the demo, may be touched. The mark
+    // is a comment on the database itself, so it survives a wipe that is interrupted halfway.
+    const [db] = await sql`select shobj_description(oid, 'pg_database') as note from pg_database where datname = current_database()`;
+    if (db?.note !== DEMO_MARK) {
+      const [tables] = await sql`select count(*)::int as n from pg_tables where schemaname in ('public', 'drizzle')`;
+      if (tables.n > 0)
         throw new Error('This database is not empty and is not marked as the demo database. Refusing to touch it. Use a new, empty database for the demo.');
+      await sql.unsafe(`comment on database "${(await sql`select current_database() as d`)[0].d.replace(/"/g, '')}" is '${DEMO_MARK}'`);
+      console.log('  Marked this empty database as the demo database.');
     }
     const [role] = await sql`select 1 from pg_roles where rolname = 'sai_app'`;
     if (!process.env.DATABASE_URL) {
@@ -76,13 +89,6 @@ async function main() {
     console.log('  Seeded the fake businesses and demo data.');
   } else {
     console.log('  Demo data already there (use npm run demo:seed to start again).');
-  }
-  // Mark this database as the demo one (lets later deploys and resets touch it).
-  const marker = postgres(ownerUrl, { max: 1, onnotice: () => {} });
-  try {
-    await marker`insert into platform_settings (key, value) values ('demo_database', 'true'::jsonb) on conflict (key) do nothing`;
-  } finally {
-    await marker.end();
   }
   const { upsertDemoAccounts } = await import('../src/seed/demo-accounts');
   for (const line of await upsertDemoAccounts(accounts.accounts, { switchOffOthers: true })) console.log(`  Demo account ready: ${line}`);

@@ -117,8 +117,10 @@ export function computeTotals(lines: PriceLine[], options: PriceOptions): Totals
   }
   const subtotalCents = SECTION_KEYS.reduce((sum, key) => sum + sections[key], 0);
   const serviceTaxCents = options.serviceTaxOn ? percentOf(subtotalCents, options.serviceTaxBp) : 0;
+  // The same rounding as a real card charge (cardFeeOnPayment), so the "paid by card" figure
+  // shown is exactly what paying the whole amount by card costs.
   const convenienceFeeCents = options.convenienceFeeOn
-    ? percentOf(subtotalCents + serviceTaxCents, options.convenienceFeeBp)
+    ? cardFeeOnPayment(subtotalCents + serviceTaxCents, options.convenienceFeeBp)
     : 0;
   return {
     sections,

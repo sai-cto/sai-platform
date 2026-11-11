@@ -5,7 +5,7 @@
  *   staff → business staff of HHMC with everything a move needs switched on
  *   tech  → the platform's tech role (Run due emails, settings)
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { getDb } from '@/core/db/client';
 import { businesses, membershipPermissions, memberships, sessions, users } from '@/core/db/schema';
 import { SEED_USERS } from './users';
@@ -52,8 +52,11 @@ export async function upsertDemoAccounts(
   const keep = new Set([...accounts.map((a) => a.email), ...SEED_USERS.map((u) => u.email)]);
   for (const user of await db.select().from(users).where(eq(users.isActive, true))) {
     if (keep.has(user.email)) continue;
-    await db.update(users).set({ isActive: false }).where(eq(users.id, user.id));
-    await db.delete(sessions).where(eq(sessions.userId, user.id));
+    // One step: switched off AND signed out (sessions are revoked: the app role may not delete them).
+    await db.transaction(async (tx) => {
+      await tx.update(users).set({ isActive: false }).where(eq(users.id, user.id));
+      await tx.update(sessions).set({ revokedAt: new Date() }).where(and(eq(sessions.userId, user.id), isNull(sessions.revokedAt)));
+    });
     done.push(`${user.email} switched off (no longer in DEMO_ACCOUNTS)`);
   }
   return done;

@@ -59,7 +59,7 @@ gm@hhmc.example|Pat Rivera|gm|Rb3n-Vz8q-Lc6y-Pd1t;sam@hhmc.example|Sam Lee|staff
 
 5. **Add the settings.** On the same screen open **Environment Variables**. Add each row below:
    type the name, paste the value, click **Add**. (Leave the environment ticks as they are:
-   only the **Production** deploy ever touches the database.)
+   only the **Production** site ever uses the database; previews of other code don't.)
 
    | Name | Value |
    |---|---|
@@ -110,7 +110,8 @@ gm@hhmc.example|Pat Rivera|gm|Rb3n-Vz8q-Lc6y-Pd1t;sam@hhmc.example|Sam Lee|staff
 - **Uploaded or stored files** (such as the saved estimate document) do not last on this
   hosting. That's fine for a test site.
 - **Cost:** both services are free at this size. Neither asks for a card on these plans.
-- **Safety:** the build only ever touches a database that was empty or that it set up itself,
-  so pointing it at the wrong database by mistake makes the deploy fail instead of erasing anything.
+- **Safety:** the build only ever touches a database that has no tables at all, or one it set
+  up itself (it leaves a mark on it). Pointing it at the wrong database by mistake makes the
+  deploy fail instead of erasing anything.
 - **New code reaches the site** by itself: every push to `main` deploys again. The data is kept
   unless `DEMO_RESET_ON_DEPLOY` is `yes`.

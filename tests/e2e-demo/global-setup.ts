@@ -9,9 +9,9 @@ export default async function globalSetup() {
   loadEnv();
   const cwd = path.resolve(__dirname, '..', '..');
   execSync('npx tsx scripts/reset-test-db.ts', { cwd, stdio: 'inherit' });
-  // The fresh test database stands in for the demo database: mark it as one.
+  // The fresh (already seeded) test database stands in for the demo database: mark it as one.
   const sql = postgres(requireEnv('TEST_DATABASE_OWNER_URL'), { max: 1, onnotice: () => {} });
-  await sql`insert into platform_settings (key, value) values ('demo_database', 'true'::jsonb) on conflict do nothing`;
+  await sql.unsafe(`comment on database sai_test is 'sai-demo-database'`);
   await sql.end();
   execSync('npx tsx scripts/demo-prepare.ts', {
     cwd,

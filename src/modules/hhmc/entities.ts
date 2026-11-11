@@ -284,8 +284,9 @@ export const invoiceLineEntity: EntityDef<typeof hhmcInvoiceLines> = {
   labelPlural: 'Invoice lines',
   table: hhmcInvoiceLines,
   ...invoices,
-  archiveGuard: (s, row) => invoiceLineLocked(s, row),
-  restoreGuard: (s, row) => invoiceLineLocked(s, row),
+  // A void invoice's lines may be archived too (so a void invoice can be purged in the end).
+  archiveGuard: (s, row) => invoiceLineLocked(s, row, ['draft', 'void']),
+  restoreGuard: (s, row) => invoiceLineLocked(s, row, ['draft']),
   // Whatever path removed or restored the line, the draft's totals follow (review: no stale total).
   afterArchiveOrRestore: async (s, row) => {
     await repriceDraftInvoice(s, String(row.invoiceId));
@@ -301,9 +302,9 @@ export const invoiceLineEntity: EntityDef<typeof hhmcInvoiceLines> = {
   immutableFields: ['invoiceId'],
 };
 
-async function invoiceLineLocked(s: Scope, row: Record<string, unknown>): Promise<string | null> {
+async function invoiceLineLocked(s: Scope, row: Record<string, unknown>, allowed: string[]): Promise<string | null> {
   const [invoice] = await s.db.select({ status: hhmcInvoices.status }).from(hhmcInvoices).where(and(s.where(hhmcInvoices, 'include'), eq(hhmcInvoices.id, String(row.invoiceId)))).limit(1);
-  return invoice && invoice.status !== 'draft' ? 'Only the lines of a draft invoice can be changed.' : null;
+  return invoice && !allowed.includes(invoice.status) ? 'Only the lines of a draft invoice can be changed.' : null;
 }
 
 /**

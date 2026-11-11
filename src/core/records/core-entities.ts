@@ -147,6 +147,7 @@ const ownedBySubject = (what: string) => async (_s: unknown, row: Record<string,
 
 export const appointmentEntity: EntityDef<typeof appointments> = {
   archiveGuard: ownedBySubject('appointment'),
+  restoreGuard: ownedBySubject('appointment'),
   key: 'core.appointment',
   label: 'appointment',
   labelPlural: 'Appointments',
