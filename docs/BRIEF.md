@@ -25,7 +25,7 @@ turns over every year and builds mostly with Claude. Clever code that is hard to
   login, users, roles, customers, payments, scheduling, notifications, files, the activity log and
   analytics. Each business is a module on top of the core, and its data stays strictly separate.
 - **Module order:** #1 Hired Hands Moving Company (HHMC), #2 Student Agencies Real Estate (SARE).
-  **Do NOT build HHMC or Real Estate features.** Scaffold their modules only.
+  **Do NOT build Real Estate features.** Scaffold its module only. *(Updated Phase 5, 11 Nov 2026: the CTO agreed HHMC's requirements — `docs/hhmc-analysis/movegistics-reference.md`, §10 as requirements — and cleared building the HHMC module. See DECISIONS P5-0.)*
 - **Individual accounts.** Every person has their own account and is assigned to one or more
   businesses, with a role in each.
 - **Roles (locked):**
@@ -57,7 +57,7 @@ distinguishable in the sidebar and record final values in `DECISIONS.md`.
 
 | # | Name | Code | Accent | Description | Module status |
 |---|------|------|--------|-------------|---------------|
-| 1 | Hired Hands Moving Company | HHMC | blue `#1F4E9C` (orange `#F28C28` secondary) | Student moving company | Module #1, scaffold only |
+| 1 | Hired Hands Moving Company | HHMC | blue `#1F4E9C` (orange `#F28C28` secondary) | Student moving company | Module #1, built in Phase 5 |
 | 2 | Student Agencies Real Estate | SARE | slate gray `#5A5A5A` | Leasing and management of SAI's owned and affiliated properties: apartments, commercial spaces, eHub (replacing AppFolio) | Module #2, scaffold only |
 | 3 | Big Red Shipping & Storage | BRSS | red `#E2231A` on black | Shipping and storage for the Cornell community; Cornell's preferred vendor | Proof module (Phase 4) |
 | 4 | The Cornellian | CORN | near-black `#1A1A1A` | Cornell University's official yearbook | scaffold only |

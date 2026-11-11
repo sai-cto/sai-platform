@@ -34,6 +34,7 @@ Locally you sign in with **dev login**: the login page lists fake test users, on
 | Tech team | `tech@sai.example` | Everything except permanent delete and platform settings |
 | Executive | `ceo@sai.example` | Read-only view of every business |
 | Business admin | `brss.admin@sai.example` (one per business: `hhmc.admin@…`, `sare.admin@…` …) | Their own business only |
+| HHMC general manager | `hhmc.admin@sai.example` | Hired Hands: open **Hired Hands Moving Company → App** for leads, jobs, schedule, invoices |
 | Business staff | `brss.staff@sai.example` | Their own business, limited permissions |
 | Staff with nothing granted | `brss.newhire@sai.example` | Almost nothing — shows what "limited" means |
 | Two businesses | `multi@sai.example` | Admin of Tutoring, staff of Bigger Beds |
@@ -53,6 +54,9 @@ Dev login only exists when `AUTH_DEV_LOGIN=true` and the app is not running in p
 | `npm run db:migrate` | Apply migrations to the dev and test databases |
 | `npm run db:reset` | Wipe the local dev database and re-seed it |
 | `npm run docs:permissions` | Regenerate `docs/PERMISSIONS.md` after changing permissions |
+| `npm run test:e2e:demo` | Browser tests of the hosted demo, locally (production build in demo mode) |
+| `npm run hhmc:automations` | Send Hired Hands' due automatic emails (no scheduler yet) |
+| `npm run demo:seed` | Hosted demo only: wipe and re-seed the demo database (see `docs/DEPLOY-DEMO.md`) |
 | `npm run secret-scan` | Check that no credential is about to be committed |
 
 ## Rules for this repository
@@ -72,5 +76,7 @@ Dev login only exists when `AUTH_DEV_LOGIN=true` and the app is not running in p
 | [`docs/PERMISSIONS.md`](docs/PERMISSIONS.md) | You need to know who can do what |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | You wonder why something is the way it is |
 | [`docs/HANDOFF.md`](docs/HANDOFF.md) | You are taking over the project |
+| [`docs/DEPLOY-DEMO.md`](docs/DEPLOY-DEMO.md) | You want to put the HHMC test site online |
+| [`src/modules/hhmc/README.md`](src/modules/hhmc/README.md) | You are working on Hired Hands (rules with sources) |
 | [`src/modules/brss/README.md`](src/modules/brss/README.md) | You are working on the BRSS module (the first real one) |
 | [`docs/brss-analysis/`](docs/brss-analysis/) | You want to know how the old BRSS Salesforce system behaves |

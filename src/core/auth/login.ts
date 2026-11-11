@@ -16,6 +16,7 @@ import { microsoftProvider } from './providers/microsoft';
 import type { ExternalIdentity, OAuthProvider } from './providers/types';
 import { createSession, revokeSession, type NewSession } from './session';
 import { isUuid } from '../ids';
+import { checkDemoPassword, isDemoMode } from '../demo/demo';
 
 export const OAUTH_PROVIDERS: OAuthProvider[] = [microsoftProvider, googleProvider];
 
@@ -25,7 +26,8 @@ export function getOAuthProvider(id: string): OAuthProvider | undefined {
 
 /** The pick-a-user login exists for local development only. It can never be on in production. */
 export function isDevLoginEnabled(): boolean {
-  return process.env.AUTH_DEV_LOGIN === 'true' && process.env.NODE_ENV !== 'production';
+  // Never on the hosted demo, never in production, whatever AUTH_DEV_LOGIN says.
+  return process.env.AUTH_DEV_LOGIN === 'true' && process.env.NODE_ENV !== 'production' && !isDemoMode();
 }
 
 export type DevLoginUser = { id: string; name: string; email: string; platformRole: string | null };
@@ -103,6 +105,25 @@ export async function loginWithDev(userId: string): Promise<NewSession> {
     throw new UnauthenticatedError();
   }
   return startSession(userId, 'dev');
+}
+
+/**
+ * Demo mode only: email + password of an account listed in DEMO_ACCOUNTS (src/core/demo).
+ * The account must also exist as an active user (created by `npm run demo:prepare`).
+ */
+export async function loginWithDemoPassword(email: string, password: string): Promise<NewSession> {
+  if (!isDemoMode()) throw new ForbiddenError('auth.demo_login', 'Password sign-in is only for the demo site.');
+  const account = checkDemoPassword(email.slice(0, 200), password.slice(0, 200));
+  if (!account) {
+    await recordFailedSignIn('demo-password', 'wrong email or password');
+    throw new UnauthenticatedError('Wrong email or password.');
+  }
+  const [user] = await getDb().select({ id: users.id }).from(users).where(eq(users.email, account.email)).limit(1);
+  if (!user) {
+    await recordFailedSignIn('demo-password', 'account not set up (run demo:prepare)');
+    throw new UnauthenticatedError('Wrong email or password.');
+  }
+  return startSession(user.id, 'demo-password');
 }
 
 /** Completes a Microsoft or Google sign-in. */

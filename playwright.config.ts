@@ -37,6 +37,9 @@ export default defineConfig({
       FILE_STORAGE_DIR: './storage/e2e',
       APP_URL: `http://localhost:${PORT}`,
       NEXT_TELEMETRY_DISABLED: '1',
+      // The dev server compiles every page the tests open; with HHMC's pages it reached Next's
+      // default memory threshold and restarted mid-run (logins then failed). More heap, no restart.
+      NODE_OPTIONS: '--max-old-space-size=6144',
     },
   },
 });

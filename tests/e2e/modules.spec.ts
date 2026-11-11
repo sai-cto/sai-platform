@@ -16,13 +16,9 @@ test('every business shows its module in the App tab', async ({ page }) => {
   }
 });
 
-test('Hired Hands and Real Estate show "pending requirements" and nothing else', async ({ page }) => {
+test('Real Estate shows "pending requirements" and nothing else; unknown portal paths are "not found"', async ({ page }) => {
+  // (Hired Hands left the pending list in Phase 5; its portal is tested in hhmc.spec.ts.)
   await loginAs(page, SEED.hhmcAdmin);
-  await page.goto('/console/hhmc/live/app');
-  await expect(page.getByText('Not built yet', { exact: true })).toBeVisible();
-  await expect(page.getByRole('listitem').filter({ hasText: 'Pending requirements' })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'App sections' })).toHaveCount(0);
-  // Unknown paths inside the portal are "not found".
   expect((await page.request.get('/console/hhmc/live/app/moves')).status()).toBe(404);
   expect((await page.request.get('/console/hhmc/live/app/anything/else')).status()).toBe(404);
 

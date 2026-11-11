@@ -23,6 +23,7 @@ export async function act(fn: () => Promise<string | void>): Promise<ActionResul
     const message = await fn();
     // Whatever changed, the console's pages should show it on the next render.
     revalidatePath('/console', 'layout');
+    revalidatePath('/l', 'layout'); // customer-link pages (src/app/l)
     return { ok: true, message: message ?? undefined };
   } catch (error) {
     unstable_rethrow(error); // lets redirect() and notFound() do their job

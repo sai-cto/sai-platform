@@ -86,6 +86,24 @@ New staff members start with: `customers.read`, `scheduling.read`, plus their mo
 Every module permission follows one of two standard rows: a `read` permission is ✅ for super admin,
 tech, executive and business admin and 🔑 for staff; a `write` permission is the same except — for executive.
 
+### Hired Hands Moving Company (`hhmc`)
+
+| Action | Key | Type | Super admin | Tech team | Executive | Business admin | Business staff |
+|---|---|---|:-:|:-:|:-:|:-:|:-:|
+| See leads *(on by default for new staff)* | `hhmc.leads.read` | read | ✅ | ✅ | ✅ | ✅ | 🔑 |
+| Add and change leads, disqualify and convert them *(on by default for new staff)* | `hhmc.leads.write` | write | ✅ | ✅ | — | ✅ | 🔑 |
+| See jobs, quotes, estimates and job days *(on by default for new staff)* | `hhmc.jobs.read` | read | ✅ | ✅ | ✅ | ✅ | 🔑 |
+| Change jobs: details, quote, job days, notes, calls, stage *(on by default for new staff)* | `hhmc.jobs.write` | write | ✅ | ✅ | — | ✅ | 🔑 |
+| Book a job and release a booking | `hhmc.jobs.book` | write | ✅ | ✅ | — | ✅ | 🔑 |
+| Send, resend and void estimates *(on by default for new staff)* | `hhmc.estimates.write` | write | ✅ | ✅ | — | ✅ | 🔑 |
+| See invoices *(on by default for new staff)* | `hhmc.invoices.read` | read | ✅ | ✅ | ✅ | ✅ | 🔑 |
+| Create, send and void invoices | `hhmc.invoices.write` | write | ✅ | ✅ | — | ✅ | 🔑 |
+| See the price catalog, discounts, templates and automation rules *(on by default for new staff)* | `hhmc.catalog.read` | read | ✅ | ✅ | ✅ | ✅ | 🔑 |
+| Change the price catalog, discounts, templates and automation rules | `hhmc.catalog.write` | write | ✅ | ✅ | — | ✅ | 🔑 |
+| Send due automation emails now (tech team only; no scheduler yet) | `hhmc.automations.run` | write | ✅ | ✅ | — | ✅ | 🔑 |
+| Customer link only: review, sign and pay the deposit on one estimate | `hhmc.customer.estimate` | write | ✅ | ✅ | — | ✅ | 🔑 |
+| Customer link only: pay one invoice | `hhmc.customer.invoice` | write | ✅ | ✅ | — | ✅ | 🔑 |
+
 ### Big Red Shipping & Storage (`brss`)
 
 | Action | Key | Type | Super admin | Tech team | Executive | Business admin | Business staff |

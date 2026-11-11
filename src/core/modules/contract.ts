@@ -52,6 +52,20 @@ export type EntityDef<T extends TenantTable = TenantTable> = {
   /** Fields that are set when the record is created and can never be changed afterwards. */
   immutableFields?: string[];
   /**
+   * Module rules about archiving ("delete"). Return a reason to refuse, or null to allow.
+   * archiveRecord() calls it for EVERY archive — the Data tab, imports, the module's own
+   * services — so a rule like "a signed estimate is never archived" cannot be bypassed.
+   * Absent = always archivable.
+   */
+  archiveGuard?: (s: Scope, row: Record<string, unknown>) => Promise<string | null>;
+  /** The same for restoring an archived row (a restore can break rules too). */
+  restoreGuard?: (s: Scope, row: Record<string, unknown>) => Promise<string | null>;
+  /**
+   * Runs after this row is archived or restored, in the same transaction, for anything that
+   * depends on it (for example re-pricing the invoice a line belongs to).
+   */
+  afterArchiveOrRestore?: (s: Scope, row: Record<string, unknown>) => Promise<void>;
+  /**
    * Clean-up outside the database after a row is permanently deleted (for example removing
    * a stored file's bytes). Most entities do not need this.
    */
@@ -111,6 +125,20 @@ export type SettingField = {
   help?: string;
 };
 
+/**
+ * A kind of customer link (src/core/links): a signed, expiring link about one record that
+ * someone without an account can open, e.g. "review and sign this estimate".
+ */
+export type LinkPurposeDef = {
+  /** Must start with "<module key>.". */
+  key: string;
+  /**
+   * Exactly what the link may do. Module permissions, plus at most the core permissions in
+   * LINK_ALLOWED_CORE_PERMISSIONS (src/core/links/links.ts). Checked by validateRegistry().
+   */
+  permissions: string[];
+};
+
 export type ModuleManifest = {
   /** Must equal the slug of the business this module serves (the name used in its URLs). */
   key: string;
@@ -130,6 +158,14 @@ export type ModuleManifest = {
     /** Absent = this module has no field (mobile crew) portal yet. */
     field?: PortalDef;
   };
+  /**
+   * Work to run on a schedule (hosting's cron calls /api/cron/scheduled). Runs once per
+   * business and per mode (live, test) as the system actor. `settingKey` names a boolean
+   * module setting that must be on, so a business switches it on deliberately.
+   */
+  scheduledTasks?: { key: string; settingKey?: string; run: (s: Scope, now: Date) => Promise<string> }[];
+  /** Customer links this module hands out. Served at /l/<token>/… from portals.customer. */
+  linkPurposes?: LinkPurposeDef[];
   widgets: WidgetDef[];
   /** The module's main unit of work, counted on the executive dashboard (for example "Orders"). */
   workItem?: {

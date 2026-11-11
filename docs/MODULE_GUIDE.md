@@ -94,9 +94,10 @@ overwrites the scaffold's `manifest.ts` and `README.md` with the template's; tha
 you are replacing the `scaffoldModule(...)` call with a full `defineModule({ ... })`. Keep the
 export name the scaffold had (for example `tutModule`), so `registry.ts` does not change.
 
-Two businesses are held back on purpose: a test (`tests/integration/modules.test.ts`, "…are
-scaffolds whose scope is pending requirements") fails if anything is built in their folders.
-Remove a business from that test only when the CTO says its requirements are agreed.
+One business is held back on purpose: a test (`tests/integration/modules.test.ts`, "Real
+Estate is a scaffold whose scope is pending requirements") fails if anything is built in its
+folder. Remove it from that test only when the CTO says its requirements are agreed (HHMC was
+removed in Phase 5).
 
 ## Server actions in a module
 
@@ -161,6 +162,27 @@ first such portal is built: its server actions need their own version of
 `requireStaffPortalContext()` in `src/server/session.ts` (that one checks the *staff* portal's
 switch and the staff "open the portal" permission). What is **not** decided is how
 customers sign in (see `docs/HANDOFF.md`). Until it is, those portals use the console's login.
+
+## Customer links (no account)
+
+For a customer who must do one thing without signing in (sign an estimate, pay an invoice):
+
+1. Add `portals.customer` with a route whose permission the link will hold.
+2. Add `linkPurposes: [{ key: '<key>.<thing>', permissions: [...] }]`: only your module's
+   permissions plus the short core list in `src/core/links/allowed.ts`.
+3. Make the link in a service with `signLink(ctx, { purpose, subjectId, expiresAt })`.
+4. In every customer-side service, refuse unless `linkFor(ctx, purpose, recordId)`; a page or
+   action gets its context from `requireLinkContext(token)` (`@/server/session`), never from a
+   session. See `src/modules/hhmc/services/estimates.ts` and `pages/customer-page.tsx`.
+
+## Rules about archiving, and scheduled work
+
+- **`archiveGuard`** on an entity: return a reason to refuse archiving a row (for example a
+  signed or paid record), or null. It applies to every archive, the Data tab's included.
+  Seed at least two rows the guard allows: the automatic tests archive one.
+- **`scheduledTasks`** in the manifest: `{ key, settingKey?, run(s, now) }`. It runs on the
+  hosting's schedule for every business and mode. Gate anything that sends or charges behind a
+  yes/no setting that is off by default.
 
 ## Common mistakes
 

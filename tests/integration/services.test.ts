@@ -467,7 +467,7 @@ describe('flags and module settings', () => {
   });
 
   it('a portal the module does not define cannot be switched on', async () => {
-    const tech = await ctxFor(USERS.tech, 'hhmc');
+    const tech = await ctxFor(USERS.tech, 'cp'); // a scaffold: it has no customer or field portal
     const config = await getModuleConfig(tech);
     expect(config.portals).toEqual({ staff: true, customer: false, field: false });
     await expect(setPortalEnabled(tech, 'customer', true)).rejects.toBeInstanceOf(ValidationError);

@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: Phase 4 (BRSS staff portal) built, verified and looked at as every role; independent review gate running._
+_Last updated: Phases 4 and 5 merged into `main` (11 Nov 2026). The HHMC test site is ready to deploy (`docs/DEPLOY-DEMO.md`); waiting for the CTO to deploy it._
 
 ## In plain English
 
@@ -31,6 +31,13 @@ and trucks, the price list with storage terms, and zip zones. It follows the rul
 old Salesforce system; each rule is listed with its Salesforce source in
 `src/modules/brss/RULES.md`. Screenshots: `docs/screenshots/phase-4/`.
 
+**Hired Hands (HHMC) now has its own app** (Phase 5): leads, one Job page per move (quote with
+live totals, estimates, booking, job days, invoices, payments, notes and calls), one schedule
+with day/week/month views, invoices, and settings. Customers review, sign and pay the deposit
+from an emailed link without an account, and pay their invoice the same way. Automatic emails
+(follow-ups, receipts, reminders) are rules in a table; with no scheduler yet, the tech team
+sends due ones with a button. Rules and sources: `src/modules/hhmc/README.md`.
+
 **What is not real yet:** BRSS's prices, zones and rates are invented, no card company or email
 service is connected, and twelve questions about how BRSS works were answered conservatively
 without a BRSS manager (`src/modules/brss/README.md`, "Decisions waiting for the CTO").
@@ -40,7 +47,8 @@ without a BRSS manager (`src/modules/brss/README.md`, "Decisions waiting for the
 - **Phase 1 — shared core.** ✅ Done. Passed the independent review gate after four rounds (see below) and merged to `main`.
 - **Phase 2 — SAI Console.** ✅ Done. UI gate done (110 screenshots); passed the independent review gate after three rounds (see below) and merged to `main`.
 - **Phase 3 — module scaffolds.** ✅ Done. UI gate done (38 screenshots); passed the independent review gate after two rounds (see below) and merged to `main`.
-- **Phase 4 — BRSS proof module**, on branch `phase-4-brss`: built; UI gate done (86 screenshots); independent review gate running.
+- **Phase 4 — BRSS proof module.** ✅ Merged to `main` (its own review gate had not finished; see DECISIONS R-22).
+- **Phase 5 — HHMC module and test site.** ✅ Merged to `main`. Next: the CTO deploys the test site, then a live smoke test.
 
 ## Acceptance criteria (final)
 
@@ -63,7 +71,8 @@ without a BRSS manager (`src/modules/brss/README.md`, "Decisions waiting for the
 | 1 — Shared core | ✅ merged to `main` |
 | 2 — SAI Console | ✅ merged to `main` |
 | 3 — Module scaffolds | ✅ merged to `main` |
-| 4 — BRSS proof module | 🔨 built, review gate running |
+| 4 — BRSS proof module | ✅ merged to `main` |
+| 5 — HHMC module + test site | ✅ merged to `main`; test site waiting to be deployed |
 
 ## Last verification
 
@@ -220,3 +229,88 @@ and while driving the screens from the browser tests:
 One thing to know when running the app locally: starting a second `npm run dev` (or the browser
 tests) before an earlier dev server has fully stopped can make pages reload in a loop. Stop the
 old one first (`pkill -f next-server`).
+
+### Phase 5 — HHMC module (11 Nov 2026)
+
+Built on `phase-4-brss` (not yet merged into `main`; the CTO chose to base this branch on it)
+and pushed to `claude/practical-brahmagupta-1o62aq`. **Stops before merge**: merge
+`phase-4-brss` first, then this branch.
+
+```
+npm run check
+  tsc --noEmit            clean
+  eslint                  clean
+  vitest run              Test Files 14 passed (14) · Tests 467 passed (467)
+                          (hhmc-pricing 8: ref §4.2 examples A, B, C to the cent; hhmc 37: full lifecycle,
+                           drip cancellation, v2 voids v1, permission refusals, sandbox/live, customer links,
+                           review regressions)
+  secret scan             clean
+npm run test:e2e          50 passed (auth 11 · brss 6 · console 12 · hhmc 3 · isolation 12 · modules 6)
+npm run docs:permissions  regenerated (13 HHMC permissions)
+```
+
+UI gate: 70 screenshots in `docs/screenshots/phase-5/` (35 screens × 1440px and 375px): HHMC admin
+(dashboard, leads, lead, new lead, jobs, new job, the Job page at four stages, schedule month /
+week / day, invoices, past due, an open and a paid invoice, settings, Overview tab, test mode),
+HHMC staff (no Book button, read-only settings), tech (Run due emails, module registry),
+executive and another business's admin ("not found"), and the customer pages (estimate summary,
+full estimate, sign, confirmation, invoice pay, tampered link "not found"). Every page answered as
+expected and none scrolls sideways at 375px. Found and fixed while looking: header cells with
+screen-reader-only text made five pages scroll sideways on a phone; the month calendar cut off
+"M / T"; the quote stayed editable after signing; seeded deposits did not appear under Payments.
+
+Review gate (independent reviewer subagent, no access to the author's reasoning):
+
+| Round | Result | What happened next |
+|---|---|---|
+| 1 | 0 critical · 1 high · 5 medium · 8 minor | All fixed but one (Data-tab archive bypassing module rules: a core design question, mitigated in the module, recorded below). High: two deposit payments at the same moment could both charge (the estimate was read before the lock). 10 regression tests. |
+| 2 | 0 critical · 0 high · 2 medium · 6 minor | All fixed: Lost/Cancel now share the estimate lock with signing and deposits; Net 30/60 invoices get their past-due reminder after the due date; card-fee display follows the charge; 5 regression tests incl. a static check that customer-link actions call only link services. |
+| 3 | **Nothing above minor** (2 minor). Gate passed. | Both fixed: a retry keeps its payment key unless the card was refused or the payment succeeded; the past-due deferral has its own test. |
+
+Also found while verifying: the e2e dev server reached Next's memory threshold with HHMC's pages
+and restarted mid-run (logins then failed); `playwright.config.ts` gives it more heap.
+
+Known, left for the CTO: the console's Data tab can archive any record its permission allows,
+which bypasses module rules (for example archiving a signed estimate). HHMC counts archived signed
+estimates and invoices so it cannot be tricked into replacing or double-billing, but a general
+fix (an "archivable" flag on entities) is a core change.
+
+### Phase 5, part 2 — HHMC prototype on `main`, hosted test site (11 Nov 2026)
+
+The CTO cleared: merge to `main`, close the Data-tab archive hole, and prepare a hosted test
+site for HHMC's managers.
+
+- **Phase 4 merged into `main`** (`48c2b38`, merge commit), then this branch synced with it.
+- **H4 (the 4%)**: the card fee is charged on card payments only; new quotes default to no
+  service tax and card fee on (manager settings). Examples A/B/C still hold to the cent.
+- **Archive hole closed** (core): `archiveGuard`, `restoreGuard`, `afterArchiveOrRestore` on
+  entities, enforced in the record functions; HHMC, BRSS and core rules
+  (`tests/integration/archive-guard.test.ts`).
+- **Hosted test site** (demo mode, Vercel + Neon): access password, demo accounts from env vars,
+  TEST SITE banner, fake payments and email, no dev login (`docs/DEPLOY-DEMO.md`,
+  `npm run test:e2e:demo`). Manager guide and message: `docs/hhmc-analysis/`.
+- **Scheduler**: daily cron behind a manager setting that is off by default.
+
+```
+npm run check             tsc, eslint clean · Test Files 16 passed · Tests 481 passed · secret scan clean
+npm run test:e2e          50 passed
+npm run test:e2e:demo     3 passed (production build in demo mode: gate, accounts, no dev login,
+                          a full move with the customer signing and paying through links)
+```
+
+UI gate: `docs/screenshots/phase-5b/` (38 screenshots, 1440px and 375px): the changed Job,
+invoice and customer screens (cash total + "paid by card"), the console Settings tab with the new
+settings, and the demo site (access password, wrong password, demo sign-in, GM dashboard, jobs,
+a customer link page with the banner). Nothing scrolls sideways; the banner is on every demo page.
+
+Review gate (fresh independent reviewer):
+
+| Round | Result | What happened next |
+|---|---|---|
+| 1 | 0 critical · 1 high · 4 medium · 7 minor | All fixed (DECISIONS P5-27 … P5-29). High: archiving a draft invoice's line from the Data tab left its total stale (a customer could be overcharged). |
+| 2 | 0 critical · 0 high · 2 medium · 6 minor | All fixed (P5-29, P5-30). Medium: removing a demo account would have failed the next deploy (the app role may not delete sessions: revoked instead); the "empty database" check only looked for one table (now: no tables anywhere, or the database's own demo mark). |
+| 3 | **Nothing above minor** (5 minor). Gate passed. | All five fixed (stricter emptiness check, quoting, the owner role refused as the app's connection, test and doc wording). |
+
+`demo:prepare` was also run by hand against a scratch database: refused while it held an
+unrelated table (which survived, even with reset on), refused mismatched URLs, marked and seeded
+an empty database, and a reset wiped and re-seeded it.

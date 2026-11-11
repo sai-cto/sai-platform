@@ -156,6 +156,9 @@ The first real module is BRSS (`src/modules/brss/`): 14 tables, eight permission
 Read its `README.md` and then `rules.ts` to see how a module is put together. The other eight
 are scaffolds: one `scaffoldModule()` call each.
 
+HHMC (`src/modules/hhmc/`) is the second real module: 14 tables, the Job page, and customer
+pages opened through **customer links** (below).
+
 Two helpers exist for needs every real module meets sooner or later:
 
 - `takeLock(scope, name)` (`src/core/db/lock.ts`): "one at a time". Two requests that take the
@@ -163,6 +166,36 @@ Two helpers exist for needs every real module meets sooner or later:
   moment would both act on the old state (two payments for one order).
 - `nextRecordNumber(scope, entity, column, prefix)` (`src/core/records/numbering.ts`): running
   numbers such as `O-000123`, counted separately per business and per live/test mode.
+
+## Customer links (`src/core/links`)
+
+A signed, expiring, single-purpose link for someone without an account ("review and sign this
+estimate"). The token carries the business, live/test, the purpose, the record id and the
+expiry, signed with `LINK_SIGNING_SECRET`. `buildLinkContext(token)` gives a context whose actor
+is "Customer (link)" (role `customer_link`) and whose permissions are exactly those the module
+declared for that purpose in `linkPurposes`; `ctx.link` names the one record. Module services
+must check `linkFor(ctx, purpose, id)` before acting. Pages are served at `/l/<token>/…` from the
+module's `portals.customer`. Nothing is stored; a link dies when it expires, when its record is
+no longer in the right state, or when the secret changes.
+
+## Archiving rules a module cannot be talked out of
+
+An entity may declare `archiveGuard(s, row)`: a reason to refuse archiving, or null.
+`archiveRecord()` calls it on every path (Data tab, imports, the module's own services), so a
+rule like "a signed estimate is never archived" holds everywhere.
+
+## Demo mode (`src/core/demo`, the hosted test site)
+
+`DEMO_MODE=true` puts a shared access password in front of the whole site (`src/proxy.ts`). It
+also turns on email + password sign-in for the accounts in `DEMO_ACCOUNTS` (passwords only in
+the environment, never in the database), a "TEST SITE" banner, forced mock payments and log-only
+email, and switches the dev login off. Deployment: `docs/DEPLOY-DEMO.md`.
+
+## Scheduled work
+
+A module may declare `scheduledTasks` (optionally gated by a yes/no module setting).
+`runScheduledTasks()` (`src/core/modules/scheduled.ts`) runs them for every business, live and
+test, as the system actor; the hosting's cron calls `/api/cron/scheduled` with `CRON_SECRET`.
 
 ## The console (`src/app/console`)
 
@@ -178,6 +211,7 @@ Two helpers exist for needs every real module meets sooner or later:
 /console/[business]/[mode]/activity
 /console/[business]/people | settings | test-mode
 /portal/[business]/…  /field/[business]/…   Customer and field portal hosts ("not found" until enabled)
+/l/[token]/…                             Customer link pages (src/core/links)
 ```
 
 How a page is built:

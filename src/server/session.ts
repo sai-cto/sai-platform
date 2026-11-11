@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { SESSION_COOKIE, findSessionUserId } from '@/core/auth/session';
 import { ForbiddenError, NotFoundError, UnauthenticatedError } from '@/core/errors';
+import { buildLinkContext } from '@/core/links/links';
 import { isPortalAvailable } from '@/core/modules/config';
 import {
   buildBusinessContext,
@@ -74,6 +75,20 @@ export async function requireStaffPortalContext(
   if (!ctx.permissions.has('business.app.use')) notFound();
   if (!(await isPortalAvailable(ctx.business.id, 'staff'))) notFound();
   return ctx;
+}
+
+/**
+ * The context for someone holding a customer link (src/core/links): no account, no cookie.
+ * A tampered, expired or switched-off link is a plain "not found". Customer-link pages and
+ * their server actions get their context ONLY from here, from the token in the URL.
+ */
+export async function requireLinkContext(token: string): Promise<BusinessContext> {
+  try {
+    return await buildLinkContext(token);
+  } catch (error) {
+    if (error instanceof NotFoundError || error instanceof ForbiddenError) notFound();
+    throw error;
+  }
 }
 
 /** Runs page code and turns "not found" / "forbidden" from the core into a 404 page. */

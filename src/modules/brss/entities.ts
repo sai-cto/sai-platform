@@ -3,6 +3,8 @@
  * the Data tab (browse, search, export, archive, restore, permanent delete), in test-mode
  * resets, and in the automatic isolation and audit tests.
  */
+import { and, eq } from 'drizzle-orm';
+import type { Scope } from '@/core/db/scope';
 import type { EntityDef } from '@/core/modules/contract';
 import { CORE, P } from './permissions';
 import {
@@ -21,6 +23,11 @@ import {
   brssZipZones,
   brssZoneRates,
 } from './schema';
+
+async function orderNotActive(s: Scope, orderId: string): Promise<string | null> {
+  const [order] = await s.db.select({ status: brssOrders.status }).from(brssOrders).where(and(s.where(brssOrders, 'include'), eq(brssOrders.id, orderId))).limit(1);
+  return order && order.status !== 'open' && order.status !== 'activated' ? 'The order is closed or cancelled: reopen it first.' : null;
+}
 
 const text = (value: unknown) => (value === null || value === undefined ? '' : String(value));
 const catalog = { readPermission: P.catalogRead, writePermission: P.catalogWrite };
@@ -134,6 +141,11 @@ export const orderEntity: EntityDef<typeof brssOrders> = {
   label: 'order',
   labelPlural: 'Orders',
   table: brssOrders,
+  // An order still in progress has articles, charges and appointments hanging off it.
+  archiveGuard: async (_s, row) =>
+    row.status === 'open' || row.status === 'activated'
+      ? 'Close or cancel the order before archiving it.'
+      : null,
   readPermission: P.ordersRead,
   writePermission: P.ordersWrite,
   titleOf: (row) => text(row.orderNumber),
@@ -174,6 +186,23 @@ export const orderArticleEntity: EntityDef<typeof brssOrderArticles> = {
   label: 'article on an order',
   labelPlural: 'Articles on orders',
   table: brssOrderArticles,
+  // Same rule as "take off the order" (services/articles.ts detachArticle).
+  archiveGuard: async (s, row) => {
+    const [paid] = await s.db
+      .select({ id: brssOrderItems.id })
+      .from(brssOrderItems)
+      .where(
+        and(
+          s.where(brssOrderItems),
+          eq(brssOrderItems.orderId, String(row.orderId)),
+          eq(brssOrderItems.articleId, String(row.articleId)),
+          eq(brssOrderItems.status, 'paid'),
+        ),
+      )
+      .limit(1);
+    return paid ? 'This article has paid charges on this order, so it cannot be taken off.' : null;
+  },
+  restoreGuard: async (s, row) => orderNotActive(s, String(row.orderId)),
   readPermission: P.articlesRead,
   writePermission: P.ordersWrite,
   titleOf: () => 'article on an order',
@@ -191,6 +220,10 @@ export const orderItemEntity: EntityDef<typeof brssOrderItems> = {
   label: 'charge',
   labelPlural: 'Order charges',
   table: brssOrderItems,
+  // P4-3: a paid charge is never touched again.
+  archiveGuard: async (_s, row) => (row.status === 'paid' ? 'A paid charge cannot be removed.' : null),
+  // A charge cannot come back on an order that is closed or cancelled.
+  restoreGuard: async (s, row) => orderNotActive(s, String(row.orderId)),
   readPermission: P.ordersRead,
   writePermission: P.ordersWrite,
   titleOf: (row) => text(row.description),

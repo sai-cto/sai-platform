@@ -354,5 +354,7 @@ test('BRSS numbers reach the Overview tab and the executive dashboard', async ({
   const row = page.getByRole('row').filter({ hasText: 'Big Red Shipping & Storage' });
   // The work-items column counts BRSS orders; businesses without a built module show a dash.
   await expect(row.getByTestId('work-items')).toHaveText(/^\d+\s*orders$/);
-  await expect(page.getByRole('row').filter({ hasText: 'Hired Hands Moving Company' }).getByTestId('work-items')).toHaveText('—');
+  await expect(page.getByRole('row').filter({ hasText: 'Student Agencies Real Estate' }).getByTestId('work-items')).toHaveText('—');
+  // Hired Hands is built (Phase 5): it counts its jobs.
+  await expect(page.getByRole('row').filter({ hasText: 'Hired Hands Moving Company' }).getByTestId('work-items')).toHaveText(/^\d+\s*jobs$/);
 });

@@ -190,6 +190,9 @@ export async function archiveRecord<T extends TenantTable>(
 ): Promise<void> {
   authorize(s.ctx, entity.writePermission);
   const before = await findInScope(s, entity.table, id, 'exclude');
+  // The module's own rules about archiving apply on every path (Data tab included).
+  const refusal = entity.archiveGuard ? await entity.archiveGuard(s, before) : null;
+  if (refusal) throw new ValidationError(refusal);
   const now = new Date();
   await txOf(s)
     .update(entity.table)
@@ -203,6 +206,7 @@ export async function archiveRecord<T extends TenantTable>(
     before: { archivedAt: null },
     after: { archivedAt: now.toISOString() },
   });
+  if (entity.afterArchiveOrRestore) await entity.afterArchiveOrRestore(s, before);
 }
 
 export async function restoreRecord<T extends TenantTable>(
@@ -212,6 +216,8 @@ export async function restoreRecord<T extends TenantTable>(
 ): Promise<void> {
   authorize(s.ctx, entity.writePermission);
   const before = await findInScope(s, entity.table, id, 'only');
+  const refusal = entity.restoreGuard ? await entity.restoreGuard(s, before) : null;
+  if (refusal) throw new ValidationError(refusal);
   await txOf(s)
     .update(entity.table)
     .set({ archivedAt: null, archivedBy: null } as never)
@@ -227,6 +233,7 @@ export async function restoreRecord<T extends TenantTable>(
     },
     after: { archivedAt: null },
   });
+  if (entity.afterArchiveOrRestore) await entity.afterArchiveOrRestore(s, before);
 }
 
 /** When an archived record becomes eligible for permanent deletion. */

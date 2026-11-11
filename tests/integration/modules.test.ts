@@ -38,8 +38,9 @@ describe('the registered modules', () => {
     for (const entity of mod.entities) expect(entitiesFor(slug)).toContain(entity);
   });
 
-  it('HHMC and Real Estate are scaffolds whose scope is "pending requirements" — nothing is built for them', () => {
-    for (const slug of ['hhmc', 'sare']) {
+  // HHMC left this list in Phase 5: the CTO agreed its requirements (docs/DECISIONS.md, P5-0).
+  it('Real Estate is a scaffold whose scope is "pending requirements" — nothing is built for it', () => {
+    for (const slug of ['sare']) {
       const mod = getModule(slug)!;
       expect(mod.status).toBe('scaffold');
       expect(mod.plannedScope).toEqual(['Pending requirements']);
@@ -58,7 +59,10 @@ describe('the registered modules', () => {
     expect(report.problems).toEqual([]);
     expect(report.registered).toBe(SEED_BUSINESSES.length);
     expect(report.installed.every((row) => row.manifest && row.portals.staff.built && row.portals.staff.on)).toBe(true);
-    expect(report.installed.every((row) => !row.portals.customer.built && !row.portals.field.built)).toBe(true);
+    // A customer portal is built exactly where a module defines one (HHMC's customer links); no field portal yet.
+    for (const row of report.installed)
+      expect(row.portals.customer.built).toBe(Boolean(getModule(row.moduleKey ?? "")?.portals.customer));
+    expect(report.installed.every((row) => !row.portals.field.built)).toBe(true);
   });
 });
 
