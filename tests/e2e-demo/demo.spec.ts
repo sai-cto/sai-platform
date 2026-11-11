@@ -81,7 +81,7 @@ test('a manager runs one move from lead to paid; the customer signs and pays thr
   await page.getByRole('button', { name: 'Add lead' }).click();
   await page.getByRole('button', { name: 'Convert to job' }).click();
   await expect(page).toHaveURL(/\/app\/jobs\/[0-9a-f-]{36}$/);
-  await page.getByLabel('Item').selectOption({ label: '2 Men · $195.00/hour' });
+  await page.getByLabel('Item', { exact: true }).selectOption({ label: '2 Men · $195.00/hour' });
   await page.getByLabel('Qty (hour)').fill('2');
   await page.getByRole('button', { name: 'Add line' }).click();
   await expect(page.getByText('Line added.')).toBeVisible();
@@ -125,6 +125,6 @@ test('staff can run a move but cannot manage people', async ({ page }) => {
   await passGate(page);
   await signIn(page, 'staff@demo.example', 'test-staff-password-1');
   await page.goto(`${APP}/jobs`);
-  await expect(page.getByRole('heading', { name: 'Jobs', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Work requests', level: 1 })).toBeVisible();
   expect((await page.request.get('/console/hhmc/people')).status()).toBe(404);
 });
