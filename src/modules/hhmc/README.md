@@ -2,8 +2,9 @@
 
 The staff portal and customer pages that replace Movegistics for one move's whole life:
 **Lead → Job → Quote → customer e-sign + deposit → Booking → Schedule → Invoice → Payment.**
-It rebuilds HHMC's workflow, not Movegistics' screens: one record per move, five sections
-in the nav (Dashboard, Leads, Jobs, Schedule, Invoices) plus Settings.
+It rebuilds HHMC's workflow, not Movegistics' screens: one record per move. The nav uses the
+managers' own words (Nov 2026): Dashboard, Leads, Estimates, Work Requests (the jobs), Contacts,
+Calendar, Invoices, Settings.
 
 Sources: `docs/hhmc-analysis/movegistics-reference.md` ("ref"; its §10 recommendations are
 requirements) and the Phase 5 build prompt from the CTO ("prompt"). The plan is in
@@ -83,7 +84,7 @@ mock card provider (see "Before going live").
 | Deposit = 20% × (subtotal + tax); paid by card + the fee % on the deposit (only when the estimate has the card fee on) | ref §4.2; prompt |
 | Integer cents, half-up | prompt |
 | Examples A ($709.80; $141.96), B ($2,406.01; $481.20), C ($202.80 − $40.56 = $162.24) | ref §4.2 — acceptance tests in `hhmc-pricing.test.ts` |
-| Discounts Friends & Family / Cornellian / Repeat Customer, 5% each | ref §4.3 |
+| Discounts Friends & Family / Repeat Customer, 5% each; Cornellian is a movers' rate $20/hr lower (estimate builder) | ref §4.3; managers Nov 2026 (P5C-9) |
 | Valuation Basic Coverage $0.60/lb at $0; initialed by the customer | ref §4.3, §7.3 |
 | The quote locks once an estimate is signed or the job is booked | ref §10 "pricing copied three times … can drift" |
 
@@ -172,3 +173,19 @@ catalog and templates. "Run due emails" is for the tech team only. Full matrix:
 Crew app, BOL, claims, long-distance trips, surveys and inventory, storage / billing / claims
 pipelines, multipliers, tariffs, SMS, commissions and payroll, canned reports, QuickBooks,
 RingCentral integration, importing Movegistics data.
+
+## Phase 5C: the managers' requirements and real data
+
+- **Estimate builder** (`services/builder.ts`, on the work-request page): load/drive/unload as 1 or 3
+  lines at the crew's rate; Cornellian rate; customer's own truck; local day fee vs long distance
+  (over the `longDistanceMiles` setting: day fee + per mile), per truck; materials; packing help;
+  valuation; notes on each location. A truck line already on the quote is replaced, never doubled.
+  Mileage: `services/maps.ts` (Google, only with `GOOGLE_MAPS_API_KEY`; otherwise typed in).
+- **Estimates** list with who made each, **Contacts** with "New estimate / work request" for repeat
+  customers, **Calendar** colour-coded (moves, estimates, work requests, invoices due), **dashboard**
+  with a date range where every number opens its list, **Settings** one page per area,
+  **branding** on customer pages and documents.
+- **Real data**: `npm run hhmc:import` (see `scripts/hhmc-import/index.ts`) loads Movegistics'
+  exports into the LOCAL database's live data and writes a reconciliation outside the repo.
+  Decisions P5C-1 … P5C-17; plan and gaps in `docs/hhmc-analysis/PLAN.md` (Phase 5C); going online:
+  `docs/hhmc-analysis/PRODUCTION-READINESS.md`.

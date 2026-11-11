@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: Phases 4 and 5 merged into `main` (11 Nov 2026). The HHMC test site is ready to deploy (`docs/DEPLOY-DEMO.md`); waiting for the CTO to deploy it._
+_Last updated: Phase 5C (11 Nov 2026): HHMC rebuilt around the managers' written requirements, and HHMC's real Movegistics history imported into the CTO's **local** database, reconciled to the cent. Nothing real is online._
 
 ## In plain English
 
@@ -314,6 +314,29 @@ Review gate (fresh independent reviewer):
 `demo:prepare` was also run by hand against a scratch database: refused while it held an
 unrelated table (which survived, even with reset on), refused mismatched URLs, marked and seeded
 an empty database, and a reset wiped and re-seeded it.
+
+### Phase 5C — HHMC on real data, the managers' requirements (11 Nov 2026)
+
+What changed for the managers: estimate builder (Cornellian rate, own truck, local vs long
+distance, materials, packing, location notes, manual mileage until a maps key exists); sidebar
+in their words (Leads, Estimates, Work Requests, Contacts, Calendar, Invoices); repeat-customer
+button on contacts; date-range dashboard with every number clickable; month calendar colour-coded
+with a legend; settings one page per area with "when X → send Y" emails; branding on customer
+documents; HHMC's real 32 line items and rates.
+
+Real data (local only): Movegistics' seven list exports (2,945 contacts, 613 leads, 1,396 work
+requests, 1,894 estimates, 883 work orders, 781 invoices, 1,454 payments) imported with
+`npm run hhmc:import`. Reconciliation (`~/Documents/SAI/hhmc-data/RECONCILIATION.md`, outside the
+repo): work requests per month, invoiced $928,655.23, collected $798,504.10, open balance
+$206,557.95 — all equal to Movegistics to the cent (with Movegistics' stale "Balance Due" on 281
+PAID invoices explained, P5C-5). Must-haves proven end to end on a real repeat customer in a
+throw-away database copy (P5C-17).
+
+```
+npm run check            typecheck, lint clean · 21 files, 522 tests passed · secret + personal-data scan clean
+npm run test:e2e         50 passed (before the importer commits; re-run below)
+review gate              round 1 (Part 3 screens): 1 high, 5 medium, 8 minor → all fixed (fdf0ae0)
+```
 
 ## Phase 5, part 3: the real-data pilot with Microsoft sign-in (11 Nov 2026)
 

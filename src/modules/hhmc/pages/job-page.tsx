@@ -49,6 +49,9 @@ import { Disclosure } from './disclosure';
 import { JobFields, areaClass } from './jobs';
 import { EstimateStatusBadge, Fact, InvoiceStatusBadge, Note, Select, StageBadge, formatDay, formatTime } from './parts';
 import { QuoteEditor } from './quote-editor';
+import { ACCESS_LABELS, EstimateBuilder } from './estimate-builder';
+import { loadSettings } from '../settings';
+import { mapsConfigured } from '../services/maps';
 
 export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
   const data = await jobPage(ctx, params.id);
@@ -65,12 +68,20 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
   const editable = canWrite && quoteEditable(job.stage) && !signedEstimate;
   const openInvoice = (invoices ?? []).find((i) => i.status !== 'void');
   const signed = liveEstimate?.status === 'signed' ? liveEstimate : null;
+  const settings = await loadSettings(ctx);
+  const access = (flags: string[], notes: string | null) =>
+    [flags.map((f) => ACCESS_LABELS[f as keyof typeof ACCESS_LABELS] ?? f).join(', '), notes].filter(Boolean).join(' — ');
 
   return (
     <>
       <PageHeader
         title={`${job.jobNumber} · ${customer ? customerName(customer) : 'Customer'}`}
-        description={<Link href={`${basePath}/jobs`} className="hover:underline">← All jobs</Link>}
+        description={
+          <>
+            <Link href={`${basePath}/jobs`} className="hover:underline">← All work requests</Link>
+            {customer ? <>{' · '}<Link href={`${basePath}/contacts/${customer.id}`} className="hover:underline">Contact</Link></> : null}
+          </>
+        }
         actions={
           <>
             <StageBadge stage={job.stage} />
@@ -122,7 +133,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
               <Fact label="Customer">
                 {customer ? (
                   <>
-                    <Link className="hover:underline" href={`/console/${slug}/${mode}/data/core.customer/${customer.id}`}>{customerName(customer)}</Link>
+                    <Link className="hover:underline" href={`${basePath}/contacts/${customer.id}`}>{customerName(customer)}</Link>
                     <span className="block text-xs break-all text-zinc-500">{customer.email ?? 'No email'}</span>
                     <span className="block text-xs text-zinc-500">{customer.phone ?? 'No phone'}</span>
                   </>
@@ -137,8 +148,9 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
               </Fact>
               <Fact label="Service">{`${SERVICE_TYPE_LABELS[job.serviceType]} · ${job.jobType}`}</Fact>
               <Fact label="Crew">{`M:${job.crewSize} / T:${job.trucks}${job.bedrooms ? ` · ${job.bedrooms}` : ''}`}</Fact>
-              <Fact label="From">{job.originAddress ?? '—'}</Fact>
-              <Fact label="To">{job.destinationAddress ?? '—'}</Fact>
+              <Fact label="From">{job.originAddress ?? '—'}{access(job.originAccess, job.originNotes) ? <span className="block text-xs text-zinc-500">{access(job.originAccess, job.originNotes)}</span> : null}</Fact>
+              <Fact label="To">{job.destinationAddress ?? '—'}{access(job.destinationAccess, job.destinationNotes) ? <span className="block text-xs text-zinc-500">{access(job.destinationAccess, job.destinationNotes)}</span> : null}</Fact>
+              <Fact label="Distance">{job.distanceTenths !== null ? `${(job.distanceTenths / 10).toFixed(1)} mi${job.driveMinutes !== null ? ` · ${job.driveMinutes} min` : ''}` : '—'}{job.ownTruck ? <span className="block text-xs text-zinc-500">Customer&apos;s own truck</span> : null}{job.cornellian ? <span className="block text-xs text-zinc-500">Cornellian</span> : null}</Fact>
               {job.extraStops.length ? <Fact label="Extra stops">{job.extraStops.join('; ')}</Fact> : null}
               <Fact label="Source">{`${job.source}${job.sourceDetail ? ` · ${job.sourceDetail}` : ''}`}{data.lead ? <Link className="block text-xs hover:underline" href={`${basePath}/leads/${data.lead.id}`}>{`From lead ${data.lead.leadNumber}`}</Link> : null}</Fact>
               <Fact label="Owner">{job.ownerName ?? '—'}{job.coordinators.length ? <span className="block text-xs text-zinc-500">{`Coordinators: ${job.coordinators.join(', ')}`}</span> : null}</Fact>
@@ -181,6 +193,20 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
           </Card>
 
           <Card title="Quote" description={editable ? 'The one price for this move. Sending makes a frozen, versioned estimate.' : 'Locked: the signed estimate is the price.'} flush>
+            {editable ? (
+              <Disclosure summary="Build the estimate from the move details" startOpen={quote.lines.length === 0}>
+                <EstimateBuilder
+                  slug={slug}
+                  mode={mode}
+                  job={job}
+                  catalog={data.catalog.map((c) => ({ id: c.id, name: c.name, section: c.section, unit: c.unit, rateCents: c.rateCents, category: c.category }))}
+                  hasLines={quote.lines.length > 0}
+                  mapsReady={mapsConfigured()}
+                  longDistanceMiles={settings.longDistanceMiles}
+                  cornellianPerHour={settings.cornellianDiscountPerHour}
+                />
+              </Disclosure>
+            ) : null}
             <QuoteEditor
               lines={quote.lines.map((l) => ({ id: l.id, section: l.section, name: l.name, unit: l.unit, qtyHundredths: l.qtyHundredths, rateCents: l.rateCents, discountType: l.discountType, discountValue: l.discountValue, description: l.description }))}
               catalog={data.catalog.map((c) => ({ id: c.id, name: c.name, section: c.section, unit: c.unit, rateCents: c.rateCents, category: c.category }))}
@@ -218,7 +244,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                         <EstimateStatusBadge status={e.status} />
                         <span className="tabular-nums">{formatMoney(baseTotalCents(e))}{e.snapshot.convenienceFeeOn ? <span className="text-xs text-zinc-500">{` (card ${formatMoney(e.totalCents)})`}</span> : null}</span>
                         <span className="text-xs text-zinc-500">
-                          {[`Sent ${formatDateTime(e.sentAt)}`, e.viewedAt ? `viewed ${formatDateTime(e.viewedAt)}` : null, e.signedAt ? `signed ${formatDateTime(e.signedAt)} by ${e.signatureName}` : null, e.expiresAt && waiting ? `expires ${formatDateTime(e.expiresAt)}` : null].filter(Boolean).join(' · ')}
+                          {[e.createdByName ? `Made by ${e.createdByName}` : null, `Sent ${formatDateTime(e.sentAt)}`, e.viewedAt ? `viewed ${formatDateTime(e.viewedAt)}` : null, e.signedAt ? `signed ${formatDateTime(e.signedAt)} by ${e.signatureName}` : null, e.expiresAt && waiting ? `expires ${formatDateTime(e.expiresAt)}` : null].filter(Boolean).join(' · ')}
                         </span>
                       </div>
                       {e.status === 'signed' ? (

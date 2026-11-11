@@ -43,3 +43,8 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Real Hired Hands data and import output (Phase 5C). Never commit.
+hhmc-data/
+import-output/
+.import/

@@ -135,6 +135,9 @@ export type Stage = (typeof STAGES)[number];
 export const SERVICE_TYPES = ['local', 'intrastate', 'interstate'] as const;
 export type ServiceType = (typeof SERVICE_TYPES)[number];
 
+export const ACCESS_FLAGS = ['stairs', 'elevator', 'long_carry', 'split_load', 'fragile', 'unusual_items'] as const;
+export type AccessFlag = (typeof ACCESS_FLAGS)[number];
+
 /** The one record per move: replaces Movegistics' Work Request AND Work Order (ref §10). */
 export const hhmcJobs = tenantTable(
   'hhmc_jobs',
@@ -169,6 +172,22 @@ export const hhmcJobs = tenantTable(
     lostReason: text('lost_reason'),
     cancelledReason: text('cancelled_reason'),
     bookedAt: timestamp('booked_at', { withTimezone: true }),
+    // ---- Estimate builder inputs (managers' requirements, Nov 2026) ----
+    /** Road distance origin → destination, in tenths of a mile (283.4 mi = 2834). */
+    distanceTenths: integer('distance_tenths'),
+    /** Drive time origin → destination, minutes. */
+    driveMinutes: integer('drive_minutes'),
+    /** Where the distance came from: the maps adapter, or typed in by staff. */
+    distanceSource: text('distance_source').$type<'maps' | 'manual'>(),
+    /** The customer brings their own truck: labor only, no truck fee. */
+    ownTruck: boolean('own_truck').notNull().default(false),
+    /** Cornellian: the per-hour labor discount applies (setting, $20/hr). */
+    cornellian: boolean('cornellian').notNull().default(false),
+    /** Access at each end: stairs, elevator, split load, fragile or unusual items. */
+    originAccess: text('origin_access').array().$type<AccessFlag[]>().notNull().default(sql`'{}'::text[]`),
+    destinationAccess: text('destination_access').array().$type<AccessFlag[]>().notNull().default(sql`'{}'::text[]`),
+    originNotes: text('origin_notes'),
+    destinationNotes: text('destination_notes'),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     closedAt: timestamp('closed_at', { withTimezone: true }),
   },
@@ -314,6 +333,9 @@ export const hhmcEstimates = tenantTable(
     depositPaidCents: integer('deposit_paid_cents').notNull().default(0),
     /** The estimate document stored through the core's files. */
     documentFileId: uuid('document_file_id'),
+    /** Who made this estimate, by name (managers: "you can always tell who made which estimate").
+     *  The signed-in staff member when sent here; the Movegistics creator when imported. */
+    createdByName: text('created_by_name'),
   },
   (t) => [
     sameTenant('hhmc_estimates_job_fk', t, t.jobId, hhmcJobs),
@@ -469,5 +491,37 @@ export const hhmcAutomationQueue = tenantTable(
     sameTenant('hhmc_queue_payment_fk', t, t.paymentId, payments),
     sameTenant('hhmc_queue_notification_fk', t, t.notificationId, notifications),
     index('hhmc_queue_due_idx').on(t.businessId, t.environment, t.status, t.dueAt),
+  ],
+);
+
+// ---------------------------------------------------------------- import from Movegistics
+
+export const IMPORT_SOURCES = ['movegistics'] as const;
+export type ImportSource = (typeof IMPORT_SOURCES)[number];
+
+/**
+ * Which local record an imported outside record became (Phase 5C). Re-running the import looks
+ * the outside id up here and updates that record instead of creating a duplicate. Holds ids and
+ * a content hash only: no personal data.
+ */
+export const hhmcImportRefs = tenantTable(
+  'hhmc_import_refs',
+  {
+    source: text('source').$type<ImportSource>().notNull(),
+    /** The outside record type: contact, lead, work_request, estimate, invoice, payment, … */
+    sourceType: text('source_type').notNull(),
+    sourceId: text('source_id').notNull(),
+    /** The local entity key (e.g. "core.customer", "hhmc.job") and record id. */
+    entityKey: text('entity_key').notNull(),
+    recordId: uuid('record_id').notNull(),
+    /** Hash of the imported fields: unchanged rows are skipped on a re-run. */
+    contentHash: text('content_hash').notNull(),
+    importedAt: timestamp('imported_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('hhmc_import_refs_source')
+      .on(t.businessId, t.environment, t.source, t.sourceType, t.sourceId)
+      .where(sql`${t.archivedAt} is null`),
+    index('hhmc_import_refs_record_idx').on(t.businessId, t.environment, t.recordId),
   ],
 );

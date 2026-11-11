@@ -21,6 +21,17 @@ export const settingsSchema = z.object({
   truckCapacityPerDay: z.number().int().min(0).max(50),
   defaultArrivalWindow: z.string().max(60),
   defaultJobHours: z.number().min(0.5).max(24),
+  // Estimate builder (managers' requirements, Nov 2026)
+  longDistanceMiles: z.number().min(1).max(5000),
+  cornellianDiscountPerHour: z.number().min(0).max(1000),
+  // Branding on the customer's estimate and invoice pages and documents
+  brandColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a colour like #1d4ed8'),
+  brandHeaderText: z.string().max(200),
+  brandFooterText: z.string().max(500),
+  companyAddress: z.string().max(300),
+  companyPhone: z.string().max(40),
+  companyEmail: z.string().max(200),
+  companyWebsite: z.string().max(200),
 });
 
 export type HhmcSettings = z.infer<typeof settingsSchema>;
@@ -41,6 +52,18 @@ export const settingsDefaults: HhmcSettings = {
   truckCapacityPerDay: 3,
   defaultArrivalWindow: '8:00–9:00 AM',
   defaultJobHours: 4,
+  // Managers: "Over roughly 150 miles we apply a long-distance rate" (NEEDS JAI REVIEW: exact cut-off).
+  longDistanceMiles: 150,
+  // Managers: "unless they are a Cornellian of which they get a $20 an hour discount".
+  cornellianDiscountPerHour: 20,
+  // NEEDS JAI REVIEW: placeholders until the managers give their brand colour and company details.
+  brandColor: '#1d4ed8',
+  brandHeaderText: 'Hired Hands Moving Company · a Student Agencies business',
+  brandFooterText: 'Questions? Reply to the email this came with. [PLACEHOLDER – manager to replace]',
+  companyAddress: '',
+  companyPhone: '',
+  companyEmail: '',
+  companyWebsite: '',
 };
 
 // prettier-ignore
@@ -57,6 +80,15 @@ export const settingsFields: SettingField[] = [
   { key: 'truckCapacityPerDay', label: 'Trucks available per day', type: 'number', help: 'Used when no trucks are set up under Schedule.' },
   { key: 'defaultArrivalWindow', label: 'Default arrival window', type: 'text' },
   { key: 'defaultJobHours', label: 'Default length of a job day (hours)', type: 'number' },
+  { key: 'longDistanceMiles', label: 'Long distance starts at (miles)', type: 'number', help: 'At or above this distance the estimate builder uses the long-distance truck day fee plus the per-mile rate (set the rates in Settings › Line items; managers price per-mile about $0.10 below U-Haul). Below it, the local truck day fee.' },
+  { key: 'cornellianDiscountPerHour', label: 'Cornellian discount ($ per labor hour)', type: 'number', help: 'When "Cornellian" is ticked in the estimate builder, the movers\' hourly rate is this much lower (packing labor is not discounted).' },
+  { key: 'brandColor', label: 'Brand colour (customer pages)', type: 'text', help: 'A hex colour such as #1d4ed8, used for the header band and buttons on estimates and invoices.' },
+  { key: 'brandHeaderText', label: 'Header line on estimates and invoices', type: 'text' },
+  { key: 'brandFooterText', label: 'Footer text on estimates and invoices', type: 'text' },
+  { key: 'companyAddress', label: 'Company address', type: 'text' },
+  { key: 'companyPhone', label: 'Company phone', type: 'text' },
+  { key: 'companyEmail', label: 'Company email', type: 'text' },
+  { key: 'companyWebsite', label: 'Company website', type: 'text' },
 ];
 
 export function loadSettings(ctx: BusinessContext): Promise<HhmcSettings> {
@@ -66,4 +98,18 @@ export function loadSettings(ctx: BusinessContext): Promise<HhmcSettings> {
 /** A percentage setting as basis points (4 → 400). */
 export function bp(percent: number): number {
   return Math.round(percent * 100);
+}
+
+/** What customers see on estimates and invoices (managers: more than "a simple logo and gradient"). */
+export type Brand = { color: string; header: string; footer: string; contact: string };
+
+export function brandOf(settings: HhmcSettings, businessName: string): Brand {
+  // The colour goes into a style attribute: only a plain #rrggbb is ever used.
+  const color = /^#[0-9a-fA-F]{6}$/.test(settings.brandColor ?? '') ? settings.brandColor : settingsDefaults.brandColor;
+  return {
+    color,
+    header: settings.brandHeaderText?.trim() || businessName,
+    footer: settings.brandFooterText?.trim() ?? '',
+    contact: [settings.companyAddress, settings.companyPhone, settings.companyEmail, settings.companyWebsite].map((v) => v?.trim()).filter(Boolean).join(' · '),
+  };
 }

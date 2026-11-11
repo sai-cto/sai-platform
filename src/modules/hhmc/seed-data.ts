@@ -17,6 +17,9 @@ const EQUIP: Pick<Item, 'category' | 'section'> = { category: 'Equipment', secti
 const PACK: Pick<Item, 'category' | 'section'> = { category: 'Packing Materials', section: 'packing_materials' };
 
 // prettier-ignore
+// HHMC's own line items and rates as set up in Movegistics (Settings › General › Line Items,
+// read 2026-11-11). "Packing Labor" and "Basic Coverage" have no Movegistics line item: Packing
+// Labor uses the standard $195/hr (NEEDS JAI REVIEW), Basic Coverage is the $0.60/lb valuation.
 export const CATALOG: Item[] = [
   { name: '2 Men', ...MOVE, unit: 'hour', rateCents: 19500 },
   { name: '3 Men', ...MOVE, unit: 'hour', rateCents: 24000 },
@@ -24,31 +27,39 @@ export const CATALOG: Item[] = [
   { name: "16' Truck Local", ...EQUIP, unit: 'day', rateCents: 19500, isDefaultForLocal: true },
   { name: "22' Truck Local", ...EQUIP, unit: 'day', rateCents: 22500 },
   { name: "26' Truck Local", ...EQUIP, unit: 'day', rateCents: 24500 },
-  { name: "16' Truck Long Distance – Day", ...EQUIP, unit: 'day', rateCents: 5500 },
-  { name: "16' Truck Long Distance – Mileage", ...EQUIP, unit: 'mile', rateCents: 109 },
-  { name: "22' Truck Long Distance – Day", ...EQUIP, unit: 'day', rateCents: 6500 },
-  { name: "22' Truck Long Distance – Mileage", ...EQUIP, unit: 'mile', rateCents: 119 },
-  { name: "26' Truck Long Distance – Day", ...EQUIP, unit: 'day', rateCents: 7500 },
-  { name: "26' Truck Long Distance – Mileage", ...EQUIP, unit: 'mile', rateCents: 119 },
+  { name: "16' Truck Long Distance - Day", ...EQUIP, unit: 'day', rateCents: 5500 },
+  { name: "16' Truck Long Distance - Mileage", ...EQUIP, unit: 'mile', rateCents: 109 },
+  { name: "22' Truck Long Distance - Day", ...EQUIP, unit: 'day', rateCents: 6500 },
+  { name: "22' Truck Long Distance - Mileage", ...EQUIP, unit: 'mile', rateCents: 119 },
+  { name: "26' Truck Long Distance - Day", ...EQUIP, unit: 'day', rateCents: 7500 },
+  { name: "26' Truck Long Distance - Mileage", ...EQUIP, unit: 'mile', rateCents: 119 },
   { name: 'Travel Charges', category: 'Additional Services', section: 'additional_services', unit: 'hour', rateCents: 19500 },
   { name: 'Materials Service Fee', ...PACK, unit: 'each', rateCents: 2500 },
-  { name: 'Small Box', ...PACK, unit: 'each', rateCents: 250 },
-  { name: 'Medium Box', ...PACK, unit: 'each', rateCents: 350 },
-  { name: 'Large Box', ...PACK, unit: 'each', rateCents: 450 },
-  { name: 'Wardrobe Box', ...PACK, unit: 'each', rateCents: 1795 },
-  { name: 'TV Box', ...PACK, unit: 'each', rateCents: 3995 },
-  { name: 'Mirror Box', ...PACK, unit: 'each', rateCents: 1495 },
-  { name: 'Packing Tape', ...PACK, unit: 'each', rateCents: 395 },
-  { name: 'Bubble Wrap (roll)', ...PACK, unit: 'each', rateCents: 2495 },
+  { name: 'Medium Moving Box', ...PACK, unit: 'each', rateCents: 204 },
+  { name: 'Large Moving Box', ...PACK, unit: 'each', rateCents: 248 },
+  { name: 'Extra-Large Moving Box', ...PACK, unit: 'each', rateCents: 349 },
+  { name: 'Book Box', ...PACK, unit: 'each', rateCents: 150 },
+  { name: 'Bankers Box', ...PACK, unit: 'each', rateCents: 575 },
+  { name: 'Grand Wardrobe Box', ...PACK, unit: 'each', rateCents: 2025 },
+  { name: 'Mirror/Picture Box', ...PACK, unit: 'each', rateCents: 695 },
+  { name: 'Large Mirror/Picture Box', ...PACK, unit: 'each', rateCents: 825 },
+  { name: 'Four Piece Mirror/Picture Box', ...PACK, unit: 'each', rateCents: 995 },
+  { name: 'Glass Packing Kit with Moving Box', ...PACK, unit: 'each', rateCents: 1550 },
+  { name: 'Dish Saver Packing Kit with Moving Box', ...PACK, unit: 'each', rateCents: 1495 },
+  { name: 'Heavy-Duty Expandable TV Moving Box - Large (Under 40")', ...PACK, unit: 'each', rateCents: 2025 },
+  { name: 'Heavy-Duty Expandable TV Moving Box - Large (32" - 70")', ...PACK, unit: 'each', rateCents: 2995 },
+  { name: 'Heavy-Duty Expandable TV Moving Box - Large (Up to 86")', ...PACK, unit: 'each', rateCents: 3995 },
+  { name: 'Clear Shipping & Packing Tape', ...PACK, unit: 'each', rateCents: 495 },
+  { name: 'Small Bubble 150\' x 12"', ...PACK, unit: 'each', rateCents: 2499 },
+  { name: 'Large Bubble 100\' x 12"', ...PACK, unit: 'each', rateCents: 2595 },
   { name: 'Packing Labor', category: 'Packing Labor', section: 'packing_labor', unit: 'hour', rateCents: 19500 },
   { name: 'Basic Coverage ($0.60/lb per article)', category: 'Valuation', section: 'valuation', unit: 'each', rateCents: 0 },
-  { name: 'Storage (per month)', category: 'Storage Charges', section: 'storage', unit: 'month', rateCents: 15000 },
-  { name: 'Junk Removal', category: 'Additional Services', section: 'additional_services', unit: 'each', rateCents: 15000 },
 ];
 
+// The Cornellian discount is no longer a 5% discount: the managers price it as $20 off every
+// labor hour (setting cornellianDiscountPerHour; the "Cornellian" box in the estimate builder).
 export const DISCOUNTS = [
   { name: 'Friends & Family', percentBp: 500 },
-  { name: 'Cornellian', percentBp: 500 },
   { name: 'Repeat Customer', percentBp: 500 },
 ];
 
@@ -83,8 +94,8 @@ export const RULES: { key: string; name: string; trigger: AutomationTrigger; del
   { key: 'drip_day3', name: 'Quick note on your move date (Day 3)', trigger: 'estimate_sent', delayMinutes: 4320, templateKey: 'drip_day3', respectsOptIn: true },
   { key: 'drip_day7', name: 'Still thinking it over? (Day 7)', trigger: 'estimate_sent', delayMinutes: 10080, templateKey: 'drip_day7', respectsOptIn: true },
   { key: 'lead_sorry', name: 'Sorry we missed you', trigger: 'lead_no_contact', delayMinutes: 0, templateKey: 'lead_sorry', respectsOptIn: false },
-  { key: 'lead_didnt_connect', name: "Didn't Connect", trigger: 'lead_no_contact', delayMinutes: 1440, templateKey: 'lead_didnt_connect', respectsOptIn: false },
-  { key: 'lead_last_checkin', name: 'Last Check In', trigger: 'lead_no_contact', delayMinutes: 2880, templateKey: 'lead_last_checkin', respectsOptIn: false },
+  { key: 'lead_didnt_connect', name: "Didn't Connect (Day 3)", trigger: 'lead_no_contact', delayMinutes: 3 * 1440, templateKey: 'lead_didnt_connect', respectsOptIn: false },
+  { key: 'lead_last_checkin', name: 'Last Check In (Day 7)', trigger: 'lead_no_contact', delayMinutes: 7 * 1440, templateKey: 'lead_last_checkin', respectsOptIn: false },
   { key: 'payment_receipt', name: 'Payment Receipt', trigger: 'payment_received', delayMinutes: 0, templateKey: 'payment_receipt', respectsOptIn: false },
   { key: 'booked', name: "You're Booked", trigger: 'job_booked', delayMinutes: 0, templateKey: 'booked', respectsOptIn: false },
   { key: 'review_request', name: 'How did your move go?', trigger: 'invoice_paid', delayMinutes: 0, templateKey: 'review_request', respectsOptIn: true },

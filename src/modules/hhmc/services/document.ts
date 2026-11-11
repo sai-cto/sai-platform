@@ -4,6 +4,7 @@
  * HTML, not PDF: no PDF library is approved (DECISIONS A3); a browser prints it to PDF.
  */
 import type { hhmcEstimates } from '../schema';
+import type { Brand } from '../settings';
 import { computeDeposit, formatQty, SECTIONS } from './pricing';
 
 const esc = (value: unknown) =>
@@ -12,7 +13,7 @@ const usd = (cents: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
 const pct = (bp: number) => `${(bp / 100).toString()}%`;
 
-export function estimateDocument(businessName: string, e: typeof hhmcEstimates.$inferSelect): string {
+export function estimateDocument(businessName: string, e: typeof hhmcEstimates.$inferSelect, brand?: Brand): string {
   const snap = e.snapshot;
   const deposit = computeDeposit(e, snap.depositBp, { byCard: snap.convenienceFeeOn, convenienceFeeBp: snap.convenienceFeeBp });
   const sections = SECTIONS.filter((sec) => snap.lines.some((l) => l.section === sec.key))
@@ -31,8 +32,8 @@ export function estimateDocument(businessName: string, e: typeof hhmcEstimates.$
     ? `<h2>Signature</h2><p>Valuation initialed: <b>${esc(e.valuationInitials)}</b></p><p>Signed by <b>${esc(e.signatureName)}</b> on ${esc(e.signedAt.toISOString())} (IP ${esc(e.signedIp ?? 'unknown')}).</p>`
     : '<p><i>Not signed yet.</i></p>';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(e.estimateNumber)} v${e.version}</title>
-<style>body{font:14px/1.5 system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;color:#18181b}table{width:100%;border-collapse:collapse;margin:.5rem 0}td,th{border-bottom:1px solid #e4e4e7;padding:4px;text-align:left}pre{white-space:pre-wrap;font:inherit}</style></head><body>
-<h1>${esc(businessName)}</h1>
+<style>body{font:14px/1.5 system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;color:#18181b}table{width:100%;border-collapse:collapse;margin:.5rem 0}td,th{border-bottom:1px solid #e4e4e7;padding:4px;text-align:left}pre{white-space:pre-wrap;font:inherit}.band{color:#fff;padding:12px 16px;border-radius:6px}.foot{margin-top:2rem;border-top:1px solid #e4e4e7;padding-top:.5rem;color:#52525b;font-size:12px}</style></head><body>
+${brand ? `<div class="band" style="background:${esc(brand.color)}"><b>${esc(brand.header)}</b>${brand.contact ? `<br><small>${esc(brand.contact)}</small>` : ''}</div>` : `<h1>${esc(businessName)}</h1>`}
 <h2>${esc(snap.title)}</h2>
 <p>Estimate ${esc(e.estimateNumber)}, version ${e.version}. Sent ${esc(e.sentAt?.toISOString().slice(0, 10) ?? '')}; expires ${esc(e.expiresAt?.toISOString().slice(0, 10) ?? '')}.</p>
 <p><b>To:</b> ${esc(snap.customerName)}<br><b>From:</b> ${esc(snap.originAddress ?? '—')}<br><b>To address:</b> ${esc(snap.destinationAddress ?? '—')}${snap.extraStops.length ? `<br><b>Extra stops:</b> ${snap.extraStops.map(esc).join('; ')}` : ''}</p>
@@ -50,5 +51,6 @@ ${snap.convenienceFeeOn ? `<tr><td>If paid by card (+${pct(snap.convenienceFeeBp
 <h2>Valuation</h2><pre>${esc(snap.valuation)}</pre>
 <h2>${esc(snap.termsTitle)}</h2><pre>${esc(snap.termsBody)}</pre>
 ${signature}
+${brand?.footer ? `<p class="foot">${esc(brand.footer)}</p>` : ''}
 </body></html>`;
 }

@@ -1,0 +1,5 @@
+"Estimate ID","Estimate","Estimate Amount","Status","Estimate Owner","Contacts","Company Name","Move Date","Created Date","Modified Date","Expiration Date","Work Request Title","Service Type","Tags"
+"ES900001","Local Estimate for Avery Fixture","800.40","Signed","Hired","Avery Fixture","","","01/07/2026","01/08/2026","02/06/2026","Avery Fixture - Work Request","Local",""
+"ES900002","Interstate Estimate for Blake Sample","1100","Viewed","General","Blake Sample","","","02/12/2026","02/12/2026","03/14/2026","Blake Sample - Work Request","Interstate",""
+"ES900003","Interstate Estimate for Blake Sample","1170","Sent","General","Blake Sample","","","02/20/2026","02/20/2026","03/22/2026","Blake Sample - Work Request","Interstate",""
+"ES900004","Estimate for Nobody","99","Sent","Hired","Nobody Atall","","","02/20/2026","02/20/2026","","No Such - Work Request","Local",""

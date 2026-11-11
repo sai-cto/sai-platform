@@ -1,0 +1,6 @@
+"Payment Date","Payment ID","Amount Recd","Convenience Fee","Actual Payment","Applied","Credits","Payment Mode","Deposit","Contact Name","Company Name","Invoice No.","Payment Status","Transaction Status","Last 4 Digits Of Card","Card Type","Refund Reason","Description","Created At","Modified Date"
+"01/08/2026","PM900001","160.08","","","0","160.08","Card","Yes","Avery Fixture","","","Unapplied","Successful","4242","Visa","","Deposit","01/08/2026","01/08/2026"
+"01/21/2026","PM900002","640.32","","","640.32","0","Card","No","Avery Fixture","","IN900001","CLOSED","Successful","4242","Visa","","","01/21/2026","01/21/2026"
+"02/02/2026","PM900003","150","","","150","0","Check","No","Blake Sample","","IN900002","CLOSED","RECORDED","","","","","02/02/2026","02/02/2026"
+"02/03/2026","PM900004","99","","","0","0","Card","No","Blake Sample","","IN900002","","REQUESTED","","","","","02/03/2026","02/03/2026"
+"02/04/2026","PM900005","50","","","0","0","Card","Yes","Blake Sample","","","","REFUNDED","1111","Visa","Changed date","","02/04/2026","02/04/2026"

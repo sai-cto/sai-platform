@@ -29,6 +29,7 @@ import { createInvoice, openInvoiceByLink, payInvoiceByLink, recordInvoicePaymen
 import { addNote, cancelJob, createJob, markLost, moveStage, reopenJob, setAutomationOptIn } from '@/modules/hhmc/services/jobs';
 import { convertLead, conversionPreview, createLead, disqualifyLead, startNoContactEmails } from '@/modules/hhmc/services/leads';
 import { addQuoteLine, quoteSummary, setQuoteOptions } from '@/modules/hhmc/services/quote';
+import { applyBuilder } from '@/modules/hhmc/services/builder';
 import { USERS, ctxFor, logFor, systemContext } from './helpers';
 
 let counter = 0;
@@ -329,7 +330,7 @@ describe('automations', () => {
     expect(result.failed).toBe(0);
   });
 
-  it('lead no-contact emails go out at 0 / +24 h / +2 d and stop when the lead is converted', async () => {
+  it('lead no-contact: three emails over a week (same day, day 3, day 7) that stop when the lead is converted', async () => {
     const ctx = await admin();
     const lead = await newLead(ctx);
     expect(await startNoContactEmails(ctx, lead.id)).toBe(3);
@@ -338,6 +339,9 @@ describe('automations', () => {
       s.db.select().from(hhmcAutomationQueue).where(and(s.where(hhmcAutomationQueue), eq(hhmcAutomationQueue.leadId, lead.id))),
     );
     expect(rows.map((r) => r.status).sort()).toEqual(['queued', 'queued', 'sent']);
+    // Managers: "a series of three follow-up emails are sent over the following week".
+    const first = Math.min(...rows.map((r) => r.dueAt.getTime()));
+    expect(rows.map((r) => Math.round((r.dueAt.getTime() - first) / 86_400_000)).sort((a, b) => a - b)).toEqual([0, 3, 7]);
     await convertLead(ctx, lead.id, {});
     const after = await withScope(ctx, P.jobsRead, (s) =>
       s.db.select().from(hhmcAutomationQueue).where(and(s.where(hhmcAutomationQueue), eq(hhmcAutomationQueue.leadId, lead.id))),
@@ -356,7 +360,7 @@ describe('leads', () => {
     expect(two.customerId).toBe(one.customerId);
     expect(two.reusedCustomer).toBe(true);
 
-    const namesake = await newLead(ctx, { firstName: first.firstName, lastName: first.lastName, email: `other.${tag()}@example.com`, phone: '607-555-9999' });
+    const namesake = await newLead(ctx, { firstName: first.firstName, lastName: first.lastName, email: `other.${tag()}@example.com`, phone: '607-555-0177' });
     const preview = await conversionPreview(ctx, namesake.id);
     expect(preview.match).toBeNull();
     expect(preview.duplicates.map((d) => d.id)).toContain(one.customerId);
@@ -776,5 +780,20 @@ describe('H4: the card fee is charged on card payments only', () => {
     const { recordDeposit } = await import('@/modules/hhmc/services/estimates');
     const cash = await recordDeposit(ctx, est.id, { method: 'cash', attemptKey: `c${tag()}x` });
     expect(cash.ok && cash.payment.amountCents).toBe(est.depositCents); // no fee on cash
+  });
+});
+
+describe('estimate builder on a real work request', () => {
+  it('a new local work request starts with the default truck line; building never doubles the truck', async () => {
+    const ctx = await admin();
+    const lead = await newLead(ctx);
+    const { customerId } = await convertLead(ctx, lead.id, {});
+    const job = await createJob(ctx, { customerId, serviceType: 'local', jobType: 'Local Full Service Move', crewSize: '2', trucks: '1' });
+    const before = await withScope(ctx, P.jobsRead, (s) => quoteSummary(s, job.id));
+    expect(before.lines.filter((l) => /truck/i.test(l.name))).toHaveLength(1);
+    await applyBuilder(ctx, job.id, { crewSize: '2', hoursMode: 'split', loadHours: '2', driveHours: '0.5', unloadHours: '1.5', truckSize: '16', truckCount: '1', truckDays: '1', miles: '12', valuation: false, replace: false, materials: {} });
+    const after = await withScope(ctx, P.jobsRead, (s) => quoteSummary(s, job.id));
+    expect(after.lines.filter((l) => /truck/i.test(l.name)).map((l) => l.name)).toEqual(["16' Truck Local"]);
+    expect(after.totals.subtotalCents).toBe(4 * 19500 + 19500);
   });
 });

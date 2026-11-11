@@ -1,0 +1,3 @@
+"Invoice ID","QB Client ID","QB Invoice ID","Invoice Date","Invoice Amount","Balance Due","Status","Due Date","Contact Name","Contact Email","Contact Phone","Invoice Type","Invoice Method","Created Date","Tags","Modified Date","Work Request Title","Work Order Display Id","Invoice Owner","Company Name","PO Number"
+"IN900001","","","01/21/2026","800.40","800.40","PAID","01/21/2026","Avery Fixture","avery.fixture@example.com","+1 607-555-0101","","","01/21/2026","","01/21/2026","Avery Fixture - Work Request","","Hired  Hands","",""
+"IN900002","","","02/01/2026","250.0000000000001","100","PARTIAL_PAID","02/08/2026","Blake Sample","blake.sample@example.com","+1 607-555-0102","","","02/01/2026","","02/01/2026","","","General Manager","",""

@@ -1,0 +1,4 @@
+"Contact ID","First Name","Last Name","Email Address","Contact Number - Mobile","Contact Number - Home","Contact Owner","Company Name","Tags","Contact Source","Contact Created Date","Contact Modified Date","Credit Amount","Date Of Birth","Pipeline Stage","Address Line 1","Address Line 2","City","State","Zip Code / Postal Code","Move Date","Internal Note","Card On File","External Reference"
+"CN900001","Avery","Fixture","avery.fixture@example.com","+1 607-555-0101","","Hired  Hands","","","","01/05/2026","01/05/2026","","","","","","","","","","","",""
+"CN900002","Avery","Fixture","AVERY.FIXTURE@example.com","+1 607-555-0101","","Hired  Hands","","","","01/06/2026","01/06/2026","","","","","","","","","","duplicate","",""
+"CN900003","Blake","Sample","blake.sample@example.com","+1 607-555-0102","","General Manager","","","","02/10/2026","02/10/2026","","","","","","","","","","","",""
