@@ -103,7 +103,13 @@ export async function seedDemoData(s: Scope): Promise<void> {
   // Leads: converted ones (for jobs that came from a lead), new ones, disqualified ones.
   const leadRows = [
     ...JOBS.map((job, i) => ({ job, i })).filter(({ job }) => job.fromLead).map(({ job, i }) => {
-      const createdAt = new Date(now.getTime() - (Math.max(-job.daysFromNow, 0) + 20 + Math.floor(random() * 10)) * DAY);
+      // Upcoming moves came in recently (so the dashboard's "this month" has something to show);
+      // booked ones at least 5 days ago (sent, signed and booked since); past moves earlier.
+      const ageDays =
+        job.daysFromNow > 0
+          ? ['qualified', 'estimate_sent', 'lost'].includes(job.stage) ? 1 + (i % 6) : 5 + (i % 4)
+          : Math.max(-job.daysFromNow, 0) + 20 + Math.floor(random() * 10);
+      const createdAt = new Date(now.getTime() - ageDays * DAY - (i % 5) * 3600 * 1000);
       return {
         leadNumber: `L-${String(i + 1).padStart(6, '0')}`,
         ...people[i],
