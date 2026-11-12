@@ -111,7 +111,7 @@ export async function runHealthChecks(ctx: PlatformContext): Promise<HealthGroup
   for (const b of businesses) {
     const mod = getModule(b.slug);
     if (!mod?.healthChecks) continue;
-    const businessCtx = await buildBusinessContext(ctx.actor.id as string, b.slug, 'live');
+    const businessCtx = await buildBusinessContext({ userId: ctx.actor.id as string, actingBy: ctx.actor.actingBy }, b.slug, 'live');
     const results = await withScope(businessCtx, 'business.overview.read', (s) =>
       mod.healthChecks!(s),
     );

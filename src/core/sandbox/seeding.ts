@@ -31,8 +31,8 @@ export async function seedRecords<T extends TenantTable>(
         ...row,
         businessId: s.ctx.business.id,
         environment: s.ctx.environment,
-        createdBy: s.ctx.actor.id,
-        updatedBy: s.ctx.actor.id,
+        createdBy: s.ctx.actor.actingBy?.id ?? s.ctx.actor.id,
+        updatedBy: s.ctx.actor.actingBy?.id ?? s.ctx.actor.id,
       })) as never,
     )
     .returning();

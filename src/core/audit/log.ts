@@ -62,7 +62,11 @@ export async function logActivity(
   await insertLog(
     tx,
     // While a super admin acts as someone, the log keeps the super admin's id (the name says both).
-    { actorUserId: ctx.actor.actingBy?.id ?? ctx.actor.id, actorName: ctx.actor.name, actorRole: ctx.role ?? 'none' },
+    {
+      actorUserId: ctx.actor.actingBy?.id ?? ctx.actor.id,
+      actorName: ctx.actor.actingBy ? `${ctx.actor.name} (acting: ${ctx.actor.actingBy.name})` : ctx.actor.name,
+      actorRole: ctx.role ?? 'none',
+    },
     where,
     entry,
   );

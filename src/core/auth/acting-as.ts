@@ -57,15 +57,37 @@ export async function findSessionPrincipal(token: string | undefined, now = new 
   if (!row) return null;
   const own: Principal = { userId: row.userId };
   if (!row.actingAsUserId || !row.actingAsSince) return own;
-  if (row.realRole !== 'super_admin') return own;
-  if (now.getTime() - row.actingAsSince.getTime() > ACTING_AS_MINUTES * 60_000) return own;
   const [target] = await getDb()
-    .select({ id: users.id, isActive: users.isActive, platformRole: users.platformRole })
+    .select({ id: users.id, name: users.name, isActive: users.isActive, platformRole: users.platformRole })
     .from(users)
     .where(eq(users.id, row.actingAsUserId))
     .limit(1);
-  if (!target || !target.isActive || target.platformRole === 'super_admin' || target.id === row.userId) return own;
-  return { userId: target.id, actingBy: { id: row.userId, name: row.realName } };
+  const why =
+    row.realRole !== 'super_admin'
+      ? 'no longer a super admin'
+      : now.getTime() - row.actingAsSince.getTime() > ACTING_AS_MINUTES * 60_000
+        ? `${ACTING_AS_MINUTES} minutes passed`
+        : !target || !target.isActive
+          ? 'the account was switched off'
+          : target.platformRole === 'super_admin' || target.id === row.userId
+            ? 'the account became a super admin'
+            : null;
+  if (!why) return { userId: target!.id, actingBy: { id: row.userId, name: row.realName } };
+  // Ends visibly: the session is cleared and the end is logged, like pressing Stop.
+  await getDb().transaction(async (tx) => {
+    const [cleared] = await tx
+      .update(sessions)
+      .set({ actingAsUserId: null, actingAsSince: null })
+      .where(and(eq(sessions.id, row.sessionId), eq(sessions.actingAsUserId, row.actingAsUserId as string)))
+      .returning({ id: sessions.id });
+    if (cleared)
+      await logAuthEvent(
+        tx,
+        { id: row.userId, name: row.realName, role: row.realRole ?? 'none' },
+        { action: 'act_as_stop', entityType: 'user', entityId: row.actingAsUserId, summary: `Stopped acting as ${target?.name ?? 'someone'} (${why})` },
+      );
+  });
+  return own;
 }
 
 /** Starts acting as someone. `ctx` must be the super admin's OWN context (not while acting). */

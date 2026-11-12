@@ -46,7 +46,7 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
         className="relative flex flex-wrap items-center justify-center gap-3 bg-amber-500 px-3 py-1.5 text-center text-sm font-semibold text-zinc-950"
       >
         <span>
-          {acting.name}, you are acting as {ctx.actor.name.replace(/ \(acting: .*\)$/, '')} ({roleLabel}). What you
+          {acting.name}, you are acting as {ctx.actor.name} ({roleLabel}). What you
           change is real and logged as you.
         </span>
         <button type="submit" className="rounded bg-zinc-950 px-2.5 py-0.5 text-xs font-semibold text-white hover:bg-zinc-800">

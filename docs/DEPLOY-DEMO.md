@@ -161,7 +161,9 @@ From then on the website is the master copy.
 - **Other businesses and Test mode:** untouched on both sides.
 
 **If it refuses:**
-- *"changed since the last copy"*: someone used the website. Their work wins; stop copying.
+- *"changed since the last copy"*: someone used the website. Downloading a CSV, or the
+  automatic emails running on the website, count as use too: keep **"Send due automatic emails
+  on a schedule"** off (HHMC → App → Settings) until the website takes over. Their work wins; stop copying.
   Make further changes on the website.
 - *An activity log entry on the website that the laptop doesn't have:* happens if the Movegistics
   history was loaded straight into the website with `hhmc:import --target pilot`. Use Neon's

@@ -72,7 +72,7 @@ export async function loadActor(who: Who): Promise<Actor> {
   const [user] = await getDb().select().from(users).where(eq(users.id, userId)).limit(1);
   if (!user || !user.isActive) throw new UnauthenticatedError();
   if (actingBy)
-    return { id: user.id, name: `${user.name} (acting: ${actingBy.name})`, email: user.email, platformRole: user.platformRole, actingBy };
+    return { id: user.id, name: user.name, email: user.email, platformRole: user.platformRole, actingBy };
   return { id: user.id, name: user.name, email: user.email, platformRole: user.platformRole };
 }
 

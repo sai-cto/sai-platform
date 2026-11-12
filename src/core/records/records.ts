@@ -56,6 +56,12 @@ async function findInScope(
   return row as AnyRow;
 }
 
+
+/** Who a change is recorded against: the super admin while they act as someone (P5-39). */
+function recordedBy(s: Scope): string | null {
+  return s.ctx.actor.actingBy?.id ?? s.ctx.actor.id;
+}
+
 export async function getRecord<T extends TenantTable>(
   s: Scope,
   entity: EntityDef<T>,
@@ -124,8 +130,8 @@ export async function createRecord<T extends TenantTable>(
         ...withoutStandard(values as AnyRow),
         businessId: s.ctx.business.id,
         environment: s.ctx.environment,
-        createdBy: s.ctx.actor.id,
-        updatedBy: s.ctx.actor.id,
+        createdBy: recordedBy(s),
+        updatedBy: recordedBy(s),
       } as never)
       .returning(),
   );
@@ -166,7 +172,7 @@ export async function updateRecord<T extends TenantTable>(
   const [row] = await writing(s, (tx) =>
     tx
       .update(entity.table)
-      .set({ ...changes, updatedAt: new Date(), updatedBy: s.ctx.actor.id } as never)
+      .set({ ...changes, updatedAt: new Date(), updatedBy: recordedBy(s) } as never)
       .where(and(s.where(entity.table), eq(entity.table.id, id)))
       .returning(),
   );
@@ -196,7 +202,7 @@ export async function archiveRecord<T extends TenantTable>(
   const now = new Date();
   await txOf(s)
     .update(entity.table)
-    .set({ archivedAt: now, archivedBy: s.ctx.actor.id } as never)
+    .set({ archivedAt: now, archivedBy: recordedBy(s) } as never)
     .where(and(s.where(entity.table), eq(entity.table.id, id)));
   await logActivity(txOf(s), s.ctx, {
     action: 'archive',

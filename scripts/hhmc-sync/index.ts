@@ -54,6 +54,9 @@ function printComparison(c: Comparison) {
   console.log(c.allMatch ? 'Result: the website MATCHES the laptop.' : 'Result: the website does NOT match the laptop.');
 }
 
+/** Set once the copy has been committed, so a later failure is not reported as a rollback. */
+let committed = false;
+
 async function main() {
   const check = process.argv.includes('--check');
   const firstCopy = process.argv.includes('--first-copy');
@@ -72,7 +75,11 @@ async function main() {
       if (!c.allMatch) process.exitCode = 1;
       return;
     }
+    // The laptop's database must never be a copy of the pilot (e.g. a tunnel to it on localhost).
+    const [mark] = await source`select obj_description(oid, 'pg_database') as comment from pg_database where datname = current_database()`;
+    if (String(mark?.comment ?? '').includes('sai-pilot-database')) throw new SyncRefused('the laptop database carries the pilot mark: it is (a copy of) the website itself.');
     const r = await syncDatabases(source, target, { firstCopy });
+    committed = true;
     console.log(r.firstCopy ? 'First copy: the website had HHMC data nobody had changed by hand; it was replaced.' : 'Copied.');
     console.log(`Rows written: ${Object.values(r.copied).reduce((a, b) => a + b, 0)} (activity log entries already there and kept: ${r.logAlreadyThere}).`);
     console.log(`User references: ${r.userRefs.mapped} matched to a website user by email, ${r.userRefs.unmapped} with no such user (left empty).`);
@@ -91,6 +98,9 @@ main().catch((error) => {
   const message = error instanceof Error ? error.message : '';
   const ours = message.startsWith('Refusing') || message.startsWith('Copy check failed');
   const code = (error as { code?: string })?.code;
-  console.error(ours ? message : `Copy failed: ${error instanceof Error ? error.name : 'error'}${code ? ` (database code ${code})` : ''}. Rolled back: the website is unchanged.`);
+  const after = committed
+    ? 'The copy WAS committed; only the final comparison failed. Run again with --check.'
+    : 'Rolled back: the website is unchanged.';
+  console.error(ours ? message : `Copy failed: ${error instanceof Error ? error.name : 'error'}${code ? ` (database code ${code})` : ''}. ${after}`);
   process.exit(1);
 });

@@ -1,6 +1,7 @@
 'use server';
 
 /** "Act as" (src/core/auth/acting-as.ts): start from a user's page, stop from the banner. */
+import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { startActingAs, stopActingAs } from '@/core/auth/acting-as';
@@ -24,5 +25,7 @@ export async function startActingAsAction(userId: string): Promise<ActionResult>
 export async function stopActingAsAction(): Promise<void> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (token) await stopActingAs(token);
+  // The console frame (menus, banner) belongs to the person being acted as: render it again.
+  revalidatePath('/console', 'layout');
   redirect('/console/platform/users');
 }
