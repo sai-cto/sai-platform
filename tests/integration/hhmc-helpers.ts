@@ -13,8 +13,10 @@ const DAY = 24 * 3600 * 1000;
 /** A date `days` from today, "yyyy-mm-dd". */
 export const dayFromNow = (days: number) => new Date(Date.now() + days * DAY).toISOString().slice(0, 10);
 
-export async function newJob(ctx: BusinessContext, moveDate = dayFromNow(30)) {
+export async function newJob(ctx: BusinessContext, moveDate?: string) {
   const t = tag();
+  // Each move on its own day unless asked: three trucks, and a day with none free cannot be booked.
+  moveDate ??= dayFromNow(400 + (counter % 300));
   const lead = await createLead(ctx, {
     firstName: 'Parity',
     lastName: `Tester${t}`,
@@ -30,7 +32,7 @@ export async function newJob(ctx: BusinessContext, moveDate = dayFromNow(30)) {
 }
 
 /** A job whose estimate the customer has signed (through the customer link). */
-export async function signedJob(ctx: BusinessContext, moveDate = dayFromNow(30)) {
+export async function signedJob(ctx: BusinessContext, moveDate?: string) {
   const job = await newJob(ctx, moveDate);
   const estimate = await sendEstimate(ctx, job.id);
   const customer = await buildLinkContext((await customerLinkFor(ctx, estimate.id)).split('/l/')[1]);
@@ -39,7 +41,7 @@ export async function signedJob(ctx: BusinessContext, moveDate = dayFromNow(30))
 }
 
 /** A booked move (one day on the move date unless more are given). */
-export async function bookedJob(ctx: BusinessContext, moveDate = dayFromNow(30), extraDays: string[] = []) {
+export async function bookedJob(ctx: BusinessContext, moveDate?: string, extraDays: string[] = []) {
   const { job, estimate } = await signedJob(ctx, moveDate);
   for (const d of extraDays) await addJobDay(ctx, job.id, { dayDate: d, startTime: '08:00', hours: '4', crewSize: '2', trucks: '1' });
   await bookJob(ctx, job.id);

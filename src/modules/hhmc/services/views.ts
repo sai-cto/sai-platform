@@ -28,6 +28,7 @@ import { jobDaysOf, trucksOf } from './booking';
 import { estimatesOf, loadCustomer, loadJob, loadLead } from './common';
 import { invoiceLines, invoicesOfJob } from './invoices';
 import { jobOfLead } from './leads';
+import { depositsReceived } from './jobs';
 import { quoteSummary } from './quote';
 import { sourceRecordsFor } from './source';
 
@@ -86,6 +87,8 @@ export async function jobPage(ctx: BusinessContext, jobId: string) {
       customer,
       lead,
       source,
+      // Deposits taken before an invoice (cancel asks what happens to them).
+      depositPaid: await depositsReceived(s, jobId),
       quote,
       estimates,
       liveEstimate: live,

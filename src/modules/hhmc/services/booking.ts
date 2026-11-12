@@ -19,7 +19,7 @@ import { appointmentEntity, resourceEntity, unavailabilityEntity } from '@/core/
 import { archiveRecord, createRecord, updateRecord } from '@/core/records/records';
 import { bookAppointment, findConflicts } from '@/core/scheduling/scheduling';
 import type { BusinessContext } from '@/core/tenancy/context';
-import { jobDayEntity } from '../entities';
+import { jobDayEntity, jobEntity, noteEntity } from '../entities';
 import { CORE, P } from '../permissions';
 import { addDays, isDateText, isTimeText, localDate, localTime, STAGE_LABELS } from '../rules';
 import { hhmcEstimates, hhmcJobDays, hhmcJobs } from '../schema';
@@ -127,8 +127,73 @@ export async function listTrucks(ctx: BusinessContext) {
   return withScope(ctx, P.jobsRead, async (s) => (await trucksOf(s)).map((t) => ({ id: t.id, name: t.name })));
 }
 
+export type BookingOptions = {
+  /**
+   * Book even when no truck is free on a day: the day is booked with "no truck yet" and the
+   * calendar says so. Without it, a day that needs a truck and finds none stops the booking.
+   */
+  allowNoTruck?: boolean;
+};
+
+/**
+ * Books one appointment per truck for each day (the picked trucks first, then the rest of the
+ * fleet). A picked truck that is busy stops the booking, so the office decides; it is never
+ * swapped silently. A day that needs a truck and finds none free stops it too, unless the
+ * office chose to book without a truck for now.
+ */
+async function bookDays(s: Scope, job: typeof hhmcJobs.$inferSelect, days: (typeof hhmcJobDays.$inferSelect)[], options: BookingOptions) {
+  // One booking at a time per business: two moves booked at the same moment must not both
+  // take the same free truck (the conflict check below reads, then writes).
+  await takeLock(s, `hhmc-booking-trucks:${s.ctx.business.id}`);
+  const fleet = await trucksOf(s);
+  const picked = job.truckIds.map((id) => fleet.find((t) => t.id === id)).filter((t) => t !== undefined);
+  if (picked.length < job.truckIds.length)
+    throw new ValidationError('A truck picked on this work request has been retired in Settings › Trucks. Pick the trucks again under "Change details".');
+  const trucks = [...picked, ...fleet.filter((t) => !job.truckIds.includes(t.id))];
+  const tz = s.ctx.business.timeZone;
+  for (const day of days) {
+    const startsAt = localTime(day.dayDate, day.startTime, tz);
+    const endsAt = new Date(startsAt.getTime() + day.durationMinutes * 60_000);
+    // Every picked truck goes, even if the day was set up for fewer.
+    const needed = Math.max(day.trucks, picked.length);
+    const count = Math.max(1, needed);
+    const taken = new Set<string>();
+    for (const truck of picked) {
+      if ((await findConflicts(s, { startsAt, endsAt, resourceId: truck.id })).length > 0)
+        throw new ValidationError(`${truck.name} is already booked on ${day.dayDate}. Pick another truck on the work request, or change the day.`);
+    }
+    for (let i = 0; i < count; i++) {
+      let resourceId: string | null = null;
+      for (const truck of trucks) {
+        if (taken.has(truck.id)) continue;
+        if ((await findConflicts(s, { startsAt, endsAt, resourceId: truck.id })).length === 0) {
+          resourceId = truck.id;
+          break;
+        }
+      }
+      // A labor-only day (no truck needed) is fine without one; a day that needs one is not.
+      if (!resourceId && i < needed && fleet.length > 0 && !options.allowNoTruck) {
+        const free = i === 0 ? 'No truck is free' : `Only ${i} of the ${needed} trucks needed ${i === 1 ? 'is' : 'are'} free`;
+        throw new ValidationError(`${free} on ${day.dayDate} at that time. Change the day or time, free a truck, or tick "Book without a truck for now".`);
+      }
+      if (resourceId) taken.add(resourceId);
+      await bookAppointment(s, {
+        customerId: job.customerId,
+        kind: JOB_DAY_KIND,
+        startsAt,
+        endsAt,
+        status: 'confirmed',
+        resourceId,
+        subjectType: jobDayEntity.key,
+        subjectId: day.id,
+        notes: `${job.jobNumber} · M:${day.crewSize} / T:${day.trucks}${resourceId ? '' : ' · no truck yet'}`,
+      });
+    }
+  }
+}
+
 /** Book This Move (ref §2.1 step 9): staff only, needs a signed estimate. */
-export async function bookJob(ctx: BusinessContext, jobId: string, now: Date = new Date()) {
+export async function bookJob(ctx: BusinessContext, jobId: string, now: Date = new Date(), options: BookingOptions = {}) {
   return withScope(ctx, P.jobsBook, async (s) => {
     authorize(ctx, P.jobsWrite);
     authorize(ctx, CORE.schedulingWrite);
@@ -147,54 +212,58 @@ export async function bookJob(ctx: BusinessContext, jobId: string, now: Date = n
     if (!signed) throw new ValidationError('The customer must sign the estimate before the job is booked.');
     const days = await jobDaysOf(s, jobId);
     if (days.length === 0) throw new ValidationError('Add at least one job day before booking.');
-    // One booking at a time per business: two moves booked at the same moment must not both
-    // take the same free truck (the conflict check below reads, then writes).
-    await takeLock(s, `hhmc-booking-trucks:${ctx.business.id}`);
-    const fleet = await trucksOf(s);
-    // The trucks picked on the work request come first, in the order picked; the rest of the
-    // fleet fills any extra truck a day needs. A picked truck that is busy stops the booking,
-    // so the office decides (pick another truck, or move the day): it is never swapped silently.
-    const picked = job.truckIds.map((id) => fleet.find((t) => t.id === id)).filter((t) => t !== undefined);
-    if (picked.length < job.truckIds.length)
-      throw new ValidationError('A truck picked on this work request has been retired in Settings › Trucks. Pick the trucks again under "Change details".');
-    const trucks = [...picked, ...fleet.filter((t) => !job.truckIds.includes(t.id))];
-    const tz = ctx.business.timeZone;
-    for (const day of days) {
-      const startsAt = localTime(day.dayDate, day.startTime, tz);
-      const endsAt = new Date(startsAt.getTime() + day.durationMinutes * 60_000);
-      // Every picked truck goes, even if the day was set up for fewer.
-      const count = Math.max(1, day.trucks, picked.length);
-      const taken = new Set<string>();
-      for (const truck of picked) {
-        if ((await findConflicts(s, { startsAt, endsAt, resourceId: truck.id })).length > 0)
-          throw new ValidationError(`${truck.name} is already booked on ${day.dayDate}. Pick another truck on the work request, or change the day.`);
-      }
-      for (let i = 0; i < count; i++) {
-        let resourceId: string | null = null;
-        for (const truck of trucks) {
-          if (taken.has(truck.id)) continue;
-          if ((await findConflicts(s, { startsAt, endsAt, resourceId: truck.id })).length === 0) {
-            resourceId = truck.id;
-            break;
-          }
-        }
-        if (resourceId) taken.add(resourceId);
-        await bookAppointment(s, {
-          customerId: job.customerId,
-          kind: JOB_DAY_KIND,
-          startsAt,
-          endsAt,
-          status: 'confirmed',
-          resourceId,
-          subjectType: jobDayEntity.key,
-          subjectId: day.id,
-          notes: `${job.jobNumber} · M:${day.crewSize} / T:${day.trucks}`,
-        });
-      }
-    }
+    await bookDays(s, job, days, options);
+    // The move date is the first booked day (lists, dashboard and calendar must agree).
+    if (job.moveDate !== days[0].dayDate) await updateRecord(s, jobEntity, jobId, { moveDate: days[0].dayDate });
     await moveStage(s, jobId, 'booked', {}, now);
     const customer = await loadCustomer(s, job.customerId);
     await enqueue(s, 'job_booked', { jobId, recipient: customer.email, optIn: job.automationOptIn }, now);
+  });
+}
+
+const rescheduleInput = z.object({
+  date: z.string().refine(isDateText, 'Enter the new move date'),
+  startTime: z.string().refine((v) => v === '' || isTimeText(v), 'Enter the start time as HH:MM').optional(),
+  reason: optionalText(300),
+  allowNoTruck: z.boolean().optional(),
+});
+
+/**
+ * Reschedule a booked move in one step: every day moves by the same number of days (the first
+ * day lands on the new date; a multi-day move keeps its shape), optionally at a new start time.
+ * The trucks are checked again for the new days and the job's move date follows. Everything is
+ * one transaction: if the new days cannot be booked, nothing changes.
+ */
+export async function rescheduleJob(ctx: BusinessContext, jobId: string, raw: unknown, now: Date = new Date()) {
+  const input = parse(rescheduleInput, raw);
+  return withScope(ctx, P.jobsBook, async (s) => {
+    authorize(ctx, P.jobsWrite);
+    authorize(ctx, CORE.schedulingWrite);
+    authorize(ctx, CORE.schedulingRead);
+    await takeLock(s, `hhmc-estimates:${jobId}`);
+    await takeLock(s, `hhmc-booking:${jobId}`);
+    const job = await loadJob(s, jobId);
+    if (job.stage !== 'booked') throw new ValidationError('Only a booked move can be rescheduled. Change the job days instead.');
+    const days = await jobDaysOf(s, jobId);
+    if (days.length === 0) throw new ValidationError('This move has no job days to move.');
+    const today = localDate(now, ctx.business.timeZone);
+    if (input.date < today) throw new ValidationError('The new move date cannot be in the past.');
+    const shift = Math.round((Date.parse(`${input.date}T12:00:00Z`) - Date.parse(`${days[0].dayDate}T12:00:00Z`)) / 86_400_000);
+    const startTime = input.startTime || null;
+    if (shift === 0 && (!startTime || days.every((d) => d.startTime === startTime))) throw new ValidationError('That is the date and time the move already has.');
+    const from = days.map((d) => `${d.dayDate} ${d.startTime}`).join(', ');
+    await releaseAppointments(s, jobId, 'Rescheduled');
+    const moved = [];
+    for (const d of days) moved.push(await updateRecord(s, jobDayEntity, d.id, { dayDate: addDays(d.dayDate, shift), ...(startTime ? { startTime } : {}) }));
+    await bookDays(s, job, moved, { allowNoTruck: input.allowNoTruck });
+    await updateRecord(s, jobEntity, jobId, { moveDate: moved[0].dayDate });
+    const to = moved.map((d) => `${d.dayDate} ${d.startTime}`).join(', ');
+    await createRecord(s, noteEntity, {
+      jobId,
+      kind: 'note',
+      body: `Rescheduled from ${from} to ${to}.${input.reason ? ` Reason: ${input.reason}` : ''}`,
+      authorName: ctx.actor.name,
+    });
   });
 }
 

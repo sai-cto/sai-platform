@@ -294,18 +294,21 @@ async function estimateRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
 
 const BOOKED_STAGES: Stage[] = ['booked', 'completed', 'closed'];
 
-/** Jobs booked in the range (still booked, completed or closed), at their signed estimate's base total. */
+/**
+ * Jobs booked in the range (still booked, completed or closed), at their signed estimate's base
+ * total; a booked move with no signed estimate (Movegistics history booked without one) at its
+ * invoice's, else unvalued. Every booked move counts.
+ */
 async function bookedRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
   const tz = s.ctx.business.timeZone;
   const rows = await s.db
     .select({ job: hhmcJobs, e: hhmcEstimates, customer: customers })
     .from(hhmcJobs)
-    .innerJoin(hhmcEstimates, and(eq(hhmcEstimates.jobId, hhmcJobs.id), eq(hhmcEstimates.status, 'signed')))
+    .leftJoin(hhmcEstimates, and(eq(hhmcEstimates.jobId, hhmcJobs.id), eq(hhmcEstimates.status, 'signed'), s.where(hhmcEstimates)))
     .innerJoin(customers, eq(customers.id, hhmcJobs.customerId))
     .where(
       and(
         s.where(hhmcJobs),
-        s.where(hhmcEstimates),
         s.where(customers, 'include'),
         inArray(hhmcJobs.stage, BOOKED_STAGES),
         isNotNull(hhmcJobs.bookedAt),
@@ -313,6 +316,8 @@ async function bookedRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
       ),
     )
     .orderBy(desc(hhmcJobs.bookedAt));
+  const unvalued = rows.filter((r) => !r.e).map((r) => r.job.id);
+  const fallback = unvalued.length && can(s.ctx, P.invoicesRead) ? await jobMoney(s, unvalued) : new Map<string, { valueCents: number }>();
   return rows.map(({ job, e, customer }) => ({
     id: job.id,
     reference: job.jobNumber,
@@ -323,7 +328,7 @@ async function bookedRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
     date: localDate(job.bookedAt!, tz),
     source: job.source,
     // Base total (no card fee): revenue is never overstated by a fee that may not be charged.
-    amountCents: baseTotalCents(e),
+    amountCents: e ? baseTotalCents(e) : (fallback.get(job.id)?.valueCents ?? null),
     paid: null,
     status: { kind: 'stage', value: job.stage },
   }));

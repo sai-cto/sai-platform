@@ -112,7 +112,7 @@ describe('calendar: records become events', () => {
     await signed(ctx, cancelled.id);
     await bookJob(ctx, cancelled.id);
     expect((await eventsOf(ctx, cancelled.id)).map((e) => e.kind)).toEqual(['booked']);
-    await cancelJob(ctx, cancelled.id, 'Customer moved the date to next year');
+    await cancelJob(ctx, cancelled.id, 'Customer moved the date to next year', { deposit: 'kept' });
     expect(await eventsOf(ctx, cancelled.id)).toEqual([]);
   });
 

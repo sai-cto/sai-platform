@@ -281,7 +281,8 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
         serviceType: j.serviceType, jobType: j.jobType, customerComments: j.customerComments, internalNotes: j.internalNotes, ownerName: j.ownerName,
         source: j.source, sourceDetail: j.sourceDetail, stage: j.stage, lostReason: j.stage === 'lost' ? j.lostReason : null,
         cancelledReason: j.stage === 'cancelled' ? 'Work order cancelled in Movegistics' : null, automationOptIn: false,
-        bookedAt: booked ? at(j.days[0] ?? j.moveDate ?? j.createdOn) : null,
+        // Booked when its first work order was made (Movegistics' booking step), else on the move day.
+        bookedAt: booked ? at(j.bookedOn ?? j.days[0] ?? j.moveDate ?? j.createdOn) : null,
         completedAt: j.stage === 'completed' || j.stage === 'closed' ? at(j.days.at(-1) ?? j.moveDate) : null,
         closedAt: j.stage === 'closed' ? at(j.days.at(-1) ?? j.moveDate) : null,
         companyName: j.companyName,

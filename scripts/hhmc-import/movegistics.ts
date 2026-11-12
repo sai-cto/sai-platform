@@ -55,6 +55,8 @@ export type NJob = {
   sid: string; title: string; contactSid: string; moveDate: string | null; tentative: boolean; origin: string | null; destination: string | null;
   serviceType: ServiceType; jobType: string; stage: Stage; lostReason: string | null; source: LeadSource; sourceDetail: string | null;
   ownerName: string | null; createdOn: string | null; amountCents: number; sections: Record<string, number>;
+  /** When the move was booked: its first work order's creation date (null: unknown). */
+  bookedOn: string | null;
   days: string[]; workOrderSids: string[]; customerComments: string | null; internalNotes: string | null; placeholder: boolean;
   /** Work-order notes per move day (WO id, crew, vehicle), shown on the day. */
   dayNotes: Record<string, string>; workOrders: NWorkOrder[];
@@ -358,6 +360,7 @@ export function normalize(files: Files, overrides: Overrides = {}): Normalized {
       stage: stageRaw === 'closed lost' ? 'lost' : stageRaw === 'lead qualified' ? 'qualified' : stageRaw === 'closed won' ? 'booked' : 'estimate_sent',
       lostReason: blank(r['Closed Lost Reason']), source: src.source, sourceDetail: src.detail,
       ownerName: ownerName(r['Work Request Owner']), createdOn, amountCents: cents(r['Work Request Amount']), sections,
+      bookedOn: wos.map((w) => day(w['Created At'])).filter((d): d is string => !!d).sort()[0] ?? null,
       days: [], dayNotes: {}, workOrders: wos.map(workOrderOf),
       workOrderSids: wos.map((w) => w['WO ID']), customerComments: blank(r['Customer Comments']),
       internalNotes: [blank(r['Internal Note']), blank(r['Notes']) ? `Notes (Movegistics): ${blank(r['Notes'])}` : null].filter(Boolean).join('\n\n') || null,
@@ -413,7 +416,7 @@ export function normalize(files: Files, overrides: Overrides = {}): Normalized {
       sid: `estimate-job:${r['Estimate ID']}`, title: r['Work Request Title'] || `Estimate ${r['Estimate ID']}`, contactSid: contact.sid, moveDate: day(r['Move Date']), tentative: false,
       origin: null, destination: null, serviceType: service.serviceType, jobType: (r['Service Type'] ?? '').toLowerCase() === 'commercial' ? 'Commercial Move' : service.jobType,
       stage: 'estimate_sent', lostReason: null, source: 'Other', sourceDetail: 'Imported estimate without a matching work request', ownerName: ownerName(r['Estimate Owner']),
-      createdOn, amountCents: cents(r['Estimate Amount']), sections: {}, days: [], workOrderSids: [], customerComments: null, internalNotes: null, placeholder: true,
+      createdOn, amountCents: cents(r['Estimate Amount']), sections: {}, bookedOn: null, days: [], workOrderSids: [], customerComments: null, internalNotes: null, placeholder: true,
       dayNotes: {}, workOrders: [], bedrooms: null, companyName: blank(r['Company Name']), rating: null, coordinators: [], raw: {},
     };
     jobs.push(job);
@@ -491,7 +494,7 @@ export function normalize(files: Files, overrides: Overrides = {}): Normalized {
         sid: `invoice-job:${r['Invoice ID']}`, title: r['Work Request Title'] || `Invoice ${r['Invoice ID']}`, contactSid: contact.sid, moveDate: invoiceDate, tentative: false,
         origin: null, destination: null, serviceType: 'local', jobType: 'Local Full Service Move', stage: 'booked', lostReason: null, source: 'Other',
         sourceDetail: 'Imported invoice without a matching work request', ownerName: ownerName(r['Invoice Owner']), createdOn: invoiceDate, amountCents: cents(r['Invoice Amount']),
-        sections: {}, days: [], workOrderSids: [], customerComments: null, internalNotes: null, placeholder: true,
+        sections: {}, bookedOn: null, days: [], workOrderSids: [], customerComments: null, internalNotes: null, placeholder: true,
         dayNotes: {}, workOrders: [], bedrooms: null, companyName: blank(r['Company Name']), rating: null, coordinators: [], raw: {},
       };
       jobs.push(job);

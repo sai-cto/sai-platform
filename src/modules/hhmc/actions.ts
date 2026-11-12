@@ -20,6 +20,7 @@ import {
   addJobDay,
   addTruck,
   bookJob,
+  rescheduleJob,
   markSoldOut,
   releaseBooking,
   removeJobDay,
@@ -235,7 +236,8 @@ export async function markLostAction(slug: string, mode: string, id: string, _p:
 
 export async function cancelJobAction(slug: string, mode: string, id: string, _p: Form, form: FormData) {
   return run(slug, mode, async (ctx) => {
-    await cancelJob(ctx, id, text(form, 'reason'));
+    const deposit = text(form, 'deposit');
+    await cancelJob(ctx, id, text(form, 'reason'), { deposit: deposit === 'kept' || deposit === 'refund' ? deposit : undefined });
     return 'Cancelled.';
   });
 }
@@ -377,8 +379,15 @@ export async function recordDepositAction(slug: string, mode: string, estimateId
   });
 }
 
-export async function bookJobAction(slug: string, mode: string, jobId: string) {
-  return run(slug, mode, (ctx) => bookJob(ctx, jobId));
+export async function bookJobAction(slug: string, mode: string, jobId: string, allowNoTruck = false) {
+  return run(slug, mode, (ctx) => bookJob(ctx, jobId, new Date(), { allowNoTruck }));
+}
+
+export async function rescheduleJobAction(slug: string, mode: string, jobId: string, _p: Form, form: FormData) {
+  return run(slug, mode, async (ctx) => {
+    await rescheduleJob(ctx, jobId, { date: text(form, 'date'), startTime: text(form, 'startTime'), reason: text(form, 'reason'), allowNoTruck: form.get('allowNoTruck') === 'on' });
+    return 'Rescheduled.';
+  });
 }
 
 export async function releaseBookingAction(slug: string, mode: string, jobId: string) {
