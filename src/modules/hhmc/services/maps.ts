@@ -3,9 +3,9 @@
  * automatic mileage"; Nov 2026 follow-up: "Work request should immediately see Google Maps
  * (distance, number of miles)" and "automatically estimates mileage").
  *
- * - Mileage: the Google Distance Matrix API when GOOGLE_MAPS_API_KEY is set in .env.local (never
+ * - Mileage: the Google Routes API when GOOGLE_MAPS_API_KEY is set in .env.local (never
  *   committed); otherwise "not_configured" and staff type the miles in. The route is every stop
- *   in order (pick-up → extra stops → drop-off), each leg summed, in ONE request.
+ *   in order (pick-up → extra stops → drop-off), in ONE request.
  * - When it runs: when a work request is created or its addresses change, and when staff press
  *   "Look up mileage" (DECISIONS P5D-1). Never in the background, never on a page view.
  * - The map on the work request: a plain Google Maps directions link (no key, opened by staff),
@@ -24,36 +24,38 @@ export function routeStops(job: { originAddress: string | null; extraStops: stri
   return [job.originAddress, ...job.extraStops, job.destinationAddress].map((a) => (a ?? '').trim()).filter(Boolean);
 }
 
-/** Road distance and drive time through every stop, in order (at most 10 stops). */
+/** Road distance and drive time through every stop, in order (at most 10 stops).
+ *  Google Routes API "computeRoutes": one route through the stops, billed once. (The older
+ *  Distance Matrix API is "Legacy" since March 2025 and cannot be enabled in new projects.) */
 export async function routeThrough(stops: string[]): Promise<Route | null | 'not_configured'> {
   const key = process.env.GOOGLE_MAPS_API_KEY;
   if (!key) return 'not_configured';
   if (stops.length < 2 || stops.length > 10) return null;
-  // One request: origins = every stop but the last, destinations = every stop but the first.
-  // Leg i is row i, element i (the diagonal).
-  const url = new URL('https://maps.googleapis.com/maps/api/distancematrix/json');
-  url.searchParams.set('origins', stops.slice(0, -1).join('|'));
-  url.searchParams.set('destinations', stops.slice(1).join('|'));
-  url.searchParams.set('units', 'imperial');
-  url.searchParams.set('mode', 'driving');
-  url.searchParams.set('key', key);
-  const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(8000) }).catch(() => null);
+  const response = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': key,
+      // Only the two numbers we use (Google bills by the fields asked for).
+      'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration',
+    },
+    body: JSON.stringify({
+      origin: { address: stops[0] },
+      destination: { address: stops[stops.length - 1] },
+      intermediates: stops.slice(1, -1).map((address) => ({ address })),
+      travelMode: 'DRIVE',
+      units: 'IMPERIAL',
+    }),
+    cache: 'no-store',
+    signal: AbortSignal.timeout(8000),
+  }).catch(() => null);
   if (!response?.ok) return null;
-  const body = (await response.json().catch(() => null)) as {
-    status?: string;
-    rows?: { elements?: { status?: string; distance?: { value: number }; duration?: { value: number } }[] }[];
-  } | null;
-  if (body?.status !== 'OK') return null;
-  let metres = 0;
-  let seconds = 0;
-  for (let i = 0; i < stops.length - 1; i++) {
-    const leg = body.rows?.[i]?.elements?.[i];
-    if (leg?.status !== 'OK' || !leg.distance || !leg.duration) return null;
-    metres += leg.distance.value;
-    seconds += leg.duration.value;
-  }
+  const body = (await response.json().catch(() => null)) as { routes?: { distanceMeters?: number; duration?: string }[] } | null;
+  const route = body?.routes?.[0];
+  const seconds = route?.duration ? Number(/^(\d+(?:\.\d+)?)s$/.exec(route.duration)?.[1]) : NaN;
+  if (!route || typeof route.distanceMeters !== 'number' || !Number.isFinite(seconds)) return null;
   // metres → tenths of a mile; seconds → minutes (rounded up).
-  return { distanceTenths: Math.round(metres / 160.9344), driveMinutes: Math.ceil(seconds / 60) };
+  return { distanceTenths: Math.round(route.distanceMeters / 160.9344), driveMinutes: Math.ceil(seconds / 60) };
 }
 
 /** A Google Maps directions link for the route. Needs no key; Google sees the addresses only

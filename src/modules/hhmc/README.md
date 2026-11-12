@@ -180,7 +180,7 @@ RingCentral integration, importing Movegistics data.
   lines at the crew's rate; Cornellian rate; customer's own truck; local day fee vs long distance
   (over the `longDistanceMiles` setting: day fee + per mile), per truck; materials; packing help;
   valuation; notes on each location. A truck line already on the quote is replaced, never doubled.
-  Mileage: `services/maps.ts` (Google Distance Matrix through every stop, only with `GOOGLE_MAPS_API_KEY`; otherwise typed in). Looked up automatically when a work request is created or its addresses change (`refreshMileage`), shown in the "Route and mileage" card with an "Open in Google Maps" link (no key) and an embedded map (only with `GOOGLE_MAPS_EMBED_KEY`).
+  Mileage: `services/maps.ts` (Google Routes API through every stop, only with `GOOGLE_MAPS_API_KEY`; otherwise typed in). Looked up automatically when a work request is created or its addresses change (`refreshMileage`), shown in the "Route and mileage" card with an "Open in Google Maps" link (no key) and an embedded map (only with `GOOGLE_MAPS_EMBED_KEY`).
   Trucks: staff pick specific trucks on a work request (`truck_ids`); a new quote gets each truck's own line by the size in its name; booking takes the picked trucks first and refuses a clash. DECISIONS P5D-1 … P5D-4.
 - **Estimates** list with who made each, **Contacts** with "New estimate / work request" for repeat
   customers, **Calendar** colour-coded (moves, estimates, work requests, invoices due), **dashboard**

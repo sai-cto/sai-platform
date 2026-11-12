@@ -31,21 +31,18 @@ const tag = () => `${Date.now().toString(36)}${(counter += 1)}`;
 const admin = () => ctxFor(USERS.hhmcAdmin, 'hhmc', 'live');
 const day = (days: number) => new Date(Date.now() + days * 24 * 3600 * 1000).toISOString().slice(0, 10);
 
-/** A fake Distance Matrix: every leg is `miles` miles and `minutes` minutes. */
+/** A fake Routes API (computeRoutes): one route whose legs are `miles` miles and `minutes` minutes. */
 function fakeGoogle(miles: number[], minutes: number[]) {
-  const calls: URL[] = [];
+  const calls: { url: string; headers: Record<string, string>; body: { origin: { address: string }; destination: { address: string }; intermediates: { address: string }[] } }[] = [];
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: URL | string) => {
-      const url = new URL(String(input));
-      calls.push(url);
-      const n = url.searchParams.get('origins')!.split('|').length;
-      const rows = Array.from({ length: n }, (_, i) => ({
-        elements: Array.from({ length: n }, (_, j) =>
-          i === j ? { status: 'OK', distance: { value: Math.round(miles[i] * 1609.344) }, duration: { value: minutes[i] * 60 } } : { status: 'OK', distance: { value: 999_999 }, duration: { value: 99_999 } },
-        ),
-      }));
-      return new Response(JSON.stringify({ status: 'OK', rows }), { status: 200 });
+    vi.fn(async (input: URL | string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      calls.push({ url: String(input), headers: init?.headers as Record<string, string>, body });
+      const legs = body.intermediates.length + 1;
+      const metres = miles.slice(0, legs).reduce((a, m) => a + Math.round(m * 1609.344), 0);
+      const seconds = minutes.slice(0, legs).reduce((a, m) => a + m * 60, 0);
+      return new Response(JSON.stringify({ routes: [{ distanceMeters: metres, duration: `${seconds}s` }] }), { status: 200 });
     }),
   );
   return calls;
@@ -132,13 +129,21 @@ describe('mileage through every stop', () => {
     vi.unstubAllEnvs();
   });
 
-  it('sums every leg in one request', async () => {
+  it('one route through every stop, in one request', async () => {
     const calls = fakeGoogle([5, 7.5, 100], [10, 15, 120]);
     const route = await routeThrough(['A', 'B', 'C', 'D']);
     expect(calls).toHaveLength(1);
-    expect(calls[0].searchParams.get('origins')).toBe('A|B|C');
-    expect(calls[0].searchParams.get('destinations')).toBe('B|C|D');
+    expect(calls[0].url).toBe('https://routes.googleapis.com/directions/v2:computeRoutes');
+    expect(calls[0].headers['X-Goog-FieldMask']).toBe('routes.distanceMeters,routes.duration');
+    expect(calls[0].body.origin.address).toBe('A');
+    expect(calls[0].body.intermediates.map((i) => i.address)).toEqual(['B', 'C']);
+    expect(calls[0].body.destination.address).toBe('D');
     expect(route).toEqual({ distanceTenths: 1125, driveMinutes: 145 });
+  });
+
+  it('no route found (an empty answer) is "not found", never zero miles', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })));
+    expect(await routeThrough(['A', 'B'])).toBeNull();
   });
 
   it('no key: not configured, and Google is not called', async () => {
