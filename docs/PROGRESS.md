@@ -370,3 +370,22 @@ Review gate (fresh independent reviewer):
 
 An e2e run once failed 17 tests because a pilot preview server shared the `.next` folder; after
 clearing it the suite passed 50/50.
+
+## Movegistics parity (12 Nov 2026, branch `hhmc/movegistics-parity`)
+
+Gap list and status: `docs/hhmc-movegistics-replacement-gaps.md`; decisions PAR-1 … PAR-8.
+Built: `npm run hhmc:import:real` (every column kept, gaps closed where the data allows, re-runnable,
+reconciliation every run), manual payments (cash / check / Shopify card / other), one-step reschedule,
+cancel with the deposit outcome, booking refuses a truckless day, booked move date locked,
+`npm run db:backup` / `db:restore`, `npm run hhmc:perf`, lookup indexes. Checked at twice HHMC's real
+volume with fake exports: import reconciles to the cent, re-run in 7 s, every screen under 500 ms.
+
+```
+npm run typecheck / lint      clean
+npm test                      28 files, 586 tests passed
+npm run secret-scan           clean
+npm run test:e2e              54 passed (3 new: reschedule, Shopify payment, cancel with deposit)
+```
+
+Not done: the real exports were not in this environment (`data/movegistics/` empty), so the real
+import and its reconciliation are still to run on the CTO's machine.
