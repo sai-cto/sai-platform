@@ -5,7 +5,6 @@
  */
 import Link from 'next/link';
 import type { PortalPageProps } from '@/core/modules/contract';
-import { isPilotMode } from '@/core/demo/pilot';
 import { can } from '@/core/rbac/permissions';
 import { customerName } from '@/core/records/core-entities';
 import { ActionForm } from '@/ui/action-form';
@@ -37,7 +36,7 @@ import {
   voidEstimateAction,
 } from '../actions';
 import { CORE, P } from '../permissions';
-import { CALL_OUTCOME_LABELS, quoteEditable, SERVICE_TYPE_LABELS, TERMS_LABELS } from '../rules';
+import { CALL_OUTCOME_LABELS, localDate, quoteEditable, SERVICE_TYPE_LABELS, TERMS_LABELS } from '../rules';
 import { INVOICE_TERMS } from '../schema';
 import { depositDueByCard } from '../services/estimates';
 import { balanceOf } from '../services/invoices';
@@ -47,6 +46,7 @@ import { CopyLinkButton } from './copy-link';
 import { AttemptKey } from './attempt-key';
 import { Disclosure } from './disclosure';
 import { JobFields, areaClass } from './jobs';
+import { ManualPaymentFields } from './payment-fields';
 import { EstimateStatusBadge, Fact, InvoiceStatusBadge, Note, Select, StageBadge, formatDay, formatTime } from './parts';
 import { QuoteEditor } from './quote-editor';
 import { ACCESS_LABELS, EstimateBuilder } from './estimate-builder';
@@ -317,17 +317,11 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                         e.depositPaidCents > 0 ? (
                           <Note tone="green" title={`Deposit paid: ${formatMoney(e.depositPaidCents)}`} />
                         ) : (
-                          <Note title={`Deposit not paid yet (${formatMoney(due.totalDueCents)} by card)`}>
+                          <Note title={`Deposit not paid yet: ${formatMoney(due.depositCents)}${due.totalDueCents !== due.depositCents ? ` (${formatMoney(due.totalDueCents)} by card)` : ''}`}>
                             {can(ctx, CORE.paymentsWrite) && canWrite && can(ctx, P.estimatesWrite) && (job.stage === 'estimate_sent' || job.stage === 'booked') && !openInvoice ? (
                               <ActionForm action={recordDepositAction.bind(null, slug, mode, e.id)} submitLabel="Record deposit" submitVariant="secondary">
                                 <AttemptKey />
-                                <Field label="Paid by" htmlFor={`dep-${e.id}`}>
-                                  <Select id={`dep-${e.id}`} name="method" defaultValue={isPilotMode() && ctx.environment === 'live' ? 'cash' : 'card'}>
-                                    {isPilotMode() && ctx.environment === 'live' ? null : <option value="card">{`Card (test card) · ${formatMoney(due.totalDueCents)}`}</option>}
-                                    <option value="cash">{`Cash · ${formatMoney(due.depositCents)}`}</option>
-                                    <option value="check">{`Check · ${formatMoney(due.depositCents)}`}</option>
-                                  </Select>
-                                </Field>
+                                <ManualPaymentFields id={`dep-${e.id}`} today={localDate(new Date(), ctx.business.timeZone)} amountFor={(m) => formatMoney(m === 'card' ? due.totalDueCents : due.depositCents)} />
                               </ActionForm>
                             ) : null}
                           </Note>

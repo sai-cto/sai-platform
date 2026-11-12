@@ -1,7 +1,6 @@
 /** Invoices (ref §7.1): the list with open / past due / paid, and one invoice. */
 import Link from 'next/link';
 import type { PortalPageProps } from '@/core/modules/contract';
-import { isPilotMode } from '@/core/demo/pilot';
 import { can } from '@/core/rbac/permissions';
 import { customerName } from '@/core/records/core-entities';
 import { ActionForm } from '@/ui/action-form';
@@ -29,6 +28,8 @@ import { AttemptKey } from './attempt-key';
 import { CopyLinkButton } from './copy-link';
 import { Disclosure } from './disclosure';
 import { Check, Fact, InvoiceStatusBadge, Select, formatDay, hrefWith } from './parts';
+import { ManualPaymentFields } from './payment-fields';
+import { PAYMENT_METHOD_LABELS } from '../services/manual-payment';
 import { SourceRecords } from './source-records';
 
 export async function InvoicesPage({ ctx, searchParams, basePath }: PortalPageProps) {
@@ -205,14 +206,8 @@ export async function InvoicePage({ ctx, params, basePath }: PortalPageProps) {
             <Card title="Receive a payment">
               <ActionForm action={invoicePaymentAction.bind(null, slug, mode, invoice.id)} submitLabel="Record payment">
                 <AttemptKey />
-                <Field label="Amount credited ($)" htmlFor="ip-amount" help={invoice.convenienceFeeOn && !(isPilotMode() && ctx.environment === 'live') ? `A card payment is charged this plus the ${pct(invoice.convenienceFeeBp)} card fee.` : undefined}><input id="ip-amount" name="amount" inputMode="decimal" defaultValue={(balance / 100).toFixed(2)} className={inputClass} /></Field>
-                <Field label="Paid by" htmlFor="ip-method">
-                  <Select id="ip-method" name="method" defaultValue="check">
-                    <option value="check">Check</option>
-                    <option value="cash">Cash</option>
-                    {isPilotMode() && ctx.environment === 'live' ? null : <option value="card">Card (test card)</option>}
-                  </Select>
-                </Field>
+                <Field label="Amount credited ($)" htmlFor="ip-amount" help={invoice.convenienceFeeOn ? `Card (Shopify): this plus the ${pct(invoice.convenienceFeeBp)} card fee is recorded.` : undefined}><input id="ip-amount" name="amount" inputMode="decimal" defaultValue={(balance / 100).toFixed(2)} className={inputClass} /></Field>
+                <ManualPaymentFields id="ip" today={localDate(new Date(), ctx.business.timeZone)} />
               </ActionForm>
             </Card>
           ) : null}
@@ -222,7 +217,7 @@ export async function InvoicePage({ ctx, params, basePath }: PortalPageProps) {
                 <ul className="space-y-1 text-sm">
                   {payments.map((p) => (
                     <li key={p.id} className="flex justify-between gap-2">
-                      <span>{`${p.method} · ${formatDateTime(p.paidAt ?? p.createdAt)}`}</span>
+                      <span className="min-w-0">{`${PAYMENT_METHOD_LABELS[p.method]} · ${formatDateTime(p.paidAt ?? p.createdAt)}`}<span className="block truncate text-xs text-zinc-500">{p.description}</span></span>
                       <span className="tabular-nums">{p.status === 'succeeded' ? formatMoney(p.amountCents) : 'Failed'}</span>
                     </li>
                   ))}

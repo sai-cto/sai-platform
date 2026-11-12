@@ -7,6 +7,7 @@
  * customer actions build it from the link token in the URL (requireLinkContext). Nothing the
  * browser sends is trusted: every check is in the services.
  */
+import { isPaymentMethod } from './services/manual-payment';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { ValidationError } from '@/core/errors';
@@ -369,8 +370,8 @@ export async function estimateLinkAction(slug: string, mode: string, estimateId:
 export async function recordDepositAction(slug: string, mode: string, estimateId: string, _p: Form, form: FormData) {
   return run(slug, mode, async (ctx) => {
     const method = text(form, 'method');
-    if (method !== 'card' && method !== 'cash' && method !== 'check') throw new ValidationError('Choose how the deposit was paid.');
-    const result = await recordDeposit(ctx, estimateId, { method, cardToken: text(form, 'cardToken') || undefined, attemptKey: text(form, 'attemptKey') });
+    if (!isPaymentMethod(method)) throw new ValidationError('Choose how the deposit was paid.');
+    const result = await recordDeposit(ctx, estimateId, { method, reference: text(form, 'reference'), paidOn: text(form, 'paidOn'), attemptKey: text(form, 'attemptKey') });
     if (!result.ok) throw new ValidationError(result.message);
     return 'Deposit recorded.';
   });
@@ -481,8 +482,8 @@ export async function voidInvoiceAction(slug: string, mode: string, id: string) 
 export async function invoicePaymentAction(slug: string, mode: string, id: string, _p: Form, form: FormData) {
   return run(slug, mode, async (ctx) => {
     const method = text(form, 'method');
-    if (method !== 'card' && method !== 'cash' && method !== 'check') throw new ValidationError('Choose how it was paid.');
-    const result = await recordInvoicePayment(ctx, id, { amount: text(form, 'amount'), method, cardToken: text(form, 'cardToken') || undefined, attemptKey: text(form, 'attemptKey') });
+    if (!isPaymentMethod(method)) throw new ValidationError('Choose how it was paid.');
+    const result = await recordInvoicePayment(ctx, id, { amount: text(form, 'amount'), method, reference: text(form, 'reference'), paidOn: text(form, 'paidOn'), attemptKey: text(form, 'attemptKey') });
     if (!result.ok) throw new ValidationError(result.message);
     return 'Payment recorded.';
   });

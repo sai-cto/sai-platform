@@ -6,6 +6,7 @@
  * Staff side: send, resend, void, the customer link. Customer side (through a customer link,
  * src/core/links): view, sign (ref §7.3), pay the deposit.
  */
+import { describeManual, manualDetails, type ManualPaymentInput } from './manual-payment';
 import { and, desc, eq, inArray, ne } from 'drizzle-orm';
 import { withScope, type Scope } from '@/core/db/scope';
 import { takeLock } from '@/core/db/lock';
@@ -330,7 +331,7 @@ export function depositDueByCard(estimate: typeof hhmcEstimates.$inferSelect) {
 async function takeDeposit(
   s: Scope,
   estimate: typeof hhmcEstimates.$inferSelect,
-  input: { method: 'card' | 'cash' | 'check'; cardToken?: string; attemptKey: string },
+  input: { method: 'card' | 'cash' | 'check' | 'other'; cardToken?: string; attemptKey: string; manual?: { paidAt: Date; reference: string | null } },
 ) {
   if (estimate.status !== 'signed') throw new ValidationError('The estimate must be signed before the deposit is paid.');
   if (estimate.depositPaymentId || estimate.depositPaidCents > 0) throw new ValidationError('The deposit has already been paid.');
@@ -348,9 +349,11 @@ async function takeDeposit(
       ? depositDueByCard(estimate)
       : computeDeposit(estimate, estimate.snapshot.depositBp, { byCard: false, convenienceFeeBp: 0 });
   if (!/^[A-Za-z0-9_-]{8,80}$/.test(input.attemptKey)) throw new ValidationError('Reload the page and try again.');
+  const base = `Deposit for ${job.jobNumber} (${estimate.estimateNumber} v${estimate.version})${due.cardFeeCents ? `, incl. card fee ${money(due.cardFeeCents)}` : ''}`;
   const payment = await takePayment(s, {
     amountCents: due.totalDueCents,
-    description: `Deposit for ${job.jobNumber} (${estimate.estimateNumber} v${estimate.version})${due.cardFeeCents ? `, incl. card fee ${money(due.cardFeeCents)}` : ''}`,
+    description: input.manual ? describeManual(base, input.method, input.manual.reference) : base,
+    ...(input.manual ? { recordOnly: true, paidAt: input.manual.paidAt } : {}),
     idempotencyKey: `hhmc-deposit:${estimate.id}:${input.attemptKey}`,
     customerId: job.customerId,
     method: input.method,
@@ -376,19 +379,19 @@ export async function payDepositByLink(ctx: BusinessContext, input: { cardToken?
   });
 }
 
-/** Staff record a deposit taken another way (Receive Payment, ref §7.2). */
-export async function recordDeposit(
-  ctx: BusinessContext,
-  estimateId: string,
-  input: { method: 'card' | 'cash' | 'check'; cardToken?: string; attemptKey: string },
-) {
+/**
+ * Staff record a deposit taken outside the software (Receive Payment, ref §7.2): cash, check,
+ * card via Shopify or other. Recorded only; never sent to a card processor.
+ */
+export async function recordDeposit(ctx: BusinessContext, estimateId: string, input: ManualPaymentInput, now: Date = new Date()) {
   if (ctx.link) throw new ForbiddenError(P.jobsWrite);
+  const manual = manualDetails(input, ctx.business.timeZone, now);
   return withScope(ctx, P.jobsWrite, async (s) => {
     // Everything the flow needs, before the card is charged (ARCHITECTURE rule 7).
     authorize(ctx, CORE.paymentsWrite);
     authorize(ctx, P.estimatesWrite);
     const estimate = await lockedEstimate(s, estimateId);
-    return takeDeposit(s, estimate, input);
+    return takeDeposit(s, estimate, { method: input.method, attemptKey: input.attemptKey, manual });
   });
 }
 

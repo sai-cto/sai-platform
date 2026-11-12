@@ -55,6 +55,13 @@ export type TakePaymentInput = {
   paymentMethodToken?: string;
   subjectType?: string;
   subjectId?: string;
+  /**
+   * Money already taken outside the platform (cash, a check, a card through another system such
+   * as Shopify): recorded as it is, never sent to a card processor, whatever the method.
+   */
+  recordOnly?: boolean;
+  /** When a recorded payment was received (default now). Only with recordOnly; never in the future. */
+  paidAt?: Date;
 };
 
 /** Makes concurrent calls for the same key wait for each other (released when the transaction ends). */
@@ -112,9 +119,15 @@ export async function takePayment(
   }
 
   const method = input.method ?? 'card';
+  if (input.paidAt !== undefined) {
+    if (!input.recordOnly) throw new ValidationError('Only a recorded payment can carry its own date.');
+    if (Number.isNaN(input.paidAt.getTime()) || input.paidAt.getTime() > Date.now() + 60_000)
+      throw new ValidationError('The payment date cannot be in the future.');
+  }
   // Pilot (real data, not yet live): no card processor is connected, so a live card payment
   // would only pretend. Refused before anything is recorded. Test mode still uses test cards.
-  if (isPilotMode() && method === 'card' && s.ctx.environment === 'live')
+  // (A card payment taken elsewhere and only recorded here is fine.)
+  if (isPilotMode() && method === 'card' && !input.recordOnly && s.ctx.environment === 'live')
     throw new ValidationError('Card payments are not connected yet. Record a cash or check payment instead.');
   const kind = input.kind ?? 'charge';
   const common = {
@@ -129,13 +142,13 @@ export async function takePayment(
     subjectId: input.subjectId ?? null,
   };
 
-  // Cash, cheque and other offline payments are simply recorded.
-  if (method !== 'card') {
+  // Cash, cheque, other offline payments and anything taken outside the platform are simply recorded.
+  if (method !== 'card' || input.recordOnly) {
     return createRecord(s, paymentEntity, {
       ...common,
       status: 'succeeded',
       provider: 'manual',
-      paidAt: new Date(),
+      paidAt: input.paidAt ?? new Date(),
     });
   }
 
