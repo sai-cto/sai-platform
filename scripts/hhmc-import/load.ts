@@ -8,9 +8,10 @@
  * Nothing here sends an email, queues an automation or takes a payment: payments are recorded as
  * already received ("manual" provider), exactly as Movegistics shows them.
  */
-import { and, eq, like, max } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, like, max } from 'drizzle-orm';
+import { logActivity } from '../../src/core/audit/log';
 import { txOf, type Scope } from '../../src/core/db/scope';
-import { customers } from '../../src/core/db/schema/tenant';
+import { appointments, customers } from '../../src/core/db/schema/tenant';
 import { customerEntity, paymentEntity } from '../../src/core/records/core-entities';
 import { createRecord, updateRecord } from '../../src/core/records/records';
 import {
@@ -24,13 +25,19 @@ import {
   quoteEntity,
   quoteLineEntity,
 } from '../../src/modules/hhmc/entities';
-import { hhmcEstimates, hhmcImportRefs, hhmcInvoiceLines, type EstimateSnapshot } from '../../src/modules/hhmc/schema';
+import { hhmcEstimates, hhmcImportRefs, hhmcInvoiceLines, hhmcJobDays, hhmcJobs, type EstimateSnapshot } from '../../src/modules/hhmc/schema';
 import { SECTION_KEYS, sectionLabel, type SectionKey } from '../../src/modules/hhmc/services/pricing';
 import { bp, loadSettings } from '../../src/modules/hhmc/settings';
 import type { EntityDef } from '../../src/core/modules/contract';
-import { hashOf, type NContact, type NEstimate, type NInvoice, type NJob, type NLead, type NPayment, type Normalized } from './movegistics';
+import { hashOf, type NContact, type NEstimate, type NInvoice, type NJob, type NLead, type NPayment, type Normalized, type Raw } from './movegistics';
 
 export type LoadStats = Record<string, { created: number; updated: number; unchanged: number; kept: number; linked: number }>;
+
+/** Same keys and values, whatever the order (jsonb does not keep key order). */
+const sameRaw = (a: Raw, b: Raw) => {
+  const ka = Object.keys(a);
+  return ka.length === Object.keys(b).length && ka.every((k) => a[k] === b[k]);
+};
 
 const TZ_NOON = 'T12:00:00-05:00';
 /** A Movegistics date (no time) as a timestamp: noon in Ithaca, so it never slips a day. */
@@ -108,16 +115,25 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
       existing?: string | null;
       /** Last adjustments right before creating (e.g. the next free estimate version). */
       beforeCreate?: (values: Record<string, unknown>) => Promise<void>;
+      /** The exported row(s), kept with the import link. */
+      raw?: Raw;
     } = {},
-  ): Promise<{ id: string; created: boolean; updated: boolean }> {
+  ): Promise<{ id: string; created: boolean; updated: boolean; kept: boolean }> {
     const key = `${type}:${sid}`;
+    const raw = options.raw ?? {};
     const hash = hashOf(values);
     const ref = refs.get(key);
     if (ref) {
       ids.set(key, ref.recordId);
+      // The exported row is import metadata, not the record: it always follows the latest export,
+      // even when staff changed the record itself in SAI.
+      if (!sameRaw(ref.sourceData ?? {}, raw)) {
+        const fresh = (await updateRecord(s, importRefEntity, ref.id, { sourceData: raw })) as Ref;
+        refs.set(key, fresh);
+      }
       if (ref.contentHash === hash) {
         tally(type, 'unchanged');
-        return { id: ref.recordId, created: false, updated: false };
+        return { id: ref.recordId, created: false, updated: false, kept: false };
       }
       // A record someone changed in SAI after the import (updated_by = a person; the import
       // runs as the system actor) is never overwritten from Movegistics.
@@ -131,13 +147,13 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
       if (!current) throw new Error(`Refusing: an imported ${type} was permanently deleted in SAI; remove its import link (hhmc_import_refs) on purpose before re-importing it.`);
       if (current.updatedBy || current.archivedAt || new Date(current.updatedAt as Date).getTime() > ref.importedAt.getTime() + 1000) {
         tally(type, 'kept');
-        return { id: ref.recordId, created: false, updated: false };
+        return { id: ref.recordId, created: false, updated: false, kept: true };
       }
       const patch = options.updatable ? Object.fromEntries(options.updatable.map((k) => [k, values[k as string]])) : values;
       await updateRecord(s, entity, ref.recordId, patch as never);
-      await updateRecord(s, importRefEntity, ref.id, { contentHash: hash, importedAt: new Date() });
+      refs.set(key, (await updateRecord(s, importRefEntity, ref.id, { contentHash: hash, importedAt: new Date() })) as Ref);
       tally(type, 'updated');
-      return { id: ref.recordId, created: false, updated: true };
+      return { id: ref.recordId, created: false, updated: true, kept: false };
     }
     let recordId: string;
     if (options.existing) {
@@ -149,16 +165,77 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
       await backdate(s, entity, recordId, options.createdOn);
       tally(type, 'created');
     }
-    const refRow = (await createRecord(s, importRefEntity, { source: 'movegistics', sourceType: type, sourceId: sid, entityKey: entity.key, recordId, contentHash: hash })) as Ref;
+    const refRow = (await createRecord(s, importRefEntity, { source: 'movegistics', sourceType: type, sourceId: sid, entityKey: entity.key, recordId, contentHash: hash, sourceData: raw })) as Ref;
     ids.set(key, recordId);
     refs.set(key, refRow);
-    return { id: recordId, created: !options.existing, updated: false };
+    return { id: recordId, created: !options.existing, updated: false, kept: false };
+  }
+
+  /** A Movegistics row merged into a record imported from another row (duplicate contacts): its own link, its own raw row. */
+  async function linkAlso(type: string, sid: string, entity: EntityDef, recordId: string, raw: Raw) {
+    const key = `${type}:${sid}`;
+    const ref = refs.get(key);
+    if (ref) {
+      ids.set(key, ref.recordId);
+      if (!sameRaw(ref.sourceData ?? {}, raw)) refs.set(key, (await updateRecord(s, importRefEntity, ref.id, { sourceData: raw })) as Ref);
+      tally(type, 'unchanged');
+      return;
+    }
+    refs.set(key, (await createRecord(s, importRefEntity, { source: 'movegistics', sourceType: type, sourceId: sid, entityKey: entity.key, recordId, contentHash: hashOf(raw), sourceData: raw })) as Ref);
+    ids.set(key, recordId);
+    tally(type, 'linked');
+  }
+
+  /**
+   * Keeps a job's days equal to its Movegistics work-order days, as long as nobody changed them in
+   * SAI (a day made or edited by a person stops the sync for that job). Days the import made and no
+   * longer wanted are archived; the import never books appointments, so nothing else depends on them.
+   */
+  async function syncDays(jobId: string, dates: string[], notes: Record<string, string>) {
+    const days = await s.db.select().from(hhmcJobDays).where(and(s.where(hhmcJobDays), eq(hhmcJobDays.jobId, jobId))).orderBy(asc(hhmcJobDays.dayDate));
+    // Someone worked on this move in SAI (changed it, or booked it: booking makes appointments).
+    const [job] = await s.db.select({ updatedBy: hhmcJobs.updatedBy, archivedAt: hhmcJobs.archivedAt }).from(hhmcJobs).where(and(s.where(hhmcJobs, 'include'), eq(hhmcJobs.id, jobId))).limit(1);
+    const booked = days.length
+      ? await s.db.select({ id: appointments.id }).from(appointments).where(and(s.where(appointments, 'include'), eq(appointments.subjectType, jobDayEntity.key), inArray(appointments.subjectId, days.map((d) => d.id)))).limit(1)
+      : [];
+    if (!job || job.updatedBy || job.archivedAt || booked.length || days.some((d) => d.createdBy || d.updatedBy)) {
+      tally('job_day', 'kept');
+      return;
+    }
+    const wanted = [...new Set(dates)].sort();
+    const free = days.filter((d) => !wanted.includes(d.dayDate));
+    for (const date of wanted) {
+      const note = notes[date] ?? null;
+      const same = days.find((d) => d.dayDate === date);
+      if (same) {
+        if ((same.notes ?? null) !== note) {
+          await updateRecord(s, jobDayEntity, same.id, { notes: note });
+          tally('job_day', 'updated');
+        } else tally('job_day', 'unchanged');
+        continue;
+      }
+      const reuse = free.shift();
+      if (reuse) {
+        await updateRecord(s, jobDayEntity, reuse.id, { dayDate: date, notes: note });
+        tally('job_day', 'updated');
+      } else {
+        await createRecord(s, jobDayEntity, { jobId, dayDate: date, startTime: '08:00', durationMinutes: Math.round(settings.defaultJobHours * 60), crewSize: 2, trucks: 1, notes: note });
+        tally('job_day', 'created');
+      }
+    }
+    for (const d of free) {
+      const now = new Date();
+      await txOf(s).update(hhmcJobDays).set({ archivedAt: now }).where(and(s.where(hhmcJobDays), eq(hhmcJobDays.id, d.id), isNull(hhmcJobDays.archivedAt)));
+      await logActivity(txOf(s), s.ctx, { action: 'archive', entityType: jobDayEntity.key, entityId: d.id, summary: `Archived job day "${d.dayDate}" (no longer a work-order day in Movegistics)`, before: { archivedAt: null }, after: { archivedAt: now.toISOString() } });
+      tally('job_day', 'updated');
+    }
   }
 
   // ---- customers
   await each(n.contacts as NContact[], async (c) => {
     const existing = existingCustomer(c.email, c.phone);
-    const { id, created } = await upsert('contact', c.sid, customerEntity, { kind: 'person', firstName: c.firstName, lastName: c.lastName, email: c.email, phone: c.phone, notes: c.notes, externalRef: `movegistics:${c.sid}` }, { createdOn: c.createdOn, existing: refs.has(`contact:${c.sid}`) ? null : existing });
+    const { id, created } = await upsert('contact', c.sid, customerEntity, { kind: 'person', firstName: c.firstName, lastName: c.lastName, email: c.email, phone: c.phone, notes: c.notes, externalRef: `movegistics:${c.sid}` }, { createdOn: c.createdOn, existing: refs.has(`contact:${c.sid}`) ? null : existing, raw: c.raw });
+    for (const d of c.duplicates) await linkAlso('contact', d.sid, customerEntity, id, d.raw);
     if (created) {
       if (c.email) customerByEmail.set(c.email, id);
       // Not added to the phone map: within one run, normalize() has already decided who is the
@@ -176,9 +253,15 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
       {
         leadNumber: l.sid, firstName: l.firstName, lastName: l.lastName, email: l.email, phone: l.phone, source: l.source, sourceDetail: l.sourceDetail,
         moveDate: l.moveDate, originAddress: l.origin, destinationAddress: l.destination, ownerName: l.ownerName, customerNote: l.customerNote,
-        internalNote: l.internalNote, bedrooms: l.bedrooms, status: 'new', customerId: customerId(l.contactSid),
+        internalNote: l.internalNote, bedrooms: l.bedrooms, status: l.status, customerId: customerId(l.contactSid),
+        disqualifiedReason: l.disqualifiedReason, disqualifiedAt: at(l.disqualifiedOn), convertedAt: at(l.qualifiedOn),
+        moveType: l.moveType, storage: l.storage, rating: l.rating, utmSource: l.utmSource, utmMedium: l.utmMedium, utmCampaign: l.utmCampaign, gclid: l.gclid, fbclid: l.fbclid,
       },
-      { createdOn: l.createdOn, updatable: ['firstName', 'lastName', 'email', 'phone', 'source', 'sourceDetail', 'moveDate', 'originAddress', 'destinationAddress', 'ownerName', 'customerNote', 'internalNote', 'customerId'] },
+      {
+        createdOn: l.createdOn,
+        raw: l.raw,
+        updatable: ['firstName', 'lastName', 'email', 'phone', 'source', 'sourceDetail', 'moveDate', 'originAddress', 'destinationAddress', 'ownerName', 'customerNote', 'internalNote', 'customerId', 'status', 'disqualifiedReason', 'disqualifiedAt', 'convertedAt', 'moveType', 'storage', 'rating', 'utmSource', 'utmMedium', 'utmCampaign', 'gclid', 'fbclid', 'bedrooms'],
+      },
     );
   });
 
@@ -189,7 +272,7 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
     const cust = customerId(j.contactSid);
     if (!cust) throw new Error(`Work request without a customer (import bug): ${j.sid}`);
     const booked = j.stage === 'booked' || j.stage === 'completed' || j.stage === 'closed';
-    const { id: jobId, created } = await upsert(
+    const { id: jobId, created, kept } = await upsert(
       'work_request',
       j.sid,
       jobEntity,
@@ -201,19 +284,27 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
         bookedAt: booked ? at(j.days[0] ?? j.moveDate ?? j.createdOn) : null,
         completedAt: j.stage === 'completed' || j.stage === 'closed' ? at(j.days.at(-1) ?? j.moveDate) : null,
         closedAt: j.stage === 'closed' ? at(j.days.at(-1) ?? j.moveDate) : null,
-        companyName: null, scopeOfWork: j.placeholder ? 'Imported from a Movegistics invoice that named no work request.' : null,
+        companyName: j.companyName,
+        scopeOfWork: j.placeholder ? (j.sid.startsWith('estimate-job:') ? 'Imported from a Movegistics estimate that named no work request.' : 'Imported from a Movegistics invoice that named no work request.') : null,
+        bedrooms: j.bedrooms, rating: j.rating, coordinators: j.coordinators,
       },
-      { createdOn: j.createdOn, updatable: ['customerId', 'originAddress', 'destinationAddress', 'moveDate', 'tentative', 'serviceType', 'jobType', 'customerComments', 'internalNotes', 'ownerName', 'source', 'sourceDetail', 'stage', 'lostReason', 'cancelledReason', 'bookedAt', 'completedAt', 'closedAt'] },
+      {
+        createdOn: j.createdOn,
+        raw: j.raw,
+        updatable: ['customerId', 'originAddress', 'destinationAddress', 'moveDate', 'tentative', 'serviceType', 'jobType', 'customerComments', 'internalNotes', 'ownerName', 'source', 'sourceDetail', 'stage', 'lostReason', 'cancelledReason', 'bookedAt', 'completedAt', 'closedAt', 'companyName', 'bedrooms', 'rating', 'coordinators'],
+      },
     );
-    if (!created) return; // quote and days are made once; later runs leave staff's changes alone
+    // Work orders: their own links (raw rows); the days follow them unless someone changed them in SAI.
+    for (const w of j.workOrders) await linkAlso('work_order', w.sid, jobEntity, jobId, w.raw);
+    const days = booked ? (j.days.length ? j.days : j.moveDate ? [j.moveDate] : []) : [];
+    if (!kept) await syncDays(jobId, days, j.dayNotes);
+    if (!created) return; // the quote is made once; later runs leave staff's changes alone
     const quote = (await createRecord(s, quoteEntity, { jobId, serviceTaxOn: false, convenienceFeeOn: false })) as { id: string };
     const sectionLines = (SECTION_KEYS as SectionKey[]).filter((k) => (j.sections[k] ?? 0) > 0);
     const lines = sectionLines.length ? sectionLines.map((k) => ({ section: k, cents: j.sections[k] })) : j.amountCents > 0 ? [{ section: 'transportation_labor' as SectionKey, cents: j.amountCents }] : [];
     for (const [i, l] of lines.entries()) {
       await createRecord(s, quoteLineEntity, { quoteId: quote.id, section: l.section, name: `${sectionLabel(l.section)} (Movegistics total)`, unit: 'each', qtyHundredths: 100, rateCents: l.cents, description: 'Imported: Movegistics exports totals by section, not line items.', sortOrder: i });
     }
-    const days = booked ? (j.days.length ? j.days : j.moveDate ? [j.moveDate] : []) : [];
-    for (const d of days) await createRecord(s, jobDayEntity, { jobId, dayDate: d, startTime: '08:00', durationMinutes: Math.round(settings.defaultJobHours * 60), crewSize: 2, trucks: 1 });
   });
 
   // Deposits are paid on the work request's estimate in force; worked out first so they are part of
@@ -228,10 +319,12 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
 
   // ---- estimates (frozen, versioned; Movegistics exports totals only)
   const depositBp = bp(settings.depositPercent);
+  const jobBySid = new Map(n.jobs.map((j) => [j.sid, j]));
+  const contactBySid = new Map(n.contacts.map((c) => [c.sid, c]));
   await each(n.estimates as NEstimate[], async (e) => {
     const jobId = ids.get(`work_request:${e.jobSid}`)!;
-    const job = n.jobs.find((x) => x.sid === e.jobSid)!;
-    const contact = n.contacts.find((c) => c.sid === job.contactSid);
+    const job = jobBySid.get(e.jobSid)!;
+    const contact = contactBySid.get(job.contactSid);
     const sent = at(e.createdOn);
     const total = e.amountCents;
     const snapshot: EstimateSnapshot = {
@@ -258,6 +351,7 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
       },
       {
         createdOn: e.createdOn,
+        raw: e.raw,
         updatable: live ? ['status', 'viewedAt', 'signedAt', 'createdByName', 'depositPaidCents'] : ['status', 'voidedAt', 'voidReason', 'createdByName', 'depositPaidCents'],
         // A later export can hold an earlier-dated or a deleted estimate: never collide on a version.
         beforeCreate: async (v) => {
@@ -271,7 +365,9 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
   // ---- invoices (one line: Movegistics exports invoice totals only)
   await each(n.invoices as NInvoice[], async (i) => {
     const jobId = ids.get(`work_request:${i.jobSid}`)!;
-    const paid = i.amountCents - i.balanceCents;
+    // What Movegistics counts as received, split into the work request's deposit credited to this
+    // invoice and payments made on it; the balance stays exactly Movegistics' own.
+    const paid = i.amountCents - i.balanceCents - i.depositCreditCents;
     const { id: invoiceId, created, updated } = await upsert(
       'invoice',
       i.sid,
@@ -279,11 +375,11 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
       {
         invoiceNumber: i.sid, jobId, customerId: customerId(i.contactSid), status: i.status, terms: 'due_on_receipt', invoiceDate: i.invoiceDate, dueDate: i.dueDate,
         poNumber: i.poNumber, serviceTaxOn: false, convenienceFeeOn: false, serviceTaxBp: bp(settings.serviceTaxPercent), convenienceFeeBp: bp(settings.convenienceFeePercent),
-        subtotalCents: i.amountCents, serviceTaxCents: 0, convenienceFeeCents: 0, totalCents: i.amountCents, depositReceivedCents: 0, paidCents: paid,
+        subtotalCents: i.amountCents, serviceTaxCents: 0, convenienceFeeCents: 0, totalCents: i.amountCents, depositReceivedCents: i.depositCreditCents, paidCents: paid,
         sentAt: i.status === 'draft' ? null : at(i.invoiceDate), paidAt: i.status === 'paid' ? at(i.invoiceDate) : null,
         remarks: `Imported from Movegistics (made by ${i.ownerName ?? 'unknown'}). Balance as Movegistics showed it on import.`,
       },
-      { createdOn: i.invoiceDate, updatable: ['status', 'dueDate', 'paidCents', 'paidAt', 'sentAt', 'subtotalCents', 'totalCents'] },
+      { createdOn: i.invoiceDate, raw: i.raw, updatable: ['status', 'dueDate', 'paidCents', 'depositReceivedCents', 'paidAt', 'sentAt', 'subtotalCents', 'totalCents', 'poNumber'] },
     );
     if (updated) {
       const [line] = await s.db.select({ id: hhmcInvoiceLines.id, rateCents: hhmcInvoiceLines.rateCents }).from(hhmcInvoiceLines).where(and(s.where(hhmcInvoiceLines), eq(hhmcInvoiceLines.invoiceId, invoiceId), eq(hhmcInvoiceLines.sortOrder, 0), like(hhmcInvoiceLines.name, 'Movegistics invoice %'))).limit(1);
@@ -297,7 +393,7 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
     const estimateSid = !p.invoiceSid && p.jobSid ? inForce.get(p.jobSid) : undefined;
     const subjectType = p.invoiceSid ? invoiceEntity.key : estimateSid ? estimateEntity.key : p.jobSid ? jobEntity.key : null;
     const subjectId = p.invoiceSid ? ids.get(`invoice:${p.invoiceSid}`)! : estimateSid ? ids.get(`estimate:${estimateSid}`)! : p.jobSid ? ids.get(`work_request:${p.jobSid}`)! : null;
-    const contactSid = p.contactSid ?? (p.jobSid ? n.jobs.find((j) => j.sid === p.jobSid)?.contactSid ?? null : null);
+    const contactSid = p.contactSid ?? (p.jobSid ? jobBySid.get(p.jobSid)?.contactSid ?? null : null);
     await upsert(
       'payment',
       p.sid,
@@ -307,7 +403,7 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
         providerRef: `movegistics:${p.sid}`, cardBrand: p.cardBrand, cardLast4: p.cardLast4, refundedCents: p.refundedCents, description: p.description,
         subjectType, subjectId, paidAt: at(p.paidOn),
       },
-      { createdOn: p.paidOn, updatable: ['refundedCents', 'description', 'subjectType', 'subjectId', 'customerId'] },
+      { createdOn: p.paidOn, raw: p.raw, updatable: ['refundedCents', 'description', 'subjectType', 'subjectId', 'customerId', 'amountCents', 'method', 'paidAt'] },
     );
   });
 

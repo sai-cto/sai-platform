@@ -11,7 +11,7 @@
  */
 import { createHash } from 'node:crypto';
 import Papa from 'papaparse';
-import type { EstimateStatus, InvoiceStatus, LeadSource, ServiceType, Stage } from '../../src/modules/hhmc/schema';
+import type { EstimateStatus, InvoiceStatus, LeadSource, LeadStatus, Rating, ServiceType, Stage } from '../../src/modules/hhmc/schema';
 
 export type Files = {
   contacts: string;
@@ -34,28 +34,69 @@ export const FILE_NAMES: Record<keyof Files, string> = {
 };
 
 type Row = Record<string, string>;
+/** An exported row as Movegistics gave it, blank columns left out (kept with the import link). */
+export type Raw = Record<string, string>;
 
-export type NContact = { sid: string; firstName: string; lastName: string; email: string | null; phone: string | null; createdOn: string | null; notes: string | null };
+export type NContact = {
+  sid: string; firstName: string; lastName: string; email: string | null; phone: string | null; createdOn: string | null; notes: string | null; raw: Raw;
+  /** Movegistics contacts merged into this one (same email or phone): their own rows are kept too. */
+  duplicates: { sid: string; raw: Raw }[];
+};
 export type NLead = {
   sid: string; contactSid: string | null; firstName: string; lastName: string; email: string | null; phone: string | null;
   source: LeadSource; sourceDetail: string | null; moveDate: string | null; origin: string | null; destination: string | null;
   createdOn: string | null; ownerName: string | null; customerNote: string | null; internalNote: string | null; bedrooms: string | null;
+  status: LeadStatus; disqualifiedReason: string | null; disqualifiedOn: string | null; qualifiedOn: string | null;
+  moveType: 'residential' | 'commercial'; storage: boolean; rating: Rating | null;
+  utmSource: string | null; utmMedium: string | null; utmCampaign: string | null; gclid: string | null; fbclid: string | null; raw: Raw;
 };
+export type NWorkOrder = { sid: string; days: string[]; note: string; cancelled: boolean; raw: Raw };
 export type NJob = {
   sid: string; title: string; contactSid: string; moveDate: string | null; tentative: boolean; origin: string | null; destination: string | null;
   serviceType: ServiceType; jobType: string; stage: Stage; lostReason: string | null; source: LeadSource; sourceDetail: string | null;
   ownerName: string | null; createdOn: string | null; amountCents: number; sections: Record<string, number>;
   days: string[]; workOrderSids: string[]; customerComments: string | null; internalNotes: string | null; placeholder: boolean;
+  /** Work-order notes per move day (WO id, crew, vehicle), shown on the day. */
+  dayNotes: Record<string, string>; workOrders: NWorkOrder[];
+  bedrooms: string | null; companyName: string | null; rating: Rating | null; coordinators: string[]; raw: Raw;
 };
-export type NEstimate = { sid: string; jobSid: string; version: number; status: EstimateStatus; amountCents: number; createdByName: string | null; createdOn: string | null; expiresOn: string | null; voidReason: string | null };
-export type NInvoice = { sid: string; jobSid: string; contactSid: string; status: InvoiceStatus; amountCents: number; balanceCents: number; invoiceDate: string; dueDate: string; ownerName: string | null; poNumber: string | null };
+export type NEstimate = { sid: string; jobSid: string; version: number; status: EstimateStatus; amountCents: number; createdByName: string | null; createdOn: string | null; expiresOn: string | null; voidReason: string | null; raw: Raw };
+export type NInvoice = {
+  sid: string; jobSid: string; contactSid: string; status: InvoiceStatus; amountCents: number; balanceCents: number; invoiceDate: string; dueDate: string; ownerName: string | null; poNumber: string | null;
+  /** The work request's deposit credited to this invoice (Movegistics often leaves it unapplied). */
+  depositCreditCents: number; raw: Raw;
+};
 export type NPayment = {
   sid: string; contactSid: string | null; invoiceSid: string | null; jobSid: string | null; isDeposit: boolean; amountCents: number;
-  refundedCents: number; partialRefund: boolean; method: 'card' | 'cash' | 'check' | 'other'; paidOn: string; cardBrand: string | null; cardLast4: string | null; description: string;
+  refundedCents: number; partialRefund: boolean; method: 'card' | 'cash' | 'check' | 'other'; paidOn: string; cardBrand: string | null; cardLast4: string | null; description: string; raw: Raw;
 };
 
 export type Issues = Record<string, number>;
-export type Normalized = { contacts: NContact[]; leads: NLead[]; jobs: NJob[]; estimates: NEstimate[]; invoices: NInvoice[]; payments: NPayment[]; issues: Issues };
+/** Movegistics ids (never names) the report lists so a manager can look each one up. */
+export type Followups = { partialRefundsWithoutAmount: string[]; paidInvoicesNotCovered: string[]; estimatesOnPlaceholder: string[] };
+export type Normalized = { contacts: NContact[]; leads: NLead[]; jobs: NJob[]; estimates: NEstimate[]; invoices: NInvoice[]; payments: NPayment[]; issues: Issues; followups: Followups };
+
+/** Hand-entered corrections (data/movegistics/refund-amounts.csv): Payment ID → refunded cents. */
+export type Overrides = { refunds?: Map<string, number> };
+
+/** Reads refund-amounts.csv ("Payment ID","Refunded Amount"). Every row must be valid. */
+export function parseRefundOverrides(text: string): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const [i, r] of parseCsv(text).entries()) {
+    const sid = blank(r['Payment ID']);
+    const amount = blank(r['Refunded Amount']);
+    if (!sid || !amount) throw new Error(`Refusing: refund-amounts.csv row ${i + 2} needs both "Payment ID" and "Refunded Amount".`);
+    let value: number;
+    try {
+      value = cents(amount);
+    } catch {
+      throw new Error(`Refusing: refund-amounts.csv row ${i + 2}: "Refunded Amount" is not an amount.`);
+    }
+    if (value <= 0) throw new Error(`Refusing: refund-amounts.csv row ${i + 2}: the refunded amount must be more than zero.`);
+    out.set(sid, value);
+  }
+  return out;
+}
 
 // ---------------------------------------------------------------- parsing helpers
 
@@ -65,6 +106,27 @@ export function parseCsv(text: string): Row[] {
 }
 
 const blank = (v: string | undefined) => (v && v.trim() && v.trim() !== '-' ? v.trim() : null);
+/** The row with blank columns left out (what the "From Movegistics" panel shows). */
+export const rawOf = (r: Row): Raw => Object.fromEntries(Object.entries(r).filter(([k, v]) => k && blank(v) !== null));
+const yes = (v: string | undefined) => /^(yes|y|true|1)$/i.test((v ?? '').trim());
+export function rating(v: string | undefined): Rating | null {
+  const t = (v ?? '').trim().toLowerCase();
+  return t === 'hot' || t === 'warm' || t === 'cold' ? t : null;
+}
+/** Movegistics lead status → ours. Labels only (no money): an unknown one is kept as New and counted. */
+const LEAD_STATUS: Record<string, LeadStatus> = { NEW: 'new', OPEN: 'new', CONTACTED: 'new', DISQUALIFIED: 'disqualified', QUALIFIED: 'converted', CONVERTED: 'converted' };
+/** Every day from start to end (inclusive), at most 14: a work order's activity dates. */
+export function daysBetween(start: string | null, end: string | null): string[] {
+  if (!start) return [];
+  const out: string[] = [];
+  const last = end && end > start ? end : start;
+  for (let d = new Date(`${start}T12:00:00Z`); out.length < 14; d.setUTCDate(d.getUTCDate() + 1)) {
+    const iso = d.toISOString().slice(0, 10);
+    if (iso > last) break;
+    out.push(iso);
+  }
+  return out;
+}
 
 /** "1,234.5" / "$12" → cents, exactly (no floating point). Empty → 0. */
 export function cents(v: string | undefined): number {
@@ -173,8 +235,9 @@ export const hashOf = (value: unknown) => createHash('sha256').update(JSON.strin
 
 // ---------------------------------------------------------------- normalize
 
-export function normalize(files: Files): Normalized {
+export function normalize(files: Files, overrides: Overrides = {}): Normalized {
   const issues: Issues = {};
+  const followups: Followups = { partialRefundsWithoutAmount: [], paidInvoicesNotCovered: [], estimatesOnPlaceholder: [] };
   const unknown = new Map<string, Set<string>>();
   const issue = (key: string) => (issues[key] = (issues[key] ?? 0) + 1);
 
@@ -196,9 +259,10 @@ export function normalize(files: Files): Normalized {
     const existing = (email && byEmail.get(email)) || (!email && phone && byPhone.get(phone)) || null;
     if (existing) {
       issue('contacts merged as duplicates (same email or phone)');
+      existing.duplicates.push({ sid: r['Contact ID'], raw: rawOf(r) });
       continue;
     }
-    const c: NContact = { sid: r['Contact ID'], firstName: r['First Name'] ?? '', lastName: r['Last Name'] ?? '', email, phone, createdOn: day(r['Contact Created Date']), notes: blank(r['Internal Note']) };
+    const c: NContact = { sid: r['Contact ID'], firstName: r['First Name'] ?? '', lastName: r['Last Name'] ?? '', email, phone, createdOn: day(r['Contact Created Date']), notes: blank(r['Internal Note']), raw: rawOf(r), duplicates: [] };
     if (!c.firstName && !c.lastName && !email && !phone) {
       issue('contacts skipped (no name, email or phone)');
       continue;
@@ -212,7 +276,7 @@ export function normalize(files: Files): Normalized {
     if (found) return found;
     const named = byName.get(nameOf(p.first, p.last)) ?? [];
     if (!p.email && !p.phone && named.length === 1) return named[0];
-    const c: NContact = { sid: `${source}:${p.sid}`, firstName: p.first, lastName: p.last, email: p.email, phone: p.phone, createdOn: p.createdOn, notes: null };
+    const c: NContact = { sid: `${source}:${p.sid}`, firstName: p.first, lastName: p.last, email: p.email, phone: p.phone, createdOn: p.createdOn, notes: null, raw: {}, duplicates: [] };
     issue(`contacts created from ${source}s (not in the contacts export)`);
     keep(c);
     return c;
@@ -232,12 +296,23 @@ export function normalize(files: Files): Normalized {
     // A lead becomes a contact only when it is converted (as in Movegistics): link an existing
     // contact if there is one, never create one.
     const contact = (email && byEmail.get(email)) || (phone && byPhone.get(phone)) || null;
+    const statusKey = (r['Lead Status'] ?? '').trim().toUpperCase().replace(/\s+/g, '_');
+    let status: LeadStatus = LEAD_STATUS[statusKey] ?? 'new';
+    if (!(statusKey in LEAD_STATUS)) issue('leads with a status the importer does not know (kept as New; the original is on the lead)');
+    // Converted needs the person it became; without one, a "qualified" lead stays open.
+    if (status === 'converted' && !contact) status = 'new';
     leads.push({
       sid: r['Lead ID'], contactSid: contact?.sid ?? null, firstName: r['First Name'] ?? '', lastName: r['Last Name'] ?? '', email, phone,
       source: src.source, sourceDetail: src.detail, moveDate: day(r['Move Date']),
       origin: [r['Origin Address Line 1'], r['Origin City'], [r['Origin State'], r['Origin Zip Code/ Postal Code']].filter(Boolean).join(' ')].map((v) => blank(v)).filter(Boolean).join(', ') || null,
       destination: [r['Destination Address Line 1'], r['Destination City'], [r['Destination State'], r['Destination Zip Code/ Postal Code']].filter(Boolean).join(' ')].map((v) => blank(v)).filter(Boolean).join(', ') || null,
       createdOn, ownerName: ownerName(r['Lead Owner']), customerNote: blank(r['Customer Note']), internalNote: blank(r['Internal Note']), bedrooms: blank(r['Number Of Bedrooms']),
+      status, disqualifiedReason: status === 'disqualified' ? (blank(r['Lead Disqualified Reason']) ?? 'Disqualified in Movegistics') : null,
+      disqualifiedOn: status === 'disqualified' ? (day(r['Lead Disqualified Date']) ?? day(r['Lead Modified Date']) ?? createdOn) : null,
+      qualifiedOn: status === 'converted' ? (day(r['Lead Qualified Date']) ?? day(r['Lead Modified Date']) ?? createdOn) : null,
+      moveType: /commercial/i.test(r['Move Type'] ?? '') ? 'commercial' : 'residential', storage: yes(r['Storage']), rating: rating(r['Lead Rating']),
+      utmSource: blank(r['UTM Source']), utmMedium: blank(r['UTM Medium']), utmCampaign: blank(r['UTM Campaign']), gclid: blank(r['GCLID']), fbclid: blank(r['FBCLID']),
+      raw: rawOf(r),
     });
   }
 
@@ -245,6 +320,11 @@ export function normalize(files: Files): Normalized {
   const woRows = parseCsv(files.workOrders);
   const titleKey = (title: string, contactName: string) => `${normName(title)}|${normName(contactName)}`;
   const woByKey = new Map<string, Row[]>();
+  const workOrderOf = (w: Row): NWorkOrder => {
+    const days = daysBetween(day(w['Start Date']), day(w['End Date']));
+    const note = [`WO ${w['WO ID']}`, blank(w['Crew']) ? `crew: ${blank(w['Crew'])}` : null, blank(w['Assigned vehicle']) ? `vehicle: ${blank(w['Assigned vehicle'])}` : null].filter(Boolean).join(', ');
+    return { sid: w['WO ID'], days, note, cancelled: (w['Pipeline Stage'] ?? '') === 'Cancelled Out', raw: rawOf(w) };
+  };
   for (const r of woRows) {
     const k = titleKey(r['Work Request'] ?? '', r['Contact Name'] ?? '');
     woByKey.set(k, [...(woByKey.get(k) ?? []), r]);
@@ -278,9 +358,18 @@ export function normalize(files: Files): Normalized {
       stage: stageRaw === 'closed lost' ? 'lost' : stageRaw === 'lead qualified' ? 'qualified' : stageRaw === 'closed won' ? 'booked' : 'estimate_sent',
       lostReason: blank(r['Closed Lost Reason']), source: src.source, sourceDetail: src.detail,
       ownerName: ownerName(r['Work Request Owner']), createdOn, amountCents: cents(r['Work Request Amount']), sections,
-      days: [...new Set(wos.filter((w) => (w['Pipeline Stage'] ?? '') !== 'Cancelled Out').map((w) => day(w['Start Date'])).filter((d): d is string => !!d))].sort(),
-      workOrderSids: wos.map((w) => w['WO ID']), customerComments: blank(r['Customer Comments']), internalNotes: blank(r['Internal Note']), placeholder: false,
+      days: [], dayNotes: {}, workOrders: wos.map(workOrderOf),
+      workOrderSids: wos.map((w) => w['WO ID']), customerComments: blank(r['Customer Comments']),
+      internalNotes: [blank(r['Internal Note']), blank(r['Notes']) ? `Notes (Movegistics): ${blank(r['Notes'])}` : null].filter(Boolean).join('\n\n') || null,
+      placeholder: false, bedrooms: blank(r['Number Of Bedrooms']), companyName: blank(r['Company Name']), rating: rating(r['Work Request Rating']),
+      coordinators: (r['Work Request Move Coordinators'] ?? '').split(/[,;]/).map((v) => v.trim()).filter(Boolean), raw: rawOf(r),
     };
+    for (const w of job.workOrders.filter((w) => !w.cancelled)) {
+      for (const d of w.days) job.dayNotes[d] = [job.dayNotes[d], w.note].filter(Boolean).join(' · ');
+    }
+    job.days = Object.keys(job.dayNotes).sort();
+    // A booked move's date is its first work-order day (the calendar and lists must agree).
+    if (job.days.length) job.moveDate = job.days[0];
     if (job.stage === 'lost' && !job.lostReason) job.lostReason = 'Closed lost in Movegistics';
     if (job.stage === 'booked' && wos.length > 0 && wos.every((w) => (w['Pipeline Stage'] ?? '') === 'Cancelled Out')) job.stage = 'cancelled';
     if (!wos.length && stageRaw === 'closed won') issue('closed-won work requests with no work order found');
@@ -304,6 +393,36 @@ export function normalize(files: Files): Normalized {
     return before.at(-1) ?? pool[0];
   };
 
+  /**
+   * An estimate whose work request title matches nothing (Movegistics renamed the work request, or
+   * the estimate was made from the contact): the contact's own work request (the latest made on or
+   * before the estimate, else the earliest), else a placeholder work request so it is never dropped.
+   */
+  const estimateFallbackJob = (r: Row, createdOn: string | null): NJob => {
+    const named = byName.get(normName(r['Contacts'] ?? '')) ?? [];
+    const contactJobs = named.length === 1 ? jobs.filter((j) => j.contactSid === named[0].sid && !j.placeholder) : [];
+    if (contactJobs.length) {
+      issue('estimates linked to their contact\'s work request (the work request title did not match)');
+      const before = contactJobs.filter((j) => !createdOn || !j.createdOn || j.createdOn <= createdOn).sort((a, b) => (a.createdOn ?? '').localeCompare(b.createdOn ?? ''));
+      return before.at(-1) ?? [...contactJobs].sort((a, b) => (a.createdOn ?? '').localeCompare(b.createdOn ?? ''))[0];
+    }
+    const { first, last } = splitName(r['Contacts'] ?? '');
+    const contact = contactFor({ email: null, phone: null, first, last, sid: r['Estimate ID'], createdOn }, 'estimate');
+    const service = SERVICE[(r['Service Type'] ?? 'local').toLowerCase()] ?? SERVICE.local;
+    const job: NJob = {
+      sid: `estimate-job:${r['Estimate ID']}`, title: r['Work Request Title'] || `Estimate ${r['Estimate ID']}`, contactSid: contact.sid, moveDate: day(r['Move Date']), tentative: false,
+      origin: null, destination: null, serviceType: service.serviceType, jobType: (r['Service Type'] ?? '').toLowerCase() === 'commercial' ? 'Commercial Move' : service.jobType,
+      stage: 'estimate_sent', lostReason: null, source: 'Other', sourceDetail: 'Imported estimate without a matching work request', ownerName: ownerName(r['Estimate Owner']),
+      createdOn, amountCents: cents(r['Estimate Amount']), sections: {}, days: [], workOrderSids: [], customerComments: null, internalNotes: null, placeholder: true,
+      dayNotes: {}, workOrders: [], bedrooms: null, companyName: blank(r['Company Name']), rating: null, coordinators: [], raw: {},
+    };
+    jobs.push(job);
+    jobByTitle.set(normName(job.title), [...(jobByTitle.get(normName(job.title)) ?? []), job]);
+    issue('estimates with no work request for their contact (a placeholder work request was made)');
+    followups.estimatesOnPlaceholder.push(r['Estimate ID']);
+    return job;
+  };
+
   // ---- estimates: versions per job; at most one in force (the platform allows only one)
   const estimates: NEstimate[] = [];
   const estimateRows = parseCsv(files.estimates).map((r) => ({ r, createdOn: day(r['Created Date']) }));
@@ -318,15 +437,12 @@ export function normalize(files: Files): Normalized {
     seenEstimates.add(r['Estimate ID']);
     const estimateStatus = strict(ESTIMATE_STATUS, r['Status'], 'estimate Status', unknown);
     if (!estimateStatus) continue;
-    const job = findJob(r['Work Request Title'] ?? '', r['Contacts'] ?? '', createdOn);
-    if (!job) {
-      issue('estimates with no matching work request (not imported)');
-      continue;
-    }
+    let job = findJob(r['Work Request Title'] ?? '', r['Contacts'] ?? '', createdOn);
+    if (!job) job = estimateFallbackJob(r, createdOn);
     const list = perJob.get(job.sid) ?? [];
     const e: NEstimate = {
       sid: r['Estimate ID'], jobSid: job.sid, version: list.length + 1, status: estimateStatus,
-      amountCents: cents(r['Estimate Amount']), createdByName: ownerName(r['Estimate Owner']), createdOn, expiresOn: day(r['Expiration Date']), voidReason: null,
+      amountCents: cents(r['Estimate Amount']), createdByName: ownerName(r['Estimate Owner']), createdOn, expiresOn: day(r['Expiration Date']), voidReason: null, raw: rawOf(r),
     };
     list.push(e);
     perJob.set(job.sid, list);
@@ -341,6 +457,15 @@ export function normalize(files: Files): Normalized {
       e.voidReason = `Imported: Movegistics showed this as ${e.status}, but a later estimate for the same work request is the one in force.`;
       e.status = 'void';
       issue('older open estimates voided (Movegistics allowed several per work request)');
+    }
+  }
+
+  // A placeholder made for estimates is open while one is in force, otherwise lost.
+  for (const job of jobs.filter((j) => j.sid.startsWith('estimate-job:'))) {
+    const live = (perJob.get(job.sid) ?? []).some((e) => e.status === 'sent' || e.status === 'viewed' || e.status === 'signed');
+    if (!live) {
+      job.stage = 'lost';
+      job.lostReason = 'Imported: the estimate was not in force and Movegistics named no work request for it';
     }
   }
 
@@ -367,6 +492,7 @@ export function normalize(files: Files): Normalized {
         origin: null, destination: null, serviceType: 'local', jobType: 'Local Full Service Move', stage: 'booked', lostReason: null, source: 'Other',
         sourceDetail: 'Imported invoice without a matching work request', ownerName: ownerName(r['Invoice Owner']), createdOn: invoiceDate, amountCents: cents(r['Invoice Amount']),
         sections: {}, days: [], workOrderSids: [], customerComments: null, internalNotes: null, placeholder: true,
+        dayNotes: {}, workOrders: [], bedrooms: null, companyName: blank(r['Company Name']), rating: null, coordinators: [], raw: {},
       };
       jobs.push(job);
       issue('invoices with no matching work request (a placeholder work request was made)');
@@ -381,6 +507,7 @@ export function normalize(files: Files): Normalized {
     invoices.push({
       sid: r['Invoice ID'], jobSid: job.sid, contactSid: job.contactSid, status, amountCents: amount, balanceCents: balance,
       invoiceDate, dueDate: day(r['Due Date']) ?? invoiceDate, ownerName: ownerName(r['Invoice Owner']), poNumber: blank(r['PO Number']),
+      depositCreditCents: 0, raw: rawOf(r),
     });
   }
   // Job stages from what happened after booking.
@@ -429,13 +556,28 @@ export function normalize(files: Files): Normalized {
     if (!contactSid) issue('payments whose contact name matches no single contact (imported without a customer)');
     else if (!jobSid) issue('payments not linked to any work request');
     const mode = (r['Payment Mode'] ?? '').toLowerCase();
+    const override = overrides.refunds?.get(r['Payment ID']);
+    let refundedCents = tx === 'refunded' ? amount : 0;
+    if (tx === 'partial_refund') {
+      if (override !== undefined && override <= amount) {
+        refundedCents = override;
+        issue('partially refunded payments with the amount from refund-amounts.csv');
+      } else {
+        if (override !== undefined) issue('refund-amounts.csv amounts larger than the payment (ignored)');
+        issue('partially refunded payments (refund amount not in the export: recorded as not refunded)');
+        followups.partialRefundsWithoutAmount.push(r['Payment ID']);
+      }
+    }
+    const fee = cents(r['Convenience Fee']);
+    const base = blank(r['Description']) ?? (invoice ? `Payment on ${invoice.sid}` : 'Deposit');
     payments.push({
       sid: r['Payment ID'], contactSid, invoiceSid: invoice?.sid ?? null, jobSid, isDeposit: !invoice && (r['Deposit'] ?? '').toLowerCase() === 'yes',
-      amountCents: amount, refundedCents: tx === 'refunded' ? amount : 0, partialRefund: tx === 'partial_refund',
-      method: mode.startsWith('card') ? 'card' : mode === 'cash' ? 'cash' : mode === 'check' ? 'check' : 'other', paidOn,
-      cardBrand: blank(r['Card Type']), cardLast4: blank(r['Last 4 Digits Of Card']), description: blank(r['Description']) ?? (invoice ? `Payment on ${invoice.sid}` : 'Deposit'),
+      amountCents: amount, refundedCents, partialRefund: tx === 'partial_refund',
+      method: mode.startsWith('card') || mode.includes('shopify') ? 'card' : mode === 'cash' ? 'cash' : mode.startsWith('check') || mode.startsWith('cheque') ? 'check' : 'other', paidOn,
+      cardBrand: blank(r['Card Type']), cardLast4: blank(r['Last 4 Digits Of Card']),
+      description: [base, fee > 0 ? `incl. convenience fee $${(fee / 100).toFixed(2)}` : null, blank(r['Refund Reason']) ? `refund reason: ${blank(r['Refund Reason'])}` : null].filter(Boolean).join(' · '),
+      raw: rawOf(r),
     });
-    if (tx === 'partial_refund') issue('partially refunded payments (refund amount not in the export: recorded as not refunded)');
 
   }
   if (unknown.size) {
@@ -443,5 +585,28 @@ export function normalize(files: Files): Normalized {
       `Movegistics values this importer does not know (nothing was imported; add them to the maps in movegistics.ts on purpose): ${[...unknown].map(([k, v]) => `${k}: ${[...v].join(', ')}`).join('; ')}`,
     );
   }
-  return { contacts, leads, jobs, estimates, invoices, payments, issues };
+  // ---- deposits: credited to the work request's invoices where Movegistics counts them as paid
+  // (it often leaves the deposit "Unapplied" and still marks the invoice PAID).
+  const netOf = (p: NPayment) => p.amountCents - p.refundedCents;
+  const depositsLeft = new Map<string, number>();
+  for (const p of payments) if (!p.invoiceSid && p.jobSid) depositsLeft.set(p.jobSid, (depositsLeft.get(p.jobSid) ?? 0) + netOf(p));
+  const paidAgainst = new Map<string, number>();
+  for (const p of payments) if (p.invoiceSid) paidAgainst.set(p.invoiceSid, (paidAgainst.get(p.invoiceSid) ?? 0) + netOf(p));
+  for (const inv of [...invoices].sort((a, b) => a.invoiceDate.localeCompare(b.invoiceDate) || a.sid.localeCompare(b.sid))) {
+    if (inv.status === 'void') continue;
+    const received = inv.amountCents - inv.balanceCents; // what Movegistics counts as paid
+    const shortfall = Math.max(0, received - (paidAgainst.get(inv.sid) ?? 0));
+    const credit = Math.min(shortfall, depositsLeft.get(inv.jobSid) ?? 0);
+    if (credit > 0) {
+      inv.depositCreditCents = credit;
+      depositsLeft.set(inv.jobSid, (depositsLeft.get(inv.jobSid) ?? 0) - credit);
+      if (inv.status === 'paid') issue('PAID invoices covered by their work request\'s deposit (credited to the invoice)');
+    }
+    if (inv.status === 'paid' && shortfall - credit > 1) {
+      issue('PAID invoices still not covered by any payment in the export (listed by id below)');
+      followups.paidInvoicesNotCovered.push(inv.sid);
+    }
+  }
+
+  return { contacts, leads, jobs, estimates, invoices, payments, issues, followups };
 }

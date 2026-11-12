@@ -54,10 +54,11 @@ import { loadSettings } from '../settings';
 import { directionsLink, embedMapUrl, formatRoute, mapsConfigured, routeStops } from '../services/maps';
 import { listTrucks } from '../services/booking';
 import { lookupMileageAction } from '../actions';
+import { SourceRecords } from './source-records';
 
 export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
   const data = await jobPage(ctx, params.id);
-  const { job, customer, quote, estimates, liveEstimate, days, booked, invoices, notes, queue } = data;
+  const { job, customer, quote, estimates, liveEstimate, days, booked, invoices, notes, queue, source } = data;
   const activity = await jobActivity(ctx, job.id, [...estimates.map((e) => e.id), ...(invoices ?? []).map((i) => i.id)]);
   const slug = ctx.business.slug;
   const mode = ctx.environment;
@@ -524,6 +525,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
               </ul>
             </Card>
           ) : null}
+          <SourceRecords records={source} />
         </div>
       </div>
     </>

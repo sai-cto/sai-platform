@@ -12,6 +12,7 @@ import { can } from '@/core/rbac/permissions';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { CORE, P } from '../permissions';
 import { hhmcEstimates, hhmcInvoices, hhmcJobs, hhmcLeads, type EstimateStatus } from '../schema';
+import { sourceRecordsFor } from './source';
 import { balanceOf } from './invoices';
 
 export const CONTACTS_PAGE_SIZE = 50;
@@ -84,7 +85,7 @@ export async function contactPage(ctx: BusinessContext, customerId: string) {
     const invoices = can(ctx, P.invoicesRead)
       ? (await s.db.select().from(hhmcInvoices).where(and(s.where(hhmcInvoices), eq(hhmcInvoices.customerId, customerId))).orderBy(desc(hhmcInvoices.invoiceDate))).map((i) => ({ ...i, balanceCents: i.status === 'void' ? 0 : Math.max(balanceOf(i), 0) }))
       : null;
-    return { customer, leads, jobs, estimates, invoices, lastJob: jobs?.[0] ?? null };
+    return { customer, leads, jobs, estimates, invoices, lastJob: jobs?.[0] ?? null, source: await sourceRecordsFor(s, [customerId]) };
   });
 }
 

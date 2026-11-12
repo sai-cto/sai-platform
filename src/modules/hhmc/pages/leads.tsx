@@ -28,6 +28,7 @@ import { leadPage } from '../services/views';
 import { Disclosure } from './disclosure';
 import { areaClass } from './jobs';
 import { Check, Fact, LeadStatusBadge, Note, Select, formatDay, hrefWith } from './parts';
+import { SourceRecords } from './source-records';
 
 type Lead = typeof hhmcLeads.$inferSelect;
 
@@ -185,7 +186,7 @@ export async function NewLeadPage({ ctx, basePath }: PortalPageProps) {
 }
 
 export async function LeadPage({ ctx, params, basePath }: PortalPageProps) {
-  const { lead, job, notes, queue } = await leadPage(ctx, params.id);
+  const { lead, job, notes, queue, source } = await leadPage(ctx, params.id);
   const slug = ctx.business.slug;
   const mode = ctx.environment;
   const canWrite = can(ctx, P.leadsWrite);
@@ -336,6 +337,7 @@ export async function LeadPage({ ctx, params, basePath }: PortalPageProps) {
             </Card>
           ) : null}
         </div>
+        <div className="lg:col-span-3"><SourceRecords records={source} /></div>
       </div>
     </>
   );

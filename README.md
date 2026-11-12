@@ -56,6 +56,7 @@ Dev login only exists when `AUTH_DEV_LOGIN=true` and the app is not running in p
 | `npm run docs:permissions` | Regenerate `docs/PERMISSIONS.md` after changing permissions |
 | `npm run test:e2e:demo` | Browser tests of the hosted demo, locally (production build in demo mode) |
 | `npm run hhmc:import` | Hired Hands only, local only: import Movegistics' exports into the local live data and reconcile (see `docs/hhmc-analysis/PLAN.md`, Phase 5C) |
+| `npm run hhmc:import:real` | Hired Hands, local only: put Movegistics' seven list exports in `data/movegistics/` (git-ignored) and run this. Loads them into the local database's HHMC **live** data (the first run replaces the fake demo moves), re-runnable after every fresh export without duplicates, and prints the reconciliation (full report in `data/movegistics-reports/`). Optional: `data/movegistics/refund-amounts.csv` ("Payment ID","Refunded Amount") for partial refunds the export has no amount for |
 | `npm run hhmc:automations` | Send Hired Hands' due automatic emails (no scheduler yet) |
 | `npm run demo:seed` | Hosted demo only: wipe and re-seed the demo database (see `docs/DEPLOY-DEMO.md`) |
 | `npm run secret-scan` | Check that no credential is about to be committed |

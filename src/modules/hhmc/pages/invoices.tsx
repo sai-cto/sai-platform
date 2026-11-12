@@ -29,6 +29,7 @@ import { AttemptKey } from './attempt-key';
 import { CopyLinkButton } from './copy-link';
 import { Disclosure } from './disclosure';
 import { Check, Fact, InvoiceStatusBadge, Select, formatDay, hrefWith } from './parts';
+import { SourceRecords } from './source-records';
 
 export async function InvoicesPage({ ctx, searchParams, basePath }: PortalPageProps) {
   const choices = ['open', 'past_due', 'paid', 'all', 'draft', 'sent', 'partially_paid', 'void'] as const;
@@ -84,7 +85,7 @@ export async function InvoicesPage({ ctx, searchParams, basePath }: PortalPagePr
 }
 
 export async function InvoicePage({ ctx, params, basePath }: PortalPageProps) {
-  const { invoice, job, customer, lines, payments } = await invoicePage(ctx, params.id);
+  const { invoice, job, customer, lines, payments, source } = await invoicePage(ctx, params.id);
   const slug = ctx.business.slug;
   const mode = ctx.environment;
   const canWrite = can(ctx, P.invoicesWrite);
@@ -230,6 +231,7 @@ export async function InvoicePage({ ctx, params, basePath }: PortalPageProps) {
             </Card>
           ) : null}
         </div>
+        <div className="xl:col-span-3"><SourceRecords records={source} /></div>
       </div>
     </>
   );

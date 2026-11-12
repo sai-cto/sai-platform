@@ -504,8 +504,9 @@ export type ImportSource = (typeof IMPORT_SOURCES)[number];
 
 /**
  * Which local record an imported outside record became (Phase 5C). Re-running the import looks
- * the outside id up here and updates that record instead of creating a duplicate. Holds ids and
- * a content hash only: no personal data.
+ * the outside id up here and updates that record instead of creating a duplicate. Since the
+ * parity work it also keeps the outside row exactly as exported (`sourceData`, every column), so
+ * nothing Movegistics showed is lost: real customer data, scoped like every tenant row.
  */
 export const hhmcImportRefs = tenantTable(
   'hhmc_import_refs',
@@ -520,6 +521,8 @@ export const hhmcImportRefs = tenantTable(
     /** Hash of the imported fields: unchanged rows are skipped on a re-run. */
     contentHash: text('content_hash').notNull(),
     importedAt: timestamp('imported_at', { withTimezone: true }).notNull().defaultNow(),
+    /** The exported row(s) as Movegistics gave them: column name → value (blank columns left out). */
+    sourceData: jsonb('source_data').$type<Record<string, string>>().notNull().default({}),
   },
   (t) => [
     uniqueIndex('hhmc_import_refs_source')
