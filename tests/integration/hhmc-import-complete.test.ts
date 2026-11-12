@@ -95,6 +95,56 @@ describe('normalizing: more fields, nothing dropped', () => {
     expect(job.dayNotes['2026-05-11']).toBe("WO WO910001, crew: Two movers, vehicle: 16' truck");
   });
 
+  it('a repeat customer\'s work requests with the same title each get only their own work order', () => {
+    const title = 'Sam Repeat - Work Request';
+    const n = normalize({
+      ...fixture,
+      contacts: csv('contacts', [person('CN930001', 'Sam', 'Repeat')]),
+      workRequests: csv('workRequests', [
+        workRequest('WR930001', title, 'Sam Repeat', { 'Work Request Created Date': '01/05/2025', 'Move Date': '02/01/2025' }),
+        workRequest('WR930002', title, 'Sam Repeat', { 'Work Request Created Date': '05/05/2026', 'Move Date': '06/10/2026' }),
+      ]),
+      workOrders: csv('workOrders', [
+        workOrder('WO930001', title, 'Sam Repeat', '02/01/2025', '02/01/2025', { 'Created At': '01/10/2025' }),
+        workOrder('WO930002', title, 'Sam Repeat', '06/10/2026', '06/10/2026', { 'Created At': '05/10/2026' }),
+      ]),
+      estimates: csv('estimates', []), invoices: csv('invoices', []), payments: csv('payments', []), leads: csv('leads', []),
+    });
+    const [first, second] = ['WR930001', 'WR930002'].map((sid) => n.jobs.find((j) => j.sid === sid)!);
+    expect([first.workOrderSids, first.days, first.bookedOn]).toEqual([['WO930001'], ['2025-02-01'], '2025-01-10']);
+    expect([second.workOrderSids, second.days, second.bookedOn]).toEqual([['WO930002'], ['2026-06-10'], '2026-05-10']);
+  });
+
+  it("a repeat customer's invoice goes to the booked move it is for, not to a later lost request with the same title", () => {
+    const title = 'Gale Repeat - Work Request';
+    const n = normalize({
+      ...fixture,
+      contacts: csv('contacts', [person('CN940001', 'Gale', 'Repeat')]),
+      workRequests: csv('workRequests', [
+        workRequest('WR940001', title, 'Gale Repeat', { 'Work Request Created Date': '04/24/2022', 'Move Date': '06/09/2022' }),
+        workRequest('WR940002', title, 'Gale Repeat', { 'Work Request Created Date': '05/15/2022', 'Move Date': '06/11/2022', 'Pipeline Stage': 'Closed Lost' }),
+      ]),
+      workOrders: csv('workOrders', [workOrder('WO940001', title, 'Gale Repeat', '06/09/2022', '06/09/2022', { 'Created At': '04/30/2022' })]),
+      invoices: csv('invoices', [{ 'Invoice ID': 'IN940001', 'Invoice Date': '06/10/2022', 'Invoice Amount': '300', 'Balance Due': '0', Status: 'PAID', 'Due Date': '06/10/2022', 'Contact Name': 'Gale Repeat', 'Created Date': '06/10/2022', 'Work Request Title': title }]),
+      estimates: csv('estimates', []), payments: csv('payments', []), leads: csv('leads', []),
+    });
+    expect(n.invoices[0].jobSid).toBe('WR940001');
+    // ...and its deposit, paid before the lost request's earlier move date, goes to the same move.
+    const withDeposit = normalize({
+      ...fixture,
+      contacts: csv('contacts', [person('CN940001', 'Gale', 'Repeat')]),
+      workRequests: csv('workRequests', [
+        workRequest('WR940001', title, 'Gale Repeat', { 'Work Request Created Date': '04/24/2022', 'Move Date': '06/20/2022' }),
+        workRequest('WR940002', title, 'Gale Repeat', { 'Work Request Created Date': '05/15/2022', 'Move Date': '06/01/2022', 'Pipeline Stage': 'Closed Lost' }),
+      ]),
+      workOrders: csv('workOrders', [workOrder('WO940001', title, 'Gale Repeat', '06/20/2022', '06/20/2022', { 'Created At': '04/30/2022' })]),
+      payments: csv('payments', [{ 'Payment Date': '05/20/2022', 'Payment ID': 'PM940001', 'Amount Recd': '60', 'Payment Mode': 'Card', Deposit: 'Yes', 'Contact Name': 'Gale Repeat', 'Transaction Status': 'Successful', 'Created At': '05/20/2022' }]),
+      estimates: csv('estimates', []), invoices: csv('invoices', []), leads: csv('leads', []),
+    });
+    expect(withDeposit.payments[0].jobSid).toBe('WR940001');
+    expect(n.jobs.find((j) => j.sid === 'WR940001')!.workOrderSids).toEqual(['WO940001']);
+  });
+
   it("an estimate whose title matches no work request goes to its contact's work request", () => {
     const n = normalize({ ...fixture, estimates: fixture.estimates.replace('"Avery Fixture - Work Request","Local"', '"Avery Fixture - Renamed","Local"') });
     expect(n.estimates.find((e) => e.sid === 'ES900001')!.jobSid).toBe('WR900001');

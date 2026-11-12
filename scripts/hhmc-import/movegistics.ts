@@ -318,19 +318,14 @@ export function normalize(files: Files, overrides: Overrides = {}): Normalized {
     });
   }
 
-  // ---- work orders, grouped by (work request title, contact name)
+  // ---- work orders (assigned to their work request once the work requests are read)
   const woRows = parseCsv(files.workOrders);
   const titleKey = (title: string, contactName: string) => `${normName(title)}|${normName(contactName)}`;
-  const woByKey = new Map<string, Row[]>();
   const workOrderOf = (w: Row): NWorkOrder => {
     const days = daysBetween(day(w['Start Date']), day(w['End Date']));
     const note = [`WO ${w['WO ID']}`, blank(w['Crew']) ? `crew: ${blank(w['Crew'])}` : null, blank(w['Assigned vehicle']) ? `vehicle: ${blank(w['Assigned vehicle'])}` : null].filter(Boolean).join(', ');
     return { sid: w['WO ID'], days, note, cancelled: (w['Pipeline Stage'] ?? '') === 'Cancelled Out', raw: rawOf(w) };
   };
-  for (const r of woRows) {
-    const k = titleKey(r['Work Request'] ?? '', r['Contact Name'] ?? '');
-    woByKey.set(k, [...(woByKey.get(k) ?? []), r]);
-  }
 
   // ---- invoices, grouped the same way (filled after jobs exist)
   const invRows = parseCsv(files.invoices);
@@ -349,7 +344,6 @@ export function normalize(files: Files, overrides: Overrides = {}): Normalized {
     const service = SERVICE[(r['Service Type'] ?? 'local').toLowerCase()] ?? SERVICE.local;
     const stageRaw = (r['Pipeline Stage'] ?? '').toLowerCase();
     const k = titleKey(r['Work Request Title'] ?? '', contactName);
-    const wos = woByKey.get(k) ?? [];
     const src = leadSource(r['Work Request Source']);
     const sections = Object.fromEntries(Object.entries(SECTION_COLUMNS).map(([key, col]) => [key, cents(r[col])]));
     const job: NJob = {
@@ -360,27 +354,23 @@ export function normalize(files: Files, overrides: Overrides = {}): Normalized {
       stage: stageRaw === 'closed lost' ? 'lost' : stageRaw === 'lead qualified' ? 'qualified' : stageRaw === 'closed won' ? 'booked' : 'estimate_sent',
       lostReason: blank(r['Closed Lost Reason']), source: src.source, sourceDetail: src.detail,
       ownerName: ownerName(r['Work Request Owner']), createdOn, amountCents: cents(r['Work Request Amount']), sections,
-      bookedOn: wos.map((w) => day(w['Created At'])).filter((d): d is string => !!d).sort()[0] ?? null,
-      days: [], dayNotes: {}, workOrders: wos.map(workOrderOf),
-      workOrderSids: wos.map((w) => w['WO ID']), customerComments: blank(r['Customer Comments']),
+      bookedOn: null, days: [], dayNotes: {}, workOrders: [], workOrderSids: [], customerComments: blank(r['Customer Comments']),
       internalNotes: [blank(r['Internal Note']), blank(r['Notes']) ? `Notes (Movegistics): ${blank(r['Notes'])}` : null].filter(Boolean).join('\n\n') || null,
       placeholder: false, bedrooms: blank(r['Number Of Bedrooms']), companyName: blank(r['Company Name']), rating: rating(r['Work Request Rating']),
       coordinators: (r['Work Request Move Coordinators'] ?? '').split(/[,;]/).map((v) => v.trim()).filter(Boolean), raw: rawOf(r),
     };
-    for (const w of job.workOrders.filter((w) => !w.cancelled)) {
-      for (const d of w.days) job.dayNotes[d] = [job.dayNotes[d], w.note].filter(Boolean).join(' · ');
-    }
-    job.days = Object.keys(job.dayNotes).sort();
-    // A booked move's date is its first work-order day (the calendar and lists must agree).
-    if (job.days.length) job.moveDate = job.days[0];
     if (job.stage === 'lost' && !job.lostReason) job.lostReason = 'Closed lost in Movegistics';
-    if (job.stage === 'booked' && wos.length > 0 && wos.every((w) => (w['Pipeline Stage'] ?? '') === 'Cancelled Out')) job.stage = 'cancelled';
-    if (!wos.length && stageRaw === 'closed won') issue('closed-won work requests with no work order found');
     jobs.push(job);
     jobByKey.set(k, [...(jobByKey.get(k) ?? []), job]);
     jobByTitle.set(normName(job.title), [...(jobByTitle.get(normName(job.title)) ?? []), job]);
   }
-  const findJob = (title: string, contactName: string, onDate?: string | null): NJob | null => {
+  const dayNumber = (d: string) => Date.parse(`${d}T12:00:00Z`) / 86_400_000;
+  /**
+   * The work request a record names (by title and contact). Several with the same title (a repeat
+   * customer): for a work order or an invoice (`moveNear` = its start or invoice date), the booked
+   * one whose move date is nearest; otherwise the latest created on or before the date.
+   */
+  const findJob = (title: string, contactName: string, onDate?: string | null, moveNear?: string | null): NJob | null => {
     const exact = jobByKey.get(titleKey(title, contactName)) ?? [];
     let pool = exact;
     if (!pool.length) {
@@ -390,11 +380,41 @@ export function normalize(files: Files, overrides: Overrides = {}): Normalized {
       pool = byTitle;
     }
     if (!pool.length) return null;
-    if (pool.length === 1 || !onDate) return pool[pool.length - 1];
+    if (pool.length === 1) return pool[0];
+    if (moveNear) {
+      const booked = pool.filter((j) => (j.stage === 'booked' || j.stage === 'cancelled') && j.moveDate);
+      const near = (booked.length ? booked : pool.filter((j) => j.moveDate)).sort((a, b) => Math.abs(dayNumber(a.moveDate!) - dayNumber(moveNear)) - Math.abs(dayNumber(b.moveDate!) - dayNumber(moveNear)));
+      if (near.length) return near[0];
+    }
+    if (!onDate) return pool[pool.length - 1];
     // Several work requests with the same title (repeat customers): the latest created on or before the date.
     const before = pool.filter((j) => !j.createdOn || j.createdOn <= onDate).sort((a, b) => (a.createdOn ?? '').localeCompare(b.createdOn ?? ''));
     return before.at(-1) ?? pool[0];
   };
+
+  // Each work order belongs to exactly ONE work request: a repeat customer's work requests often
+  // share a title, so the booked one whose move date is nearest the work order's start is the one.
+  for (const r of woRows) {
+    const job = findJob(r['Work Request'] ?? '', r['Contact Name'] ?? '', day(r['Created At']) ?? day(r['Start Date']), day(r['Start Date']));
+    if (!job) {
+      issue('work orders with no matching work request (their row is in the report only)');
+      continue;
+    }
+    job.workOrders.push(workOrderOf(r));
+    job.workOrderSids.push(r['WO ID']);
+    const created = day(r['Created At']);
+    if (created && (!job.bookedOn || created < job.bookedOn)) job.bookedOn = created;
+  }
+  for (const job of jobs) {
+    for (const w of job.workOrders.filter((w) => !w.cancelled)) {
+      for (const d of w.days) job.dayNotes[d] = [job.dayNotes[d], w.note].filter(Boolean).join(' · ');
+    }
+    job.days = Object.keys(job.dayNotes).sort();
+    // A booked move's date is its first work-order day (the calendar and lists must agree).
+    if (job.days.length) job.moveDate = job.days[0];
+    if (job.stage === 'booked' && job.workOrders.length > 0 && job.workOrders.every((w) => w.cancelled)) job.stage = 'cancelled';
+    if (!job.workOrders.length && job.stage === 'booked') issue('closed-won work requests with no work order found');
+  }
 
   /**
    * An estimate whose work request title matches nothing (Movegistics renamed the work request, or
@@ -486,7 +506,7 @@ export function normalize(files: Files, overrides: Overrides = {}): Normalized {
     const invoiceDate = day(r['Invoice Date']) ?? day(r['Created Date'])!;
     const email = normEmail(r['Contact Email']);
     const phone = normPhone(r['Contact Phone']);
-    let job = findJob(r['Work Request Title'] ?? '', r['Contact Name'] ?? '', invoiceDate);
+    let job = findJob(r['Work Request Title'] ?? '', r['Contact Name'] ?? '', invoiceDate, invoiceDate);
     if (!job) {
       const { first, last } = splitName(r['Contact Name'] ?? '');
       const contact = contactFor({ email, phone, first, last, sid: r['Invoice ID'], createdOn: invoiceDate }, 'invoice');
@@ -552,9 +572,16 @@ export function normalize(files: Files, overrides: Overrides = {}): Normalized {
     let jobSid = invoice?.jobSid ?? null;
     if (!jobSid && contactSid) {
       // A deposit: the customer's work request with the nearest move on or after the payment.
-      const candidates = (jobsOfContact.get(contactSid) ?? []).filter((j) => !j.placeholder);
-      const upcoming = candidates.filter((j) => (j.moveDate ?? '9999') >= paidOn).sort((a, b) => (a.moveDate ?? '').localeCompare(b.moveDate ?? ''));
-      jobSid = (upcoming[0] ?? candidates.sort((a, b) => (b.createdOn ?? '').localeCompare(a.createdOn ?? ''))[0])?.sid ?? null;
+      // A deposit is paid on a move that went ahead: prefer the customer's booked work requests.
+      const all = (jobsOfContact.get(contactSid) ?? []).filter((j) => !j.placeholder);
+      const went = all.filter((j) => ['booked', 'completed', 'closed', 'cancelled'].includes(j.stage));
+      const candidates = went.length ? went : all;
+      // The move still ahead whose work request was made most recently before the payment (two
+      // moves weeks apart: each deposit follows its own request); else the nearest move ahead.
+      const upcoming = candidates.filter((j) => (j.moveDate ?? '9999') >= paidOn);
+      const madeBefore = upcoming.filter((j) => j.createdOn && j.createdOn <= paidOn).sort((a, b) => (b.createdOn ?? '').localeCompare(a.createdOn ?? ''));
+      const nearest = [...upcoming].sort((a, b) => (a.moveDate ?? '').localeCompare(b.moveDate ?? ''));
+      jobSid = (madeBefore[0] ?? nearest[0] ?? candidates.sort((a, b) => (b.createdOn ?? '').localeCompare(a.createdOn ?? ''))[0])?.sid ?? null;
     }
     if (!contactSid) issue('payments whose contact name matches no single contact (imported without a customer)');
     else if (!jobSid) issue('payments not linked to any work request');

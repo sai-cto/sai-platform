@@ -22,6 +22,8 @@
     "db:migrate": "tsx scripts/db-migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:reset": "tsx scripts/db-reset.ts",
+    "db:backup": "tsx scripts/db-backup.ts",
+    "db:restore": "tsx scripts/db-restore.ts",
     "docs:permissions": "tsx scripts/generate-permissions-doc.ts",
     "hhmc:automations": "tsx scripts/hhmc-automations.ts",
     "demo:prepare": "tsx scripts/demo-prepare.ts",
@@ -31,6 +33,7 @@
     "check": "npm run typecheck && npm run lint && npm run test && npm run secret-scan",
     "hhmc:import": "tsx scripts/hhmc-import/index.ts",
     "hhmc:import:real": "tsx scripts/hhmc-import/index.ts --real",
+    "hhmc:perf": "tsx scripts/hhmc-perf.ts",
     "hhmc:sync-to-pilot": "tsx scripts/hhmc-sync/index.ts"
   },
   "dependencies": {
