@@ -131,6 +131,7 @@ Then send the managers `docs/hhmc-analysis/MANAGER-MESSAGE.md`, with
 - **Previews:** if Vercel ever builds a "preview" of other code, it has no database. An error
   page there is expected and harmless.
 - **Stored files** (saved estimate documents) don't last on this hosting yet.
+- **Deploy says "blocked" (no Git account for the commit author):** Vercel's free plan only builds commits whose author email belongs to the `sai-cto` GitHub account. Set `git config user.email` to that account's email before committing. Merging a pull request on github.com always works.
 
 ## Going fully live (replacing Movegistics): not built yet
 
