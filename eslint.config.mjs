@@ -67,6 +67,8 @@ const eslintConfig = defineConfig([
     'storage/**',
     'playwright-report/**',
     'test-results/**',
+    // Static Hired Hands site: plain browser JS, outside the Next.js app.
+    'hiredhands-site/**',
   ]),
   {
     // Routes and UI: no direct database access, no system actor, no raw transaction.
