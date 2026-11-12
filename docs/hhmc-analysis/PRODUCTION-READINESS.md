@@ -19,7 +19,7 @@ already covers several items; they are marked "pilot mode".
 
 ## 3. Getting the data there
 - [ ] Re-export from Movegistics on the cut-over day (the import is idempotent: re-running updates, never duplicates).
-- [ ] Run the importer **from the CTO's machine against the hosted database once**, deliberately (today it refuses any non-local database — change that guard on purpose, with a review, not by editing `.env`).
+- [x] The importer can load into the pilot, deliberately: `npm run hhmc:import -- --target pilot --confirm-host <host>` (reads only `.env.pilot`; refuses unless the database is the marked pilot with this code's migrations; writes as `sai_app`; DECISIONS P5E-1). Over the network it takes tens of minutes in batches of 50: run it when nobody is using the site.
 - [ ] Re-run the reconciliation against the hosted database; it must match to the cent before managers are told to use it.
 - [ ] Decide the gaps: line items (Open API key), the 74 unmatched estimates, 7 partial refunds, Terms & Conditions text.
 

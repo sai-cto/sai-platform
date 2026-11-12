@@ -52,7 +52,9 @@ async function backdate(s: Scope, entity: EntityDef, id: string, on: string | nu
 
 /** Runs one batch in its own transaction (a whole import in one transaction runs out of locks). */
 export type Batch = <T>(fn: (s: Scope) => Promise<T>) => Promise<T>;
-const BATCH = 250;
+// Smaller over the network (pilot): each batch's transaction holds the record-number locks, so
+// short batches keep the live site responsive while the import runs.
+const BATCH = Number(process.env.HHMC_IMPORT_BATCH) || 250;
 
 export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats: LoadStats; ids: Map<string, string> }> {
   let s!: Scope; // the current batch's scope (every helper below uses it)
