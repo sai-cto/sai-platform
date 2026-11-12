@@ -118,6 +118,56 @@ It takes about 30 minutes. You need to be able to sign in to SAI's Microsoft 365
 Then send the managers `docs/hhmc-analysis/MANAGER-MESSAGE.md`, with
 `docs/hhmc-analysis/MANAGER-TESTING-GUIDE.md` attached.
 
+## Make the website match your laptop (HHMC data and settings)
+
+This copies **HHMC's live data and settings** from the database on your laptop to the website,
+replacing what's there, then checks every table matches. Run it on your laptop, in the project
+folder, on the latest `main` (the same code the website runs).
+
+**The rule:** the website follows the laptop **until managers start using it**. The copy refuses
+if anything on the website has changed since the last copy, so their work is never overwritten.
+From then on the website is the master copy.
+
+1. **Once:** in the project folder, create a file named `.env.pilot` with one line (it is
+   ignored by git, so it never reaches GitHub). The address is Neon's **Connect** string with
+   **Connection pooling** off, ending in `?sslmode=require`:
+   ```
+   DATABASE_OWNER_URL=postgresql://…?sslmode=require
+   ```
+2. **Get the latest code:** `git pull` on `main`, then `npm install`. The site deploys the same
+   code; wait until Vercel shows the newest deploy as **Ready**. Then run `npm run db:migrate`
+   so your laptop's database has the same layout.
+3. **Note the time before you copy.** Neon can put the database back to an earlier moment
+   (its **Restore** option; the free plan only reaches back a short time, so check how far in
+   Neon first). That is your undo.
+4. **Look first** (writes nothing). The host is the part of the address between `@` and `/`:
+   ```bash
+   npm run hhmc:sync-to-pilot -- --confirm-host <host> --check
+   ```
+   It lists every table: laptop rows, website rows, and whether they match.
+5. **Copy.** The very first time, add `--first-copy` (allowed only while nobody has used the
+   website):
+   ```bash
+   npm run hhmc:sync-to-pilot -- --confirm-host <host> --first-copy
+   ```
+   After that, without `--first-copy`. It finishes with the same table, every row saying
+   "matches". If anything fails, nothing on the website changes.
+6. Run step 4 again whenever you want proof that the website matches.
+
+**What is not copied:**
+- **People and sign-ins:** the website uses Microsoft accounts. Who did what is matched by
+  email; anyone without an account on the website shows as unknown.
+- **Saved files** (estimate PDFs): the hosting doesn't keep files yet; they can be made again.
+- **Other businesses and Test mode:** untouched on both sides.
+
+**If it refuses:**
+- *"changed since the last copy"*: someone used the website. Their work wins; stop copying.
+  Make further changes on the website.
+- *An activity log entry on the website that the laptop doesn't have:* happens if the Movegistics
+  history was loaded straight into the website with `hhmc:import --target pilot`. Use Neon's
+  restore to go back to before that import (or start a fresh database), then copy.
+- *Migrations differ:* the laptop and the website run different code. Do step 2 again.
+
 ## Good to know
 
 - **Real data is protected.** The build refuses to touch a database that has other tables in it
