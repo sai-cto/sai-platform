@@ -27,12 +27,13 @@ import { P } from '../permissions';
 import { ACCESS_FLAGS, hhmcCatalogItems, type AccessFlag } from '../schema';
 import { loadSettings, type HhmcSettings } from '../settings';
 import { optionalText, parse } from './input';
-import { routeBetween } from './maps';
+import { routeStops, routeThrough, type Route } from './maps';
+import { loadJob, trucksOf } from './common';
 import { parseQty, type SectionKey } from './pricing';
 import { editableQuote, quoteLines } from './quote';
 
-export const TRUCK_SIZES = ['16', '22', '26'] as const;
-export type TruckSize = (typeof TRUCK_SIZES)[number];
+import { TRUCK_SIZES, truckSizeOf, type TruckSize } from '../rules';
+export { TRUCK_SIZES, type TruckSize };
 
 export type CatalogRow = { id: string; name: string; section: SectionKey; unit: string; rateCents: number; isActive: boolean };
 
@@ -49,6 +50,9 @@ export type BuilderInput = {
   truckSize: TruckSize;
   /** How many of our trucks (each pays its own day fee and mileage). */
   truckCount: number;
+  /** The sizes of the specific trucks picked on the work request, one per truck. When given,
+   *  they replace truckSize × truckCount (one set of lines per size). */
+  truckSizes?: TruckSize[];
   truckDaysHundredths: number;
   /** Road miles × 10, or null when unknown. */
   distanceTenths: number | null;
@@ -145,16 +149,22 @@ export function buildLines(
     const longDistance = input.distanceTenths !== null && input.distanceTenths > Math.round(settings.longDistanceMiles * 10);
     if (input.distanceTenths === null) warnings.push('No mileage yet: priced as a local move. Enter the miles to check.');
     const days = input.truckDaysHundredths > 0 ? input.truckDaysHundredths : 100;
-    const trucks = Math.max(1, Math.floor(input.truckCount));
-    const each = trucks > 1 ? `${trucks} trucks` : null;
-    if (longDistance) {
-      truckPricing = 'long_distance';
-      lines.push(line(find(catalog, `${input.truckSize}' Truck Long Distance - Day`), days * trucks, { description: each }));
-      // Miles in hundredths: tenths × 10; every truck drives the distance.
-      lines.push(line(find(catalog, `${input.truckSize}' Truck Long Distance - Mileage`), input.distanceTenths! * 10 * trucks, { description: each }));
-    } else {
-      truckPricing = 'local';
-      lines.push(line(find(catalog, `${input.truckSize}' Truck Local`), days * trucks, { description: each }));
+    // How many trucks of each size: the picked trucks, or N of the one chosen size.
+    const bySize = new Map<TruckSize, number>();
+    if (input.truckSizes?.length) for (const size of input.truckSizes) bySize.set(size, (bySize.get(size) ?? 0) + 1);
+    else bySize.set(input.truckSize, Math.max(1, Math.floor(input.truckCount)));
+    truckPricing = longDistance ? 'long_distance' : 'local';
+    for (const size of TRUCK_SIZES) {
+      const trucks = bySize.get(size);
+      if (!trucks) continue;
+      const each = trucks > 1 ? `${trucks} trucks` : null;
+      if (longDistance) {
+        lines.push(line(find(catalog, `${size}' Truck Long Distance - Day`), days * trucks, { description: each }));
+        // Miles in hundredths: tenths × 10; every truck drives the distance.
+        lines.push(line(find(catalog, `${size}' Truck Long Distance - Mileage`), input.distanceTenths! * 10 * trucks, { description: each }));
+      } else {
+        lines.push(line(find(catalog, `${size}' Truck Local`), days * trucks, { description: each }));
+      }
     }
   }
 
@@ -202,6 +212,8 @@ const builderForm = z.object({
   ownTruck: z.boolean().default(false),
   truckSize: z.enum(TRUCK_SIZES).default('16'),
   truckCount: z.coerce.number().int().min(1).max(10).default(1),
+  /** Price the trucks picked on the work request (each at its own size). */
+  usePickedTrucks: z.boolean().default(false),
   truckDays: hours('Truck days'),
   miles: z.string().trim().default(''),
   driveMinutes: z.string().trim().default(''),
@@ -249,6 +261,10 @@ export async function applyBuilder(ctx: BusinessContext, jobId: string, raw: unk
         return { catalogItemId: id, qtyHundredths: q };
       });
     const settings = await loadSettings(ctx);
+    // The trucks picked on the work request, each at its size (a truck with no size in its
+    // name, e.g. "Van", is priced at the size chosen in the builder).
+    const picked = f.usePickedTrucks && job.truckIds.length ? (await trucksOf(s)).filter((t) => job.truckIds.includes(t.id)) : [];
+    const truckSizes = picked.length ? picked.map((t) => truckSizeOf(t.name) ?? f.truckSize) : undefined;
     const result = buildLines(
       {
         crewSize: f.crewSize,
@@ -261,6 +277,7 @@ export async function applyBuilder(ctx: BusinessContext, jobId: string, raw: unk
         ownTruck: f.ownTruck,
         truckSize: f.truckSize,
         truckCount: f.truckCount,
+        truckSizes,
         truckDaysHundredths: f.truckDays,
         distanceTenths,
         materials,
@@ -281,7 +298,7 @@ export async function applyBuilder(ctx: BusinessContext, jobId: string, raw: unk
       crewSize: f.crewSize,
       cornellian: f.cornellian,
       ownTruck: f.ownTruck,
-      trucks: f.ownTruck ? 0 : f.truckCount,
+      trucks: f.ownTruck ? 0 : (truckSizes?.length ?? f.truckCount),
       distanceTenths,
       driveMinutes,
       distanceSource: distanceTenths === null ? null : job.distanceSource === 'maps' && job.distanceTenths === distanceTenths ? 'maps' : 'manual',
@@ -294,19 +311,44 @@ export async function applyBuilder(ctx: BusinessContext, jobId: string, raw: unk
   });
 }
 
-/** Fills the job's mileage and drive time from the maps adapter (only when a key is set). The
- *  outside call happens between two short transactions, never inside one. */
-export async function lookupMileage(ctx: BusinessContext, jobId: string) {
-  const { originAddress, destinationAddress } = await withScope(ctx, P.jobsWrite, async (s) => (await editableQuote(s, jobId)).job);
-  if (!originAddress || !destinationAddress) throw new ValidationError('Enter both addresses on the job first.');
-  const route = await routeBetween(originAddress, destinationAddress);
-  if (route === 'not_configured') throw new ValidationError('Automatic mileage is not set up yet (no maps key). Enter the miles by hand.');
-  if (!route) throw new ValidationError('The maps service could not find a driving route between those addresses. Check them, or enter the miles by hand.');
+export type MileageResult =
+  | { status: 'updated'; route: Route }
+  | { status: 'not_configured' | 'missing_addresses' | 'already_set' | 'no_route' | 'changed' | 'locked' };
+
+/**
+ * Fills the work request's mileage and drive time from the maps adapter, through every stop.
+ * The outside call happens between two short transactions, never inside one.
+ *
+ * - force (staff pressed "Look up mileage"): replaces whatever is there; problems are errors.
+ * - automatic (a work request was created or its addresses changed): only fills an empty
+ *   distance, never overwrites miles typed in by staff, and never throws.
+ */
+export async function refreshMileage(ctx: BusinessContext, jobId: string, options: { force?: boolean } = {}): Promise<MileageResult> {
+  const force = options.force ?? false;
+  const fail = (status: Exclude<MileageResult['status'], 'updated'>, message: string): MileageResult => {
+    if (force) throw new ValidationError(message);
+    return { status };
+  };
+  const job = await withScope(ctx, P.jobsWrite, (s) => loadJob(s, jobId));
+  if (job.stage === 'closed' || job.stage === 'cancelled') return fail('locked', 'A closed or cancelled work request cannot be changed.');
+  if (!force && job.distanceTenths !== null) return { status: 'already_set' };
+  const stops = routeStops(job);
+  if (!job.originAddress || !job.destinationAddress) return fail('missing_addresses', 'Enter both addresses on the work request first.');
+  const route = await routeThrough(stops);
+  if (route === 'not_configured') return fail('not_configured', 'Automatic mileage is not set up yet (no Google Maps key). Enter the miles by hand.');
+  if (!route) return fail('no_route', 'Google Maps could not find a driving route through those addresses. Check them, or enter the miles by hand.');
   return withScope(ctx, P.jobsWrite, async (s) => {
-    const { job } = await editableQuote(s, jobId);
-    if (job.originAddress !== originAddress || job.destinationAddress !== destinationAddress)
-      throw new ValidationError('The addresses changed while looking up the mileage. Try again.');
-    await updateRecord(s, jobEntity, job.id, { distanceTenths: route.distanceTenths, driveMinutes: route.driveMinutes, distanceSource: 'maps' });
-    return route;
+    const now = await loadJob(s, jobId);
+    if (routeStops(now).join('\n') !== stops.join('\n')) return fail('changed', 'The addresses changed while looking up the mileage. Try again.');
+    if (!force && now.distanceTenths !== null) return { status: 'already_set' } as MileageResult;
+    await updateRecord(s, jobEntity, jobId, { distanceTenths: route.distanceTenths, driveMinutes: route.driveMinutes, distanceSource: 'maps' });
+    return { status: 'updated', route } as MileageResult;
   });
+}
+
+/** "Look up mileage" in the estimate builder. */
+export async function lookupMileage(ctx: BusinessContext, jobId: string): Promise<Route> {
+  const result = await refreshMileage(ctx, jobId, { force: true });
+  if (result.status !== 'updated') throw new ValidationError('Could not look up the mileage. Try again.');
+  return result.route;
 }

@@ -341,3 +341,15 @@ export function automationStillWanted(input: {
       return { ok: true };
   }
 }
+
+// ---------------------------------------------------------------- trucks
+
+/** HHMC's truck sizes (feet), matching the line items "16' Truck Local", "22' …", "26' …". */
+export const TRUCK_SIZES = ['16', '22', '26'] as const;
+export type TruckSize = (typeof TRUCK_SIZES)[number];
+
+/** The size in a truck's name ("Truck 2 · 26'", "26 ft box truck"), or null (e.g. "Van"). */
+export function truckSizeOf(name: string): TruckSize | null {
+  const m = /\b(16|22|26)\s*(?:'|’|′|ft\b|foot\b|feet\b|-?foot\b)/i.exec(name);
+  return m ? (m[1] as TruckSize) : null;
+}

@@ -25,7 +25,7 @@ import { addDays, isDateText, isTimeText, localDate, localTime, STAGE_LABELS } f
 import { hhmcEstimates, hhmcJobDays, hhmcJobs } from '../schema';
 import { loadSettings } from '../settings';
 import { cancelQueued, enqueue } from './automations';
-import { loadCustomer, loadJob, personName } from './common';
+import { loadCustomer, loadJob, personName, trucksOf } from './common';
 import { optionalText, parse } from './input';
 import { moveStage } from './jobs';
 
@@ -120,13 +120,11 @@ export async function setActualTime(ctx: BusinessContext, jobId: string, dayId: 
 
 // ---------------------------------------------------------------- book / release
 
-/** Active trucks (core resources of kind "truck"). */
-export async function trucksOf(s: Scope) {
-  return s.db
-    .select()
-    .from(resources)
-    .where(and(s.where(resources), eq(resources.kind, 'truck'), eq(resources.isActive, true)))
-    .orderBy(asc(resources.name));
+export { trucksOf };
+
+/** The fleet, for the "Trucks for this move" checkboxes. */
+export async function listTrucks(ctx: BusinessContext) {
+  return withScope(ctx, P.jobsRead, async (s) => (await trucksOf(s)).map((t) => ({ id: t.id, name: t.name })));
 }
 
 /** Book This Move (ref §2.1 step 9): staff only, needs a signed estimate. */
@@ -149,13 +147,22 @@ export async function bookJob(ctx: BusinessContext, jobId: string, now: Date = n
     if (!signed) throw new ValidationError('The customer must sign the estimate before the job is booked.');
     const days = await jobDaysOf(s, jobId);
     if (days.length === 0) throw new ValidationError('Add at least one job day before booking.');
-    const trucks = await trucksOf(s);
+    const fleet = await trucksOf(s);
+    // The trucks picked on the work request come first, in the order picked; the rest of the
+    // fleet fills any extra truck a day needs. A picked truck that is busy stops the booking,
+    // so the office decides (pick another truck, or move the day): it is never swapped silently.
+    const picked = job.truckIds.map((id) => fleet.find((t) => t.id === id)).filter((t) => t !== undefined);
+    const trucks = [...picked, ...fleet.filter((t) => !job.truckIds.includes(t.id))];
     const tz = ctx.business.timeZone;
     for (const day of days) {
       const startsAt = localTime(day.dayDate, day.startTime, tz);
       const endsAt = new Date(startsAt.getTime() + day.durationMinutes * 60_000);
       const count = Math.max(1, day.trucks);
       const taken = new Set<string>();
+      for (const truck of picked.slice(0, count)) {
+        if ((await findConflicts(s, { startsAt, endsAt, resourceId: truck.id })).length > 0)
+          throw new ValidationError(`${truck.name} is already booked on ${day.dayDate}. Pick another truck on the work request, or change the day.`);
+      }
       for (let i = 0; i < count; i++) {
         let resourceId: string | null = null;
         for (const truck of trucks) {

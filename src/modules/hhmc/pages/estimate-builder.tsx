@@ -34,6 +34,7 @@ export function EstimateBuilder({
   catalog,
   hasLines,
   mapsReady,
+  pickedTrucks = [],
   longDistanceMiles,
   cornellianPerHour,
 }: {
@@ -43,6 +44,8 @@ export function EstimateBuilder({
   catalog: Item[];
   hasLines: boolean;
   mapsReady: boolean;
+  /** Names of the trucks picked on the work request. */
+  pickedTrucks?: string[];
   longDistanceMiles: number;
   cornellianPerHour: number;
 }) {
@@ -95,6 +98,11 @@ export function EstimateBuilder({
           <div className="flex items-end pb-2 sm:col-span-4">
             <Check name="ownTruck" defaultChecked={job.ownTruck} label="Customer's own truck (we load and unload only: no truck fee)" />
           </div>
+          {pickedTrucks.length ? (
+            <div className="sm:col-span-4">
+              <Check name="usePickedTrucks" defaultChecked label={`Price the trucks picked on the work request: ${pickedTrucks.join(', ')} (each at its own size; size and number below are then ignored)`} />
+            </div>
+          ) : null}
           <Field label="Our truck" htmlFor="b-size">
             <Select id="b-size" name="truckSize" defaultValue="16">
               {TRUCK_SIZES.map((t) => <option key={t} value={t}>{`${t}' truck`}</option>)}

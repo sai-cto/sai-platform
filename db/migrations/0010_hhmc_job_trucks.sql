@@ -1,0 +1,1 @@
+ALTER TABLE "hhmc_jobs" ADD COLUMN "truck_ids" uuid[] DEFAULT '{}'::uuid[] NOT NULL;

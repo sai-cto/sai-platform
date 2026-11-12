@@ -18,6 +18,8 @@ import {
   reopenLeadAction,
   updateLeadAction,
 } from '../actions';
+import { listTrucks } from '../services/booking';
+import { TruckPicker } from './jobs';
 import { CORE, P } from '../permissions';
 import { BEDROOMS, CALL_OUTCOME_LABELS, JOB_TYPES, LEAD_STATUS_LABELS, SERVICE_TYPE_LABELS } from '../rules';
 import { LEAD_SOURCES, SERVICE_TYPES, type hhmcLeads, type LeadStatus } from '../schema';
@@ -189,6 +191,7 @@ export async function LeadPage({ ctx, params, basePath }: PortalPageProps) {
   const canWrite = can(ctx, P.leadsWrite);
   const canConvert = canWrite && can(ctx, P.jobsWrite) && can(ctx, CORE.customersRead) && lead.status === 'new';
   const preview = canConvert ? await conversionPreview(ctx, lead.id) : null;
+  const trucks = canConvert ? await listTrucks(ctx) : [];
 
   return (
     <>
@@ -277,6 +280,7 @@ export async function LeadPage({ ctx, params, basePath }: PortalPageProps) {
                   </Field>
                   <Field label="Movers" htmlFor="cv-crew"><input id="cv-crew" name="crewSize" type="number" min={1} max={20} defaultValue={2} className={inputClass} /></Field>
                   <Field label="Trucks" htmlFor="cv-trucks"><input id="cv-trucks" name="trucks" type="number" min={0} max={10} defaultValue={1} className={inputClass} /></Field>
+                  <TruckPicker trucks={trucks} idPrefix="cv-truck" />
                 </div>
                 {preview.duplicates.length && !preview.match ? <Check name="confirmNewCustomer" label="This is a different person: create a new customer" /> : null}
               </ActionForm>

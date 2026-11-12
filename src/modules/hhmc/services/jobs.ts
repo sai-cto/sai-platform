@@ -15,7 +15,8 @@ import { createRecord, updateRecord } from '@/core/records/records';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { estimateEntity, jobDayEntity, jobEntity, noteEntity, quoteEntity, quoteLineEntity } from '../entities';
 import { P } from '../permissions';
-import { isDateText, isJobTypeFor, JOB_TYPES, stageMoveProblem, STAGE_LABELS } from '../rules';
+import { isDateText, isJobTypeFor, JOB_TYPES, stageMoveProblem, STAGE_LABELS, truckSizeOf } from '../rules';
+import { isUuid } from '@/core/ids';
 import {
   hhmcCatalogItems,
   hhmcEstimates,
@@ -27,7 +28,8 @@ import {
 import { loadSettings } from '../settings';
 import { cancelQueued } from './automations';
 import { releaseAppointments } from './booking';
-import { loadCustomer, loadJob, loadLead } from './common';
+import { isTruckLine, sameName } from './builder';
+import { loadCustomer, loadJob, loadLead, trucksOf } from './common';
 import { optionalText, parse, requiredId } from './input';
 
 export const JOBS_PAGE_SIZE = 25;
@@ -153,6 +155,12 @@ export const jobDetailsInput = z.object({
   bedrooms: optionalText(40),
   crewSize: count('Movers', 1, 20),
   trucks: count('Trucks', 0, 10),
+  /** Specific trucks picked for the move (Settings › Trucks); empty = any free truck. */
+  truckIds: z
+    .array(z.string().refine(isUuid, 'Choose trucks from the list'))
+    .max(10)
+    .default([])
+    .transform((ids) => [...new Set(ids)]),
   customerComments: optionalText(4000),
   scopeOfWork: optionalText(8000),
   internalNotes: optionalText(4000),
@@ -164,6 +172,15 @@ export const jobDetailsInput = z.object({
 });
 
 export type JobDetails = z.infer<typeof jobDetailsInput>;
+
+/** The picked trucks, in the business's truck order; refuses one that is unknown or retired. */
+async function pickedTrucks(s: Scope, ids: string[]) {
+  if (!ids.length) return [];
+  const active = await trucksOf(s);
+  const picked = active.filter((t) => ids.includes(t.id));
+  if (picked.length !== ids.length) throw new ValidationError('A chosen truck is no longer in Settings › Trucks. Reload the page and choose again.');
+  return picked;
+}
 
 function checkJobType(details: { serviceType: (typeof SERVICE_TYPES)[number]; jobType: string }) {
   if (!isJobTypeFor(details.serviceType, details.jobType))
@@ -181,6 +198,9 @@ export async function createJobInScope(
 ) {
   checkJobType(input);
   await loadCustomer(s, input.customerId);
+  const picked = await pickedTrucks(s, input.truckIds ?? []);
+  // Picking trucks sets how many the move needs.
+  if (picked.length) input = { ...input, trucks: picked.length };
   const settings = await loadSettings(s.ctx);
   const [jobNumber] = await nextRecordNumber(s, jobEntity, hhmcJobs.jobNumber, 'J');
   const job = await createRecord(s, jobEntity, {
@@ -198,7 +218,12 @@ export async function createJobInScope(
       .from(hhmcCatalogItems)
       .where(and(s.where(hhmcCatalogItems), eq(hhmcCatalogItems.isDefaultForLocal, true), eq(hhmcCatalogItems.isActive, true)))
       .orderBy(asc(hhmcCatalogItems.sortOrder));
-    for (const [i, item] of defaults.entries()) {
+    // Picked trucks put in their own truck line ("26' Truck Local" for a 26' truck), one line
+    // per size; a truck whose size is not in its name (e.g. "Van") uses the default truck line.
+    const truckLines = picked.length ? await truckLinesFor(s, picked) : null;
+    let order = 0;
+    for (const item of defaults) {
+      if (truckLines && isTruckLine(item.name)) continue;
       await createRecord(s, quoteLineEntity, {
         quoteId: quote.id,
         section: item.section,
@@ -207,7 +232,22 @@ export async function createJobInScope(
         unit: item.unit,
         qtyHundredths: 100 * Math.max(1, input.trucks),
         rateCents: item.rateCents,
-        sortOrder: i,
+        sortOrder: order++,
+      });
+    }
+    for (const t of truckLines ?? []) {
+      const item = t.item ?? defaults.find((d) => isTruckLine(d.name));
+      if (!item) continue;
+      await createRecord(s, quoteLineEntity, {
+        quoteId: quote.id,
+        section: item.section,
+        catalogItemId: item.id,
+        name: item.name,
+        unit: item.unit,
+        qtyHundredths: 100 * t.trucks.length,
+        rateCents: item.rateCents,
+        description: t.trucks.join(', '),
+        sortOrder: order++,
       });
     }
   }
@@ -224,6 +264,24 @@ export async function createJobInScope(
   return job;
 }
 
+/** The local truck line for each size among the picked trucks (null item = size unknown). */
+async function truckLinesFor(s: Scope, picked: { name: string }[]) {
+  const catalog = await s.db
+    .select()
+    .from(hhmcCatalogItems)
+    .where(and(s.where(hhmcCatalogItems), eq(hhmcCatalogItems.isActive, true)));
+  const groups = new Map<string, { item: (typeof catalog)[number] | null; trucks: string[] }>();
+  for (const truck of picked) {
+    const size = truckSizeOf(truck.name);
+    const item = size ? (catalog.find((c) => sameName(c.name, `${size}' Truck Local`)) ?? null) : null;
+    const key = item?.id ?? 'default';
+    const group = groups.get(key) ?? { item, trucks: [] };
+    group.trucks.push(truck.name);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
 export async function createJob(ctx: BusinessContext, raw: unknown) {
   const input = parse(jobDetailsInput.extend({ customerId: requiredId('a customer') }), raw);
   return withScope(ctx, P.jobsWrite, (s) => createJobInScope(s, input));
@@ -236,7 +294,16 @@ export async function updateJob(ctx: BusinessContext, jobId: string, raw: unknow
     const job = await loadJob(s, jobId);
     if (job.stage === 'closed' || job.stage === 'cancelled')
       throw new ValidationError(`A ${STAGE_LABELS[job.stage].toLowerCase()} job cannot be changed.`);
-    return updateRecord(s, jobEntity, jobId, input);
+    const picked = await pickedTrucks(s, input.truckIds);
+    // New addresses make the old mileage wrong: clear it, so it is looked up again (or retyped).
+    const stops = (j: { originAddress: string | null; extraStops: string[]; destinationAddress: string | null }) =>
+      [j.originAddress ?? '', ...j.extraStops, j.destinationAddress ?? ''].join('\n');
+    const routeChanged = stops(job) !== stops(input);
+    return updateRecord(s, jobEntity, jobId, {
+      ...input,
+      ...(picked.length ? { trucks: picked.length } : {}),
+      ...(routeChanged ? { distanceTenths: null, driveMinutes: null, distanceSource: null } : {}),
+    });
   });
 }
 

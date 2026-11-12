@@ -69,7 +69,7 @@ import {
   setQuoteOptions,
   updateQuoteLine,
 } from './services/quote';
-import { applyBuilder, lookupMileage } from './services/builder';
+import { applyBuilder, lookupMileage, refreshMileage } from './services/builder';
 import { createCatalogItem, updateCatalogItem, updateTemplate } from './services/settings';
 
 type Form = ActionResult | null;
@@ -153,9 +153,11 @@ export async function convertLeadAction(slug: string, mode: string, id: string, 
         jobType: text(form, 'jobType') || undefined,
         crewSize: text(form, 'crewSize') || 2,
         trucks: text(form, 'trucks') || 1,
+        truckIds: all(form, 'truckIds'),
       },
       { confirmNewCustomer: ticked(form, 'confirmNewCustomer') },
     );
+    await autoMileage(ctx, job.id);
     redirect(`${portalPath(ctx)}/jobs/${job.id}`);
   });
 }
@@ -168,6 +170,13 @@ export async function addLeadNoteAction(slug: string, mode: string, leadId: stri
 }
 
 // ---------------------------------------------------------------- jobs
+
+/** After a work request is created or changed: fill an empty mileage from Google Maps (when a
+ *  key is set). Best effort: the work request is already saved, so a maps problem never fails it. */
+async function autoMileage(ctx: BusinessContext, jobId: string) {
+  const result = await refreshMileage(ctx, jobId).catch(() => null);
+  return result?.status ?? 'failed';
+}
 
 function jobFields(form: FormData) {
   return {
@@ -184,6 +193,7 @@ function jobFields(form: FormData) {
     bedrooms: text(form, 'bedrooms'),
     crewSize: text(form, 'crewSize'),
     trucks: text(form, 'trucks'),
+    truckIds: all(form, 'truckIds'),
     customerComments: text(form, 'customerComments'),
     scopeOfWork: text(form, 'scopeOfWork'),
     internalNotes: text(form, 'internalNotes'),
@@ -198,6 +208,7 @@ function jobFields(form: FormData) {
 export async function createJobAction(slug: string, mode: string, _p: Form, form: FormData) {
   return run(slug, mode, async (ctx) => {
     const job = await createJob(ctx, { ...jobFields(form), customerId: text(form, 'customerId') });
+    await autoMileage(ctx, job.id);
     redirect(`${portalPath(ctx)}/jobs/${job.id}`);
   });
 }
@@ -205,7 +216,8 @@ export async function createJobAction(slug: string, mode: string, _p: Form, form
 export async function updateJobAction(slug: string, mode: string, id: string, _p: Form, form: FormData) {
   return run(slug, mode, async (ctx) => {
     await updateJob(ctx, id, jobFields(form));
-    return 'Saved.';
+    const mileage = await autoMileage(ctx, id);
+    return mileage === 'updated' ? 'Saved. Mileage looked up from Google Maps.' : 'Saved.';
   });
 }
 
@@ -272,6 +284,7 @@ export async function buildQuoteAction(slug: string, mode: string, jobId: string
       ownTruck: ticked(form, 'ownTruck'),
       truckSize: text(form, 'truckSize') || '16',
       truckCount: text(form, 'truckCount') || '1',
+      usePickedTrucks: ticked(form, 'usePickedTrucks'),
       truckDays: text(form, 'truckDays'),
       miles: text(form, 'miles'),
       driveMinutes: text(form, 'driveMinutes'),

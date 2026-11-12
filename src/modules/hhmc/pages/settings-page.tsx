@@ -14,6 +14,7 @@ import { ConfirmButton } from '@/ui/confirm-button';
 import { formatMoney } from '@/ui/format';
 import { Card, Field, PageHeader, Table, Td, Th, inputClass } from '@/ui/layout';
 import { addTruckAction, catalogItemAction, newCatalogItemAction, ruleAction, runDueEmailsAction, templateAction } from '../actions';
+import { truckSizeOf } from '../rules';
 import { CORE, P } from '../permissions';
 import type { AutomationTrigger } from '../schema';
 import { CATEGORIES, UNITS } from '../services/settings';
@@ -234,8 +235,18 @@ export async function SettingsPage({ ctx, searchParams, basePath }: PortalPagePr
 
       {area === 'trucks' ? (
         can(ctx, CORE.schedulingRead) ? (
-          <Card title="Trucks" description="Each booked move day takes one truck per truck needed.">
-            <ul className="mb-3 space-y-1 text-sm">{data.trucks.map((t) => <li key={t.id}>{t.name}</li>)}</ul>
+          <Card title="Trucks" description="Each booked move day takes one truck per truck needed. Staff can pick specific trucks on a work request; put the size in the name (16', 22' or 26') so a picked truck adds the right truck line to the quote.">
+            <ul className="mb-3 space-y-1 text-sm">
+              {data.trucks.map((t) => {
+                const size = truckSizeOf(t.name);
+                return (
+                  <li key={t.id}>
+                    {t.name}
+                    <span className="ml-2 text-xs text-zinc-500">{size ? `quotes as "${size}' Truck Local"` : 'no size in the name: quotes as the default truck line'}</span>
+                  </li>
+                );
+              })}
+            </ul>
             {can(ctx, CORE.schedulingWrite) ? (
               <ActionForm action={addTruckAction.bind(null, slug, mode)} submitLabel="Add truck" submitVariant="secondary">
                 <Field label="Name" htmlFor="truck-name"><input id="truck-name" name="name" placeholder="Truck 4 · 22'" className={inputClass} /></Field>

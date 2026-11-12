@@ -218,7 +218,8 @@ managers win** and the conservative choice is logged in DECISIONS (P5C-*), most 
 | Local truck day fee ($195 for 16'); long distance (> ~150 mi) small day fee + per mile ~$0.10 under U-Haul | ✅ threshold is a setting (150); per-mile rates are line items | builder, Settings › Line items |
 | Materials (dollies, blankets, wrap, boxes), packing help | ✅ any line item with a quantity; packing labor $195/hr (NEEDS JAI REVIEW: no Movegistics item) | builder |
 | Notes on locations (stairs, elevator, split loading, fragile/unusual) | ✅ per end, ticks + text, on the job page | builder, job page |
-| Automatic mileage and drive time | ⚠️ adapter built; **NEEDS JAI REVIEW**: no `GOOGLE_MAPS_API_KEY` yet → manual entry with a clear note | `services/maps.ts` |
+| Automatic mileage and drive time | ⚠️ built: looked up automatically on create / address change, through every stop; "Route and mileage" card with "Open in Google Maps" on every work request (P5D-1…3); **NEEDS JAI REVIEW**: no `GOOGLE_MAPS_API_KEY` yet → manual entry with a clear note | `services/maps.ts` |
+| Pick specific trucks on a work request ("auto put in equipment") | ✅ picked trucks put in their own truck line, are priced by the builder at their size, and are booked first (a clash is refused, not swapped) (P5D-4) | `services/jobs.ts`, `services/booking.ts`, `pages/jobs.tsx` |
 | Cost categories with dropdowns of pre-generated line items, set up in Settings ("very important") | ✅ HHMC's real 32 Movegistics line items seeded; add/edit by cost category | `seed-data.ts CATALOG`, Settings › Line items |
 | "Created by" on every estimate | ✅ `created_by_name` (staff name when sent; Movegistics owner when imported) | Estimates list, job page |
 | Detailed estimates and work requests | ✅ (Phase 5); imported history carries totals only (see gaps) | |

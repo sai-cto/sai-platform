@@ -158,6 +158,9 @@ export const hhmcJobs = tenantTable(
     bedrooms: text('bedrooms'),
     crewSize: integer('crew_size').notNull().default(2),
     trucks: integer('trucks').notNull().default(1),
+    /** Specific trucks picked for this move (core resources of kind "truck"). Booking takes these
+     *  first; the truck lines on a new quote follow their sizes. Empty = any free truck. */
+    truckIds: uuid('truck_ids').array().$type<string[]>().notNull().default(sql`'{}'::uuid[]`),
     customerComments: text('customer_comments'),
     scopeOfWork: text('scope_of_work'),
     internalNotes: text('internal_notes'),

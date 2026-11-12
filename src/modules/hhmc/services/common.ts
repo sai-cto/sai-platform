@@ -1,6 +1,6 @@
 /** Lookups shared by the HHMC services. All take a Scope: they run inside the caller's transaction. */
 import { and, asc, eq } from 'drizzle-orm';
-import { customers } from '@/core/db/schema/tenant';
+import { customers, resources } from '@/core/db/schema/tenant';
 import type { Scope } from '@/core/db/scope';
 import { NotFoundError } from '@/core/errors';
 import { isUuid } from '@/core/ids';
@@ -146,3 +146,12 @@ export function invoiceLink(s: Scope, invoice: { id: string }, now: Date = new D
 }
 
 export const money = (cents: number) => formatMoney(cents);
+
+/** Active trucks (core resources of kind "truck"). */
+export async function trucksOf(s: Scope) {
+  return s.db
+    .select()
+    .from(resources)
+    .where(and(s.where(resources), eq(resources.kind, 'truck'), eq(resources.isActive, true)))
+    .orderBy(asc(resources.name));
+}

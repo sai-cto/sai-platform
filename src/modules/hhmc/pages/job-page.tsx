@@ -51,7 +51,9 @@ import { EstimateStatusBadge, Fact, InvoiceStatusBadge, Note, Select, StageBadge
 import { QuoteEditor } from './quote-editor';
 import { ACCESS_LABELS, EstimateBuilder } from './estimate-builder';
 import { loadSettings } from '../settings';
-import { mapsConfigured } from '../services/maps';
+import { directionsLink, embedMapUrl, formatRoute, mapsConfigured, routeStops } from '../services/maps';
+import { listTrucks } from '../services/booking';
+import { lookupMileageAction } from '../actions';
 
 export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
   const data = await jobPage(ctx, params.id);
@@ -69,6 +71,14 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
   const openInvoice = (invoices ?? []).find((i) => i.status !== 'void');
   const signed = liveEstimate?.status === 'signed' ? liveEstimate : null;
   const settings = await loadSettings(ctx);
+  const fleet = await listTrucks(ctx);
+  const pickedTrucks = job.truckIds.map((id) => fleet.find((t) => t.id === id)?.name).filter((n): n is string => Boolean(n));
+  const stops = routeStops(job);
+  const mapLink = directionsLink(stops);
+  const embed = embedMapUrl(stops);
+  const routeText = formatRoute(job.distanceTenths, job.driveMinutes);
+  const mapsReady = mapsConfigured();
+  const longDistance = job.distanceTenths !== null && job.distanceTenths > Math.round(settings.longDistanceMiles * 10);
   const access = (flags: string[], notes: string | null) =>
     [flags.map((f) => ACCESS_LABELS[f as keyof typeof ACCESS_LABELS] ?? f).join(', '), notes].filter(Boolean).join(' — ');
 
@@ -128,6 +138,57 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
 
       <div className="grid gap-5 xl:grid-cols-3">
         <div className="min-w-0 space-y-5 xl:col-span-2">
+          <Card title="Route and mileage" flush>
+            <div className="flex flex-wrap items-start justify-between gap-3 p-4">
+              <div className="min-w-0 space-y-1 text-sm">
+                <p className="text-2xl font-semibold tabular-nums" data-testid="route-miles">
+                  {routeText ?? 'Mileage not set'}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  {job.distanceSource === 'maps'
+                    ? `From Google Maps, through ${stops.length} stop${stops.length === 1 ? '' : 's'}.`
+                    : job.distanceSource === 'manual'
+                      ? 'Typed in by staff.'
+                      : stops.length < 2
+                        ? 'Add both addresses to get the mileage.'
+                        : mapsReady
+                          ? 'Not looked up yet.'
+                          : 'Automatic mileage needs a Google Maps key (NEEDS JAI REVIEW). Type the miles in the estimate builder for now.'}
+                  {routeText ? (longDistance ? ` Long distance (over ${settings.longDistanceMiles} mi).` : ` Local (up to ${settings.longDistanceMiles} mi).`) : ''}
+                </p>
+                <ol className="mt-2 space-y-0.5 text-sm">
+                  {stops.map((stop, i) => (
+                    <li key={`${i}-${stop}`}>
+                      <span className="mr-1.5 inline-block w-14 text-xs text-zinc-500">{i === 0 ? 'Pick-up' : i === stops.length - 1 ? 'Drop-off' : `Stop ${i}`}</span>
+                      {stop}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {mapLink ? (
+                  <a href={mapLink} target="_blank" rel="noopener noreferrer" className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50">
+                    Open in Google Maps ↗
+                  </a>
+                ) : null}
+                {mapsReady && canWrite && stops.length >= 2 && job.stage !== 'closed' && job.stage !== 'cancelled' ? (
+                  <ConfirmButton action={lookupMileageAction.bind(null, slug, mode, job.id)} variant="secondary">
+                    {job.distanceTenths === null ? 'Look up mileage' : 'Look up again'}
+                  </ConfirmButton>
+                ) : null}
+              </div>
+            </div>
+            {embed ? (
+              <iframe
+                title="Route map"
+                src={embed}
+                className="h-72 w-full border-t border-zinc-200"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            ) : null}
+          </Card>
+
           <Card title="Move" flush>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-3 p-4 md:grid-cols-4">
               <Fact label="Customer">
@@ -147,7 +208,10 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                 <span className="block text-xs text-zinc-500">{job.arrivalWindow ?? ''}</span>
               </Fact>
               <Fact label="Service">{`${SERVICE_TYPE_LABELS[job.serviceType]} · ${job.jobType}`}</Fact>
-              <Fact label="Crew">{`M:${job.crewSize} / T:${job.trucks}${job.bedrooms ? ` · ${job.bedrooms}` : ''}`}</Fact>
+              <Fact label="Crew">
+                {`M:${job.crewSize} / T:${job.trucks}${job.bedrooms ? ` · ${job.bedrooms}` : ''}`}
+                <span className="block text-xs text-zinc-500">{pickedTrucks.length ? `Trucks: ${pickedTrucks.join(', ')}` : 'Any free truck'}</span>
+              </Fact>
               <Fact label="From">{job.originAddress ?? '—'}{access(job.originAccess, job.originNotes) ? <span className="block text-xs text-zinc-500">{access(job.originAccess, job.originNotes)}</span> : null}</Fact>
               <Fact label="To">{job.destinationAddress ?? '—'}{access(job.destinationAccess, job.destinationNotes) ? <span className="block text-xs text-zinc-500">{access(job.destinationAccess, job.destinationNotes)}</span> : null}</Fact>
               <Fact label="Distance">{job.distanceTenths !== null ? `${(job.distanceTenths / 10).toFixed(1)} mi${job.driveMinutes !== null ? ` · ${job.driveMinutes} min` : ''}` : '—'}{job.ownTruck ? <span className="block text-xs text-zinc-500">Customer&apos;s own truck</span> : null}{job.cornellian ? <span className="block text-xs text-zinc-500">Cornellian</span> : null}</Fact>
@@ -172,7 +236,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
             {canWrite && job.stage !== 'closed' && job.stage !== 'cancelled' ? (
               <Disclosure summary="Change details">
                 <ActionForm action={updateJobAction.bind(null, slug, mode, job.id)} submitLabel="Save" resetOnSuccess={false}>
-                  <JobFields job={job} />
+                  <JobFields job={job} trucks={fleet} />
                 </ActionForm>
               </Disclosure>
             ) : null}
@@ -201,7 +265,8 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                   job={job}
                   catalog={data.catalog.map((c) => ({ id: c.id, name: c.name, section: c.section, unit: c.unit, rateCents: c.rateCents, category: c.category }))}
                   hasLines={quote.lines.length > 0}
-                  mapsReady={mapsConfigured()}
+                  mapsReady={mapsReady}
+                  pickedTrucks={pickedTrucks}
                   longDistanceMiles={settings.longDistanceMiles}
                   cornellianPerHour={settings.cornellianDiscountPerHour}
                 />

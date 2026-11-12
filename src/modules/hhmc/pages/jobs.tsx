@@ -11,7 +11,9 @@ import { Card, EmptyState, Field, PageHeader, Table, Td, Th, inputClass } from '
 import { Pagination } from '@/ui/pagination';
 import { createJobAction } from '../actions';
 import { CORE, P } from '../permissions';
-import { BEDROOMS, JOB_TYPES, SERVICE_TYPE_LABELS, STAGE_LABELS } from '../rules';
+import { BEDROOMS, JOB_TYPES, SERVICE_TYPE_LABELS, STAGE_LABELS, truckSizeOf } from '../rules';
+import { listTrucks } from '../services/booking';
+import { formatRoute } from '../services/maps';
 import { LEAD_SOURCES, SERVICE_TYPES, STAGES, type hhmcJobs, type Stage } from '../schema';
 import { contactPage } from '../services/directory';
 import { JOBS_PAGE_SIZE, listJobs } from '../services/jobs';
@@ -67,7 +69,10 @@ export async function JobsPage({ ctx, searchParams, basePath }: PortalPageProps)
                   <Td>{customerName(customer)}<span className="block max-w-[16rem] truncate text-xs text-zinc-500">{job.originAddress ?? ''}</span></Td>
                   <Td className="whitespace-nowrap">{formatDay(job.moveDate)}{job.tentative ? <span className="block text-xs text-amber-700">Tentative</span> : null}</Td>
                   <Td>{SERVICE_TYPE_LABELS[job.serviceType]}<span className="block text-xs text-zinc-500">{job.jobType}</span></Td>
-                  <Td className="whitespace-nowrap">M:{job.crewSize} / T:{job.trucks}</Td>
+                  <Td className="whitespace-nowrap">
+                    M:{job.crewSize} / T:{job.trucks}
+                    {job.distanceTenths !== null ? <span className="block text-xs text-zinc-500">{formatRoute(job.distanceTenths, null)}</span> : null}
+                  </Td>
                   <Td><StageBadge stage={job.stage} /></Td>
                 </tr>
               ))}
@@ -80,8 +85,34 @@ export async function JobsPage({ ctx, searchParams, basePath }: PortalPageProps)
   );
 }
 
+export type TruckChoice = { id: string; name: string };
+
+/** "Trucks for this move": the fleet from Settings › Trucks as checkboxes. A picked truck is
+ *  booked for the move and puts in its own truck line ("26' Truck Local") on a new quote. */
+export function TruckPicker({ trucks, picked = [], idPrefix }: { trucks: TruckChoice[]; picked?: string[]; idPrefix: string }) {
+  if (!trucks.length) return null;
+  return (
+    <fieldset className="sm:col-span-2 lg:col-span-4">
+      <legend className="mb-1 text-sm font-medium">Trucks for this move</legend>
+      <div className="flex flex-wrap gap-x-5 gap-y-1">
+        {trucks.map((t) => {
+          const size = truckSizeOf(t.name);
+          return (
+            <label key={t.id} htmlFor={`${idPrefix}-${t.id}`} className="flex items-center gap-1.5 text-sm">
+              <input id={`${idPrefix}-${t.id}`} type="checkbox" name="truckIds" value={t.id} defaultChecked={picked.includes(t.id)} />
+              {t.name}
+              <span className="text-xs text-zinc-500">{size ? `(${size}' truck line)` : '(default truck line)'}</span>
+            </label>
+          );
+        })}
+      </div>
+      <p className="mt-1 text-xs text-zinc-500">Optional. Picked trucks set the number of trucks, are booked for this move, and add their truck line to a new quote. Leave all unticked to use any free truck.</p>
+    </fieldset>
+  );
+}
+
 /** The fields of a job, used by "New job" and "Change details" on the Job page. */
-export function JobFields({ job }: { job?: typeof hhmcJobs.$inferSelect }) {
+export function JobFields({ job, trucks = [] }: { job?: typeof hhmcJobs.$inferSelect; trucks?: TruckChoice[] }) {
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -110,9 +141,10 @@ export function JobFields({ job }: { job?: typeof hhmcJobs.$inferSelect }) {
           </Select>
         </Field>
         <div className="flex items-end pb-2"><Check name="tentative" label="Date is tentative" defaultChecked={job?.tentative} /></div>
+        <TruckPicker trucks={trucks} picked={job?.truckIds ?? []} idPrefix="jf-truck" />
         <Field label="From address" htmlFor="jf-from" className="sm:col-span-2"><input id="jf-from" name="originAddress" defaultValue={job?.originAddress ?? ''} className={inputClass} /></Field>
         <Field label="To address" htmlFor="jf-to" className="sm:col-span-2"><input id="jf-to" name="destinationAddress" defaultValue={job?.destinationAddress ?? ''} className={inputClass} /></Field>
-        <Field label="Extra stops" htmlFor="jf-stops" help="One per line." className="sm:col-span-2"><textarea id="jf-stops" name="extraStops" rows={2} defaultValue={(job?.extraStops ?? []).join('\n')} className={areaClass} /></Field>
+        <Field label="Extra stops" htmlFor="jf-stops" help="One per line, in driving order. The mileage goes through every stop." className="sm:col-span-2"><textarea id="jf-stops" name="extraStops" rows={2} defaultValue={(job?.extraStops ?? []).join('\n')} className={areaClass} /></Field>
         <Field label="Company" htmlFor="jf-company"><input id="jf-company" name="companyName" defaultValue={job?.companyName ?? ''} className={inputClass} /></Field>
         <Field label="PO number" htmlFor="jf-po"><input id="jf-po" name="poNumber" defaultValue={job?.poNumber ?? ''} className={inputClass} /></Field>
         <Field label="Source" htmlFor="jf-source">
@@ -143,6 +175,7 @@ export function JobFields({ job }: { job?: typeof hhmcJobs.$inferSelect }) {
 
 export async function NewJobPage({ ctx, basePath, searchParams }: PortalPageProps) {
   const { rows } = await listCustomers(ctx, { limit: 500 });
+  const trucks = await listTrucks(ctx);
   // Repeat customer (Contacts → "New estimate / work request"): keep who they are and how they
   // usually move; only the new addresses and dates need entering.
   const repeat = searchParams.customer ? await contactPage(ctx, searchParams.customer).catch(() => null) : null;
@@ -173,7 +206,8 @@ export async function NewJobPage({ ctx, basePath, searchParams }: PortalPageProp
           {last ? (
             <p className="text-xs text-zinc-500">{`Last move (${last.jobNumber}, ${formatDay(last.moveDate)}): ${[last.originAddress, last.destinationAddress].filter(Boolean).join(' → ') || 'no addresses'}`}</p>
           ) : null}
-          <JobFields job={prefill} />
+          <JobFields job={prefill ? { ...prefill, truckIds: [] } : undefined} trucks={trucks} />
+          <p className="text-xs text-zinc-500">The mileage is looked up from Google Maps as soon as the work request is saved (once a maps key is set up).</p>
         </ActionForm>
       </Card>
     </>

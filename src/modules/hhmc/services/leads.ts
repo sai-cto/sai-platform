@@ -248,6 +248,7 @@ export async function convertLead(
       bedrooms: details.bedrooms ?? lead.bedrooms,
       crewSize: details.crewSize ?? 2,
       trucks: details.trucks ?? 1,
+      truckIds: details.truckIds ?? [],
       customerComments: details.customerComments ?? lead.customerNote,
       scopeOfWork: details.scopeOfWork ?? null,
       internalNotes: details.internalNotes ?? lead.internalNote,

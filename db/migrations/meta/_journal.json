@@ -71,6 +71,13 @@
       "when": 1794425283782,
       "tag": "0009_hhmc_cornellian_per_hour",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794444191451,
+      "tag": "0010_hhmc_job_trucks",
+      "breakpoints": true
     }
   ]
 }
