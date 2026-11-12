@@ -42,7 +42,7 @@ describe('booking when no truck is free (OPS-4)', () => {
     // The test fleet has three trucks: three moves at the same time take them all.
     for (let i = 0; i < 3; i++) await bookedJob(ctx, date);
     const { job: fourth } = await signedJob(ctx, date);
-    await expect(bookJob(ctx, fourth.id)).rejects.toThrow(/No truck is free on .* tick "Book without a truck for now"/);
+    await expect(bookJob(ctx, fourth.id)).rejects.toThrow(/No truck is free on .* book it without a truck for now/);
     expect((await job(ctx, fourth.id)).stage).toBe('estimate_sent'); // nothing changed
     await bookJob(ctx, fourth.id, new Date(), { allowNoTruck: true });
     const [day] = await daysOf(ctx, fourth.id);

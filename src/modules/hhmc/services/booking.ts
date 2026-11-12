@@ -174,7 +174,7 @@ async function bookDays(s: Scope, job: typeof hhmcJobs.$inferSelect, days: (type
       // A labor-only day (no truck needed) is fine without one; a day that needs one is not.
       if (!resourceId && i < needed && fleet.length > 0 && !options.allowNoTruck) {
         const free = i === 0 ? 'No truck is free' : `Only ${i} of the ${needed} trucks needed ${i === 1 ? 'is' : 'are'} free`;
-        throw new ValidationError(`${free} on ${day.dayDate} at that time. Change the day or time, free a truck, or tick "Book without a truck for now".`);
+        throw new ValidationError(`${free} on ${day.dayDate} at that time. Change the day or time, free a truck, or book it without a truck for now.`);
       }
       if (resourceId) taken.add(resourceId);
       await bookAppointment(s, {

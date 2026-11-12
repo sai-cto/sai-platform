@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { payments } from '@/core/db/schema';
+import { appointments, payments } from '@/core/db/schema';
 import { withScope, type Scope } from '@/core/db/scope';
 import { updateRecord } from '@/core/records/records';
 import { jobDayEntity } from '@/modules/hhmc/entities';
@@ -249,6 +249,34 @@ describe('loading: raw rows kept, deposits credited, days follow re-exports', ()
     const fourth = await loadIntoHhmc(batch, normalize(base));
     expect(fourth.stats.job_day.kept).toBe(1);
     expect(await daysOf()).toEqual(['2026-05-15']);
+  });
+
+  it('a move still to come holds a truck (an appointment) like any booking; it follows the work order and is released when lost', async () => {
+    const { batch } = await batchOf('sandbox');
+    const us = (d: Date) => `${String(d.getUTCMonth() + 1).padStart(2, '0')}/${String(d.getUTCDate()).padStart(2, '0')}/${d.getUTCFullYear()}`;
+    const future = new Date(Date.now() + 400 * 86_400_000);
+    const later = new Date(Date.now() + 410 * 86_400_000);
+    const files = (start: Date, stage = 'Closed Won'): Files => ({
+      ...fixture,
+      contacts: csv('contacts', [person('CN950001', 'Toni', 'Future')]),
+      workRequests: csv('workRequests', [workRequest('WR950001', 'Toni Future - Work Request', 'Toni Future', { 'Move Date': us(start), 'Pipeline Stage': stage })]),
+      workOrders: csv('workOrders', [workOrder('WO950001', 'Toni Future - Work Request', 'Toni Future', us(start), us(start))]),
+      estimates: csv('estimates', []), invoices: csv('invoices', []), payments: csv('payments', []), leads: csv('leads', []),
+    });
+    const run = await loadIntoHhmc(batch, normalize(files(future)));
+    const jobId = run.ids.get('work_request:WR950001')!;
+    const live = () =>
+      batch(async (s) => {
+        const days = await s.db.select().from(hhmcJobDays).where(and(s.where(hhmcJobDays, 'include'), eq(hhmcJobDays.jobId, jobId)));
+        const appts = await s.db.select().from(appointments).where(and(s.where(appointments), inArray(appointments.subjectId, days.map((d) => d.id))));
+        return appts.filter((a) => a.status !== 'canceled').map((a) => a.startsAt.toISOString().slice(0, 10));
+      });
+    expect(await live()).toEqual([future.toISOString().slice(0, 10)]);
+    expect((await loadIntoHhmc(batch, normalize(files(future)))).stats.appointment.created).toBe(0); // re-run: nothing new
+    await loadIntoHhmc(batch, normalize(files(later)));
+    expect(await live()).toEqual([later.toISOString().slice(0, 10)]);
+    await loadIntoHhmc(batch, normalize(files(later, 'Closed Lost')));
+    expect(await live()).toEqual([]);
   });
 
   it('with a hand-entered partial refund, collected money reconciles to the cent', async () => {

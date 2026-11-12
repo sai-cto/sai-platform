@@ -8,11 +8,14 @@
  * Nothing here sends an email, queues an automation or takes a payment: payments are recorded as
  * already received ("manual" provider), exactly as Movegistics shows them.
  */
-import { and, asc, eq, inArray, isNull, like, max } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, like, max, ne } from 'drizzle-orm';
 import { logActivity } from '../../src/core/audit/log';
 import { txOf, type Scope } from '../../src/core/db/scope';
 import { appointments, customers } from '../../src/core/db/schema/tenant';
-import { customerEntity, paymentEntity } from '../../src/core/records/core-entities';
+import { appointmentEntity, customerEntity, paymentEntity } from '../../src/core/records/core-entities';
+import { bookAppointment, findConflicts } from '../../src/core/scheduling/scheduling';
+import { localDate, localTime } from '../../src/modules/hhmc/rules';
+import { trucksOf } from '../../src/modules/hhmc/services/common';
 import { createRecord, updateRecord } from '../../src/core/records/records';
 import {
   estimateEntity,
@@ -191,12 +194,13 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
    * SAI (a day made or edited by a person stops the sync for that job). Days the import made and no
    * longer wanted are archived; the import never books appointments, so nothing else depends on them.
    */
-  async function syncDays(jobId: string, dates: string[], notes: Record<string, string>) {
+  async function syncDays(jobId: string, jobNumber: string, dates: string[], notes: Record<string, string>, holdsTrucks: boolean, customerId: string) {
     const days = await s.db.select().from(hhmcJobDays).where(and(s.where(hhmcJobDays), eq(hhmcJobDays.jobId, jobId))).orderBy(asc(hhmcJobDays.dayDate));
-    // Someone worked on this move in SAI (changed it, or booked it: booking makes appointments).
+    // Someone worked on this move in SAI (changed it, or booked it: booking makes appointments,
+    // made by a person; the import's own appointments have no person).
     const [job] = await s.db.select({ updatedBy: hhmcJobs.updatedBy, archivedAt: hhmcJobs.archivedAt }).from(hhmcJobs).where(and(s.where(hhmcJobs, 'include'), eq(hhmcJobs.id, jobId))).limit(1);
     const booked = days.length
-      ? await s.db.select({ id: appointments.id }).from(appointments).where(and(s.where(appointments, 'include'), eq(appointments.subjectType, jobDayEntity.key), inArray(appointments.subjectId, days.map((d) => d.id)))).limit(1)
+      ? await s.db.select({ id: appointments.id }).from(appointments).where(and(s.where(appointments, 'include'), eq(appointments.subjectType, jobDayEntity.key), inArray(appointments.subjectId, days.map((d) => d.id)), isNotNull(appointments.createdBy))).limit(1)
       : [];
     if (!job || job.updatedBy || job.archivedAt || booked.length || days.some((d) => d.createdBy || d.updatedBy)) {
       tally('job_day', 'kept');
@@ -228,6 +232,60 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
       await txOf(s).update(hhmcJobDays).set({ archivedAt: now }).where(and(s.where(hhmcJobDays), eq(hhmcJobDays.id, d.id), isNull(hhmcJobDays.archivedAt)));
       await logActivity(txOf(s), s.ctx, { action: 'archive', entityType: jobDayEntity.key, entityId: d.id, summary: `Archived job day "${d.dayDate}" (no longer a work-order day in Movegistics)`, before: { archivedAt: null }, after: { archivedAt: now.toISOString() } });
       tally('job_day', 'updated');
+    }
+    await syncAppointments(jobId, jobNumber, holdsTrucks, customerId);
+  }
+
+  /**
+   * A move still to come that Movegistics has booked holds trucks here too, so a new booking can't
+   * take them and the schedule shows the day as busy: one appointment per truck per day, a free
+   * truck where there is one ("no truck yet" otherwise; Movegistics assigns none). Kept in step
+   * with the days on every re-import; past days are history and left alone.
+   */
+  async function syncAppointments(jobId: string, jobNumber: string, holdsTrucks: boolean, customerId: string) {
+    const tz = s.ctx.business.timeZone;
+    const today = localDate(new Date(), tz);
+    const allDays = await s.db.select().from(hhmcJobDays).where(and(s.where(hhmcJobDays, 'include'), eq(hhmcJobDays.jobId, jobId)));
+    const dayById = new Map(allDays.map((d) => [d.id, d]));
+    const existing = allDays.length
+      ? await s.db
+          .select()
+          .from(appointments)
+          .where(and(s.where(appointments), eq(appointments.subjectType, jobDayEntity.key), inArray(appointments.subjectId, allDays.map((d) => d.id)), ne(appointments.status, 'canceled')))
+      : [];
+    const startOf = (d: typeof hhmcJobDays.$inferSelect) => localTime(d.dayDate, d.startTime, tz);
+    const covered = new Set<string>();
+    for (const a of existing) {
+      const day = dayById.get(a.subjectId ?? '');
+      if (day && !day.archivedAt && day.dayDate < today) continue; // history
+      if (holdsTrucks && day && !day.archivedAt && a.startsAt.getTime() === startOf(day).getTime()) {
+        covered.add(day.id);
+        tally('appointment', 'unchanged');
+        continue;
+      }
+      await updateRecord(s, appointmentEntity, a.id, { status: 'canceled', notes: `${a.notes ?? ''} · changed in Movegistics`.trim() });
+      tally('appointment', 'updated');
+    }
+    if (!holdsTrucks) return;
+    const fleet = await trucksOf(s);
+    for (const day of allDays.filter((d) => !d.archivedAt && d.dayDate >= today && !covered.has(d.id))) {
+      const startsAt = startOf(day);
+      const endsAt = new Date(startsAt.getTime() + day.durationMinutes * 60_000);
+      const taken = new Set<string>();
+      for (let i = 0; i < Math.max(1, day.trucks); i++) {
+        let resourceId: string | null = null;
+        for (const truck of fleet) {
+          if (taken.has(truck.id)) continue;
+          if ((await findConflicts(s, { startsAt, endsAt, resourceId: truck.id })).length === 0) {
+            resourceId = truck.id;
+            break;
+          }
+        }
+        if (resourceId) taken.add(resourceId);
+        // Movegistics already booked it: a sold-out mark made here does not undo that.
+        await bookAppointment(s, { customerId, kind: 'hhmc.job_day', startsAt, endsAt, status: 'confirmed', resourceId, subjectType: jobDayEntity.key, subjectId: day.id, notes: `${jobNumber} · booked in Movegistics${resourceId ? '' : ' · no truck yet'}` }, { overrideBlocks: true });
+        tally('appointment', 'created');
+      }
     }
   }
 
@@ -298,7 +356,7 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
     // Work orders: their own links (raw rows); the days follow them unless someone changed them in SAI.
     for (const w of j.workOrders) await linkAlso('work_order', w.sid, jobEntity, jobId, w.raw);
     const days = booked ? (j.days.length ? j.days : j.moveDate ? [j.moveDate] : []) : [];
-    if (!kept) await syncDays(jobId, days, j.dayNotes);
+    if (!kept) await syncDays(jobId, j.sid, days, j.dayNotes, j.stage === 'booked', cust);
     if (!created) return; // the quote is made once; later runs leave staff's changes alone
     const quote = (await createRecord(s, quoteEntity, { jobId, serviceTaxOn: false, convenienceFeeOn: false })) as { id: string };
     const sectionLines = (SECTION_KEYS as SectionKey[]).filter((k) => (j.sections[k] ?? 0) > 0);

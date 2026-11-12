@@ -183,6 +183,8 @@ main().catch((error) => {
   const message = error instanceof Error ? error.message : '';
   const ours = message.startsWith('Refusing') || (error instanceof Error && error.name === 'UnknownValues') || message.startsWith('Movegistics values');
   const code = (error as { cause?: { code?: string } })?.cause?.code;
-  console.error(ours ? message : `Import failed: ${error instanceof Error ? error.name : 'error'}${code ? ` (database code ${code})` : ''}. Nothing printed from the data; re-run to retry.`);
+  // 42703 / 42P01: a column or table this code needs is missing: the database is behind the code.
+  const behind = code === '42703' || code === '42P01' ? ' The local database is older than this code: run "npm run db:migrate", then import again.' : '';
+  console.error(ours ? message : `Import failed: ${error instanceof Error ? error.name : 'error'}${code ? ` (database code ${code})` : ''}.${behind} Nothing printed from the data; re-run to retry.`);
   process.exit(1);
 });
