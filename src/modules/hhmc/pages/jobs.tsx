@@ -144,7 +144,7 @@ export function JobFields({ job, trucks = [] }: { job?: typeof hhmcJobs.$inferSe
         <TruckPicker trucks={trucks} picked={job?.truckIds ?? []} idPrefix="jf-truck" />
         <Field label="From address" htmlFor="jf-from" className="sm:col-span-2"><input id="jf-from" name="originAddress" defaultValue={job?.originAddress ?? ''} className={inputClass} /></Field>
         <Field label="To address" htmlFor="jf-to" className="sm:col-span-2"><input id="jf-to" name="destinationAddress" defaultValue={job?.destinationAddress ?? ''} className={inputClass} /></Field>
-        <Field label="Extra stops" htmlFor="jf-stops" help="One per line, in driving order. The mileage goes through every stop." className="sm:col-span-2"><textarea id="jf-stops" name="extraStops" rows={2} defaultValue={(job?.extraStops ?? []).join('\n')} className={areaClass} /></Field>
+        <Field label="Extra stops" htmlFor="jf-stops" help="One per line, in driving order (at most 8). The mileage goes through every stop." className="sm:col-span-2"><textarea id="jf-stops" name="extraStops" rows={2} defaultValue={(job?.extraStops ?? []).join('\n')} className={areaClass} /></Field>
         <Field label="Company" htmlFor="jf-company"><input id="jf-company" name="companyName" defaultValue={job?.companyName ?? ''} className={inputClass} /></Field>
         <Field label="PO number" htmlFor="jf-po"><input id="jf-po" name="poNumber" defaultValue={job?.poNumber ?? ''} className={inputClass} /></Field>
         <Field label="Source" htmlFor="jf-source">

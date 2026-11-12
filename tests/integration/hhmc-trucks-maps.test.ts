@@ -11,7 +11,10 @@ import { withScope } from '@/core/db/scope';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { P } from '@/modules/hhmc/permissions';
 import { truckSizeOf } from '@/modules/hhmc/rules';
-import { addTruck, bookJob, scheduleBetween } from '@/modules/hhmc/services/booking';
+import { addTruck, bookJob, jobDaysOf, scheduleBetween } from '@/modules/hhmc/services/booking';
+import { archiveRecord } from '@/core/records/records';
+import { resourceEntity } from '@/core/records/core-entities';
+import { CORE } from '@/modules/hhmc/permissions';
 import { applyBuilder, buildLines, refreshMileage, type BuilderInput, type CatalogRow } from '@/modules/hhmc/services/builder';
 import { loadJob } from '@/modules/hhmc/services/common';
 import { customerLinkFor, sendEstimate, signEstimateByLink } from '@/modules/hhmc/services/estimates';
@@ -245,5 +248,57 @@ describe('picking specific trucks', () => {
 
     const second = await booked();
     await expect(bookJob(ctx, second.id)).rejects.toThrow(new RegExp(`${truck.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} is already booked`));
+  });
+
+  it('trucks picked after the move day exists: the day follows, and booking takes every picked truck', async () => {
+    const ctx = await admin();
+    const a = await addTruck(ctx, `Test truck ${tag()} · 16'`);
+    const b = await addTruck(ctx, `Test truck ${tag()} · 26'`);
+    const job = await newCustomerJob(ctx, { moveDate: day(70 + (counter % 20)) });
+    await change(ctx, job.id, { truckIds: [a.id, b.id] });
+    const days = await withScope(ctx, P.jobsRead, (s) => jobDaysOf(s, job.id));
+    expect(days.map((d) => d.trucks)).toEqual([2]);
+    const est = await sendEstimate(ctx, job.id);
+    await signEstimateByLink(await buildLinkContext((await customerLinkFor(ctx, est.id)).split('/l/')[1]), { valuationInitials: 'RR', signatureName: 'Robin Route', agree: true, ip: null, userAgent: null });
+    await bookJob(ctx, job.id);
+    const d = days[0].dayDate;
+    const schedule = await scheduleBetween(ctx, d, (await import('@/modules/hhmc/rules')).addDays(d, 1));
+    expect(schedule.days[0].entries.find((e) => e.jobId === job.id)?.truckNames.sort()).toEqual([a.name, b.name].sort());
+  });
+
+  it('a retired picked truck stops the booking with a clear message', async () => {
+    const ctx = await admin();
+    const truck = await addTruck(ctx, `Test truck ${tag()} · 22'`);
+    const job = await newCustomerJob(ctx, { moveDate: day(95 + (counter % 20)), truckIds: [truck.id] });
+    const est = await sendEstimate(ctx, job.id);
+    await signEstimateByLink(await buildLinkContext((await customerLinkFor(ctx, est.id)).split('/l/')[1]), { valuationInitials: 'RR', signatureName: 'Robin Route', agree: true, ip: null, userAgent: null });
+    await withScope(ctx, CORE.schedulingWrite, (s) => archiveRecord(s, resourceEntity, truck.id));
+    await expect(bookJob(ctx, job.id)).rejects.toThrow(/retired/);
+  });
+});
+
+describe('mileage once the price is settled', () => {
+  beforeEach(() => vi.stubEnv('GOOGLE_MAPS_API_KEY', 'fake-test-key'));
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it('"Look up again" cannot change the miles after the customer signed', async () => {
+    const ctx = await admin();
+    fakeGoogle([12.4], [25]);
+    const job = await newCustomerJob(ctx);
+    await refreshMileage(ctx, job.id);
+    const est = await sendEstimate(ctx, job.id);
+    await signEstimateByLink(await buildLinkContext((await customerLinkFor(ctx, est.id)).split('/l/')[1]), { valuationInitials: 'RR', signatureName: 'Robin Route', agree: true, ip: null, userAgent: null });
+    vi.unstubAllGlobals();
+    fakeGoogle([300], [300]);
+    await expect(refreshMileage(ctx, job.id, { force: true })).rejects.toThrow(/price is settled/);
+    expect((await jobOf(ctx, job.id)).distanceTenths).toBe(124);
+  });
+
+  it('at most 8 extra stops', async () => {
+    const ctx = await admin();
+    await expect(newCustomerJob(ctx, { extraStops: Array.from({ length: 9 }, (_, i) => `${i} Stop St`) })).rejects.toThrow(/At most 8/);
   });
 });

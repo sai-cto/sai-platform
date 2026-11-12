@@ -110,7 +110,7 @@ export function EstimateBuilder({
           </Field>
           <Field label="Trucks" htmlFor="b-trucks"><input id="b-trucks" name="truckCount" type="number" min={1} max={10} defaultValue={Math.max(job.trucks, 1)} className={inputClass} /></Field>
           <Field label="Days" htmlFor="b-days"><input id="b-days" name="truckDays" inputMode="decimal" defaultValue="1" className={inputClass} /></Field>
-          <Field label="Miles" htmlFor="b-miles" help={`${longDistanceMiles}+ miles = long-distance rate (day fee + per mile).`}>
+          <Field label="Miles" htmlFor="b-miles" help={`Over ${longDistanceMiles} miles = long-distance rate (day fee + per mile).`}>
             <input id="b-miles" name="miles" inputMode="decimal" defaultValue={miles} className={inputClass} />
           </Field>
           <Field label="Drive time (min)" htmlFor="b-mins"><input id="b-mins" name="driveMinutes" inputMode="numeric" defaultValue={job.driveMinutes ?? ''} className={inputClass} /></Field>

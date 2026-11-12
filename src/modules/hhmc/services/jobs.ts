@@ -20,6 +20,7 @@ import { isUuid } from '@/core/ids';
 import {
   hhmcCatalogItems,
   hhmcEstimates,
+  hhmcJobDays,
   hhmcJobs,
   LEAD_SOURCES,
   SERVICE_TYPES,
@@ -146,7 +147,8 @@ export const jobDetailsInput = z.object({
   poNumber: optionalText(100),
   originAddress: optionalText(300),
   destinationAddress: optionalText(300),
-  extraStops: z.array(z.string().trim().max(300)).max(10).default([]).transform((list) => list.filter(Boolean)),
+  // Google's route lookup takes at most 10 stops: pick-up, 8 extra stops, drop-off.
+  extraStops: z.array(z.string().trim().max(300)).max(8, 'At most 8 extra stops').default([]).transform((list) => list.filter(Boolean)),
   moveDate: optionalDate,
   tentative: z.boolean().default(false),
   arrivalWindow: optionalText(60),
@@ -299,6 +301,12 @@ export async function updateJob(ctx: BusinessContext, jobId: string, raw: unknow
     const stops = (j: { originAddress: string | null; extraStops: string[]; destinationAddress: string | null }) =>
       [j.originAddress ?? '', ...j.extraStops, j.destinationAddress ?? ''].join('\n');
     const routeChanged = stops(job) !== stops(input);
+    // Picked trucks also set the truck count of the move days (until the move is booked; a booked
+    // move's days are changed by releasing the booking first).
+    if (picked.length && job.stage !== 'booked' && job.stage !== 'completed') {
+      const days = await s.db.select().from(hhmcJobDays).where(and(s.where(hhmcJobDays), eq(hhmcJobDays.jobId, jobId)));
+      for (const d of days) if (d.trucks !== picked.length) await updateRecord(s, jobDayEntity, d.id, { trucks: picked.length });
+    }
     return updateRecord(s, jobEntity, jobId, {
       ...input,
       ...(picked.length ? { trucks: picked.length } : {}),

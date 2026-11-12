@@ -171,7 +171,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                     Open in Google Maps ↗
                   </a>
                 ) : null}
-                {mapsReady && canWrite && stops.length >= 2 && job.stage !== 'closed' && job.stage !== 'cancelled' ? (
+                {mapsReady && editable && stops.length >= 2 ? (
                   <ConfirmButton action={lookupMileageAction.bind(null, slug, mode, job.id)} variant="secondary">
                     {job.distanceTenths === null ? 'Look up mileage' : 'Look up again'}
                   </ConfirmButton>
@@ -184,7 +184,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                 src={embed}
                 className="h-72 w-full border-t border-zinc-200"
                 loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
+                referrerPolicy="strict-origin-when-cross-origin"
               />
             ) : null}
           </Card>

@@ -24,7 +24,7 @@ import type { BusinessContext } from '@/core/tenancy/context';
 import { and, asc, eq } from 'drizzle-orm';
 import { jobEntity, quoteLineEntity } from '../entities';
 import { P } from '../permissions';
-import { ACCESS_FLAGS, hhmcCatalogItems, type AccessFlag } from '../schema';
+import { ACCESS_FLAGS, hhmcCatalogItems, hhmcEstimates, type AccessFlag, type Stage } from '../schema';
 import { loadSettings, type HhmcSettings } from '../settings';
 import { optionalText, parse } from './input';
 import { routeStops, routeThrough, type Route } from './maps';
@@ -32,7 +32,7 @@ import { loadJob, trucksOf } from './common';
 import { parseQty, type SectionKey } from './pricing';
 import { editableQuote, quoteLines } from './quote';
 
-import { TRUCK_SIZES, truckSizeOf, type TruckSize } from '../rules';
+import { quoteEditable, TRUCK_SIZES, truckSizeOf, type TruckSize } from '../rules';
 export { TRUCK_SIZES, type TruckSize };
 
 export type CatalogRow = { id: string; name: string; section: SectionKey; unit: string; rateCents: number; isActive: boolean };
@@ -329,8 +329,13 @@ export async function refreshMileage(ctx: BusinessContext, jobId: string, option
     if (force) throw new ValidationError(message);
     return { status };
   };
-  const job = await withScope(ctx, P.jobsWrite, (s) => loadJob(s, jobId));
-  if (job.stage === 'closed' || job.stage === 'cancelled') return fail('locked', 'A closed or cancelled work request cannot be changed.');
+  const locked = async (s: Scope, j: { id: string; stage: Stage }) =>
+    j.stage === 'closed' || j.stage === 'cancelled' || (force && !(await mileageChangeable(s, j)));
+  const job = await withScope(ctx, P.jobsWrite, async (s) => {
+    const j = await loadJob(s, jobId);
+    return { ...j, isLocked: await locked(s, j) };
+  });
+  if (job.isLocked) return fail('locked', 'The price is settled (signed, booked or closed), so the mileage is not changed. Release the booking or send a new estimate first.');
   if (!force && job.distanceTenths !== null) return { status: 'already_set' };
   const stops = routeStops(job);
   if (!job.originAddress || !job.destinationAddress) return fail('missing_addresses', 'Enter both addresses on the work request first.');
@@ -340,10 +345,23 @@ export async function refreshMileage(ctx: BusinessContext, jobId: string, option
   return withScope(ctx, P.jobsWrite, async (s) => {
     const now = await loadJob(s, jobId);
     if (routeStops(now).join('\n') !== stops.join('\n')) return fail('changed', 'The addresses changed while looking up the mileage. Try again.');
+    if (await locked(s, now)) return fail('locked', 'The work request changed while looking up the mileage. Reload the page.');
     if (!force && now.distanceTenths !== null) return { status: 'already_set' } as MileageResult;
     await updateRecord(s, jobEntity, jobId, { distanceTenths: route.distanceTenths, driveMinutes: route.driveMinutes, distanceSource: 'maps' });
     return { status: 'updated', route } as MileageResult;
   });
+}
+
+/** Staff may replace the miles only while the price is still open: the quote can be edited and
+ *  no estimate is signed (a signed price was agreed on the old miles). */
+export async function mileageChangeable(s: Scope, job: { id: string; stage: Stage }): Promise<boolean> {
+  if (!quoteEditable(job.stage)) return false;
+  const [signed] = await s.db
+    .select({ id: hhmcEstimates.id })
+    .from(hhmcEstimates)
+    .where(and(s.where(hhmcEstimates, 'include'), eq(hhmcEstimates.jobId, job.id), eq(hhmcEstimates.status, 'signed')))
+    .limit(1);
+  return !signed;
 }
 
 /** "Look up mileage" in the estimate builder. */

@@ -147,19 +147,25 @@ export async function bookJob(ctx: BusinessContext, jobId: string, now: Date = n
     if (!signed) throw new ValidationError('The customer must sign the estimate before the job is booked.');
     const days = await jobDaysOf(s, jobId);
     if (days.length === 0) throw new ValidationError('Add at least one job day before booking.');
+    // One booking at a time per business: two moves booked at the same moment must not both
+    // take the same free truck (the conflict check below reads, then writes).
+    await takeLock(s, `hhmc-booking-trucks:${ctx.business.id}`);
     const fleet = await trucksOf(s);
     // The trucks picked on the work request come first, in the order picked; the rest of the
     // fleet fills any extra truck a day needs. A picked truck that is busy stops the booking,
     // so the office decides (pick another truck, or move the day): it is never swapped silently.
     const picked = job.truckIds.map((id) => fleet.find((t) => t.id === id)).filter((t) => t !== undefined);
+    if (picked.length < job.truckIds.length)
+      throw new ValidationError('A truck picked on this work request has been retired in Settings › Trucks. Pick the trucks again under "Change details".');
     const trucks = [...picked, ...fleet.filter((t) => !job.truckIds.includes(t.id))];
     const tz = ctx.business.timeZone;
     for (const day of days) {
       const startsAt = localTime(day.dayDate, day.startTime, tz);
       const endsAt = new Date(startsAt.getTime() + day.durationMinutes * 60_000);
-      const count = Math.max(1, day.trucks);
+      // Every picked truck goes, even if the day was set up for fewer.
+      const count = Math.max(1, day.trucks, picked.length);
       const taken = new Set<string>();
-      for (const truck of picked.slice(0, count)) {
+      for (const truck of picked) {
         if ((await findConflicts(s, { startsAt, endsAt, resourceId: truck.id })).length > 0)
           throw new ValidationError(`${truck.name} is already booked on ${day.dayDate}. Pick another truck on the work request, or change the day.`);
       }
