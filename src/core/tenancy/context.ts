@@ -24,6 +24,8 @@ export type Actor = {
   name: string;
   email: string;
   platformRole: PlatformRole | null;
+  /** Set while a super admin acts as this person (src/core/auth/acting-as.ts). */
+  actingBy?: { id: string; name: string };
 };
 
 export type BusinessRef = {
@@ -61,14 +63,21 @@ export type BusinessContext = {
 
 export type AnyContext = PlatformContext | BusinessContext;
 
-export async function loadActor(userId: string): Promise<Actor> {
+/** A user id, or the principal of a session (a super admin may be acting as this person). */
+export type Who = string | { userId: string; actingBy?: { id: string; name: string } };
+
+export async function loadActor(who: Who): Promise<Actor> {
+  const userId = typeof who === 'string' ? who : who.userId;
+  const actingBy = typeof who === 'string' ? undefined : who.actingBy;
   const [user] = await getDb().select().from(users).where(eq(users.id, userId)).limit(1);
   if (!user || !user.isActive) throw new UnauthenticatedError();
+  if (actingBy)
+    return { id: user.id, name: `${user.name} (acting: ${actingBy.name})`, email: user.email, platformRole: user.platformRole, actingBy };
   return { id: user.id, name: user.name, email: user.email, platformRole: user.platformRole };
 }
 
-export async function buildPlatformContext(userId: string): Promise<PlatformContext> {
-  const actor = await loadActor(userId);
+export async function buildPlatformContext(who: Who): Promise<PlatformContext> {
+  const actor = await loadActor(who);
   return {
     kind: 'platform',
     actor,
@@ -104,11 +113,12 @@ async function loadBusiness(slug: string): Promise<BusinessRef | null> {
  * exist OR the user has no access to it — the caller cannot tell which, on purpose.
  */
 export async function buildBusinessContext(
-  userId: string,
+  who: Who,
   businessSlug: string,
   environment: Environment,
 ): Promise<BusinessContext> {
-  const actor = await loadActor(userId);
+  const actor = await loadActor(who);
+  const userId = actor.id as string;
   const business = await loadBusiness(businessSlug);
   if (!business) throw new NotFoundError();
 

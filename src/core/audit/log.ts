@@ -19,7 +19,9 @@ export type ActivityAction =
   | 'settings_change'
   | 'export'
   | 'import'
-  | 'sandbox_reset';
+  | 'sandbox_reset'
+  | 'act_as_start'
+  | 'act_as_stop';
 
 export type ActivityEntry = {
   action: ActivityAction;
@@ -59,7 +61,8 @@ export async function logActivity(
         : null;
   await insertLog(
     tx,
-    { actorUserId: ctx.actor.id, actorName: ctx.actor.name, actorRole: ctx.role ?? 'none' },
+    // While a super admin acts as someone, the log keeps the super admin's id (the name says both).
+    { actorUserId: ctx.actor.actingBy?.id ?? ctx.actor.id, actorName: ctx.actor.name, actorRole: ctx.role ?? 'none' },
     where,
     entry,
   );

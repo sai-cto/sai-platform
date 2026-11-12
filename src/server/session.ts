@@ -4,7 +4,8 @@
  */
 import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
-import { SESSION_COOKIE, findSessionUserId } from '@/core/auth/session';
+import { findSessionPrincipal, type Principal } from '@/core/auth/acting-as';
+import { SESSION_COOKIE } from '@/core/auth/session';
 import { ForbiddenError, NotFoundError, UnauthenticatedError } from '@/core/errors';
 import { buildLinkContext } from '@/core/links/links';
 import { isPortalAvailable } from '@/core/modules/config';
@@ -16,22 +17,28 @@ import {
   type PlatformContext,
 } from '@/core/tenancy/context';
 
-export async function currentUserId(): Promise<string | null> {
+/** Who this request is for (a super admin may be acting as someone), or null when signed out. */
+export async function currentPrincipal(): Promise<Principal | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
-  return findSessionUserId(token);
+  return findSessionPrincipal(token);
 }
 
-/** The signed-in user's id, or a redirect to the login page. */
-export async function requireUserId(): Promise<string> {
-  const userId = await currentUserId();
-  if (!userId) redirect('/login');
-  return userId;
+/** The id of the person whose view this is (the acted-as person while a super admin acts). */
+export async function currentUserId(): Promise<string | null> {
+  return (await currentPrincipal())?.userId ?? null;
+}
+
+/** The signed-in principal, or a redirect to the login page. */
+export async function requirePrincipal(): Promise<Principal> {
+  const principal = await currentPrincipal();
+  if (!principal) redirect('/login');
+  return principal;
 }
 
 export async function requirePlatformContext(): Promise<PlatformContext> {
-  const userId = await requireUserId();
+  const principal = await requirePrincipal();
   try {
-    return await buildPlatformContext(userId);
+    return await buildPlatformContext(principal);
   } catch (error) {
     if (error instanceof UnauthenticatedError) redirect('/login');
     throw error;
@@ -51,9 +58,9 @@ export async function requireBusinessContext(
   slug: string,
   environment: Environment = 'live',
 ): Promise<BusinessContext> {
-  const userId = await requireUserId();
+  const principal = await requirePrincipal();
   try {
-    return await buildBusinessContext(userId, slug, environment);
+    return await buildBusinessContext(principal, slug, environment);
   } catch (error) {
     if (error instanceof UnauthenticatedError) redirect('/login');
     if (error instanceof NotFoundError || error instanceof ForbiddenError) notFound();

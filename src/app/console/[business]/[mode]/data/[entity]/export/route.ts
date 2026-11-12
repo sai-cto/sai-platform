@@ -4,7 +4,7 @@ import { ForbiddenError, NotFoundError } from '@/core/errors';
 import { findEntity } from '@/core/modules/registry';
 import { EXPORT_LIMIT, exportCell, exportRecords } from '@/core/records/export';
 import { buildBusinessContext } from '@/core/tenancy/context';
-import { currentUserId } from '@/server/session';
+import { currentPrincipal } from '@/server/session';
 
 /** CSV download of an entity's records. Needs business.data.export; every export is logged. */
 export async function GET(
@@ -13,11 +13,11 @@ export async function GET(
 ) {
   const { business, mode, entity: entityKey } = await params;
   const notFound = new NextResponse('Not found', { status: 404 });
-  const userId = await currentUserId();
-  if (!userId) return new NextResponse('Sign in first', { status: 401 });
+  const principal = await currentPrincipal();
+  if (!principal) return new NextResponse('Sign in first', { status: 401 });
   if (mode !== 'live' && mode !== 'sandbox') return notFound;
   try {
-    const ctx = await buildBusinessContext(userId, business, mode);
+    const ctx = await buildBusinessContext(principal, business, mode);
     const entity = findEntity(ctx.business.moduleKey, entityKey);
     if (!entity) return notFound;
     const url = new URL(request.url);

@@ -350,3 +350,10 @@ No new dependencies (papaparse was already installed).
 | P5E-1 | **The CTO decided (11 Nov 2026) to load the real Movegistics history into the hosted pilot site's database** ("Yes, load it"), changing P5C-1 for the pilot only. `npm run hhmc:import -- --target pilot --confirm-host <host>` reads only `.env.pilot` (git-ignored; `DATABASE_OWNER_URL`, optional `DATABASE_URL`), refuses unless the database carries the pilot mark set by its deploy, is encrypted (`sslmode`), has every migration of this code and its host is typed exactly; it writes as `sai_app` (row-level security on), never as the owner; the reconciliation goes to `RECONCILIATION-PILOT.md` next to the exports. The real data is never in git. Pilot mode: Microsoft sign-in only, no customer email, no card charges. Before: a Neon restore point. | PRODUCTION-READINESS §3. Paid database with backups still to do before managers rely on it. |
 
 No new dependencies.
+
+## Phase 5, part 4: acting as someone, and the website matching the laptop (12 Nov 2026) — NEEDS JAI REVIEW
+
+| # | Decision | Why / how to change it |
+|---|---|---|
+| P5-39 | **"Act as" for super admins** (the CTO chose "act as them" over look-only): on a user's page, **Act as this person** makes the super admin's own session see and use the site exactly as that person (their businesses, roles, permissions, menus), with an amber banner and **Stop acting**. Limits: super admins only, never as another super admin, oneself or a switched-off account; ends by itself after 60 minutes or when either account loses its standing; only that browser session is affected. Every change made meanwhile is logged with the **super admin's id** and the name "Person (acting: Super admin)"; start and stop are logged too. | The CTO asked to see what each user sees. Acting changes real data, so accountability stays with the super admin. `src/core/auth/acting-as.ts` (`ACTING_AS_MINUTES`), the session columns `acting_as_user_id`/`acting_as_since` (migration 0011). |
+

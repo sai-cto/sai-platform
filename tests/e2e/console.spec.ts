@@ -377,3 +377,23 @@ test('works on a phone: the menu opens as a drawer and nothing scrolls sideways'
     expect(overflow, path).toBeLessThanOrEqual(1);
   }
 });
+
+test('a super admin acts as someone, sees exactly their console, and stops', async ({ page }) => {
+  await loginAs(page, SEED.superAdmin);
+  const [brssAdmin] = await asOwner((sql) => sql`select id from users where email = ${SEED.brssAdmin}`);
+  await page.goto(`/console/platform/users/${brssAdmin.id}`);
+  await page.getByRole('button', { name: 'Act as this person' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Act as them' }).click();
+  await expect(page.getByTestId('acting-as-banner')).toBeVisible();
+  // Their console: one business, no Platform section, no executive view.
+  await expect(page.getByTestId('nav-platform')).toHaveCount(0);
+  await expect(sidebar(page).getByRole('link', { name: 'Executive view' })).toHaveCount(0);
+  expect((await page.request.get('/console/platform/users')).status()).toBe(404);
+  expect((await page.request.get('/console/hhmc')).status()).toBe(404);
+  await page.goto('/console/brss');
+  await expect(page).toHaveURL(/\/console\/brss\/live\/overview/);
+  await page.getByRole('button', { name: 'Stop acting' }).click();
+  await expect(page).toHaveURL(/\/console\/platform\/users$/);
+  await expect(page.getByTestId('acting-as-banner')).toHaveCount(0);
+  await expect(page.getByTestId('nav-platform').first()).toBeVisible();
+});

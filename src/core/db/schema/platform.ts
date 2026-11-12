@@ -94,6 +94,9 @@ export const sessions = pgTable(
     createdAt: createdAt(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    /** A super admin "acting as" someone else (src/core/auth/acting-as.ts): whom, and since when. */
+    actingAsUserId: uuid('acting_as_user_id').references(() => users.id),
+    actingAsSince: timestamp('acting_as_since', { withTimezone: true }),
   },
   (t) => [index('sessions_user_idx').on(t.userId)],
 );

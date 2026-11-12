@@ -12,6 +12,8 @@ import { Card, Field, PageHeader, inputClass } from '@/ui/layout';
 import { guarded, requirePlatformContext } from '@/server/session';
 import { removeMemberAction } from '../../../[business]/people/actions';
 import { addMembershipAction, setPlatformRoleAction, setUserActiveAction } from '../actions';
+import { startActingAsAction } from '@/server/acting-as-actions';
+import { ACTING_AS_MINUTES } from '@/core/auth/acting-as';
 
 export const metadata: Metadata = { title: 'User' };
 
@@ -23,6 +25,9 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
   const businesses = await listAccessibleBusinesses(ctx.actor.id as string);
   const canManage = ctx.permissions.has('platform.users.manage');
   const canGrant = ctx.permissions.has('platform.roles.grant');
+  // Only a super admin, in their own view, may act as an active person who is not a super admin.
+  const canActAs =
+    ctx.role === 'super_admin' && !ctx.actor.actingBy && user.id !== ctx.actor.id && user.isActive && user.platformRole !== 'super_admin';
   const canToggle = canManage && (!user.platformRole || canGrant) && user.id !== ctx.actor.id;
   const active = user.memberships.filter((m) => m.isActive);
   const available = businesses.filter((b) => !active.some((m) => m.businessId === b.id));
@@ -42,6 +47,16 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
         }
         actions={
           <>
+            {canActAs ? (
+              <ConfirmButton
+                action={startActingAsAction.bind(null, user.id)}
+                confirmTitle={`Act as ${user.name}?`}
+                confirmBody={`You will see and use the site exactly as ${user.name} does, for up to ${ACTING_AS_MINUTES} minutes or until you press Stop. Anything you change is real and is logged as you acting as them.`}
+                confirmLabel="Act as them"
+              >
+                Act as this person
+              </ConfirmButton>
+            ) : null}
             {user.isActive ? (
               <Badge tone="green">Active</Badge>
             ) : (
