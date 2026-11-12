@@ -72,10 +72,10 @@
   --space-10: 5rem;
   --space-12: 6rem;
 
-  --radius: 10px;
-  --radius-lg: 20px;
+  --radius: 6px;
+  --radius-lg: 8px;
   --shadow-sm: 0 1px 2px rgb(16 35 63 / 0.06), 0 2px 8px rgb(16 35 63 / 0.06);
-  --shadow-md: 0 4px 12px rgb(16 35 63 / 0.08), 0 16px 40px rgb(16 35 63 / 0.1);
+  --shadow-md: 0 8px 24px rgb(16 35 63 / 0.1);
   --container: 72rem;
   --gutter: var(--space-2);
   --tap: 2.75rem;
@@ -137,7 +137,7 @@ h3 {
   margin: 0 0 var(--space-2);
   line-height: 1.15;
   font-weight: 800;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   color: var(--navy);
 }
 
@@ -207,9 +207,7 @@ a:hover {
 .eyebrow {
   margin: 0 0 var(--space-1);
   font-size: var(--text-sm);
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-weight: 700;
   color: var(--orange-ink);
 }
 
@@ -253,10 +251,10 @@ a:hover {
   min-height: 3rem;
   padding: var(--space-1) var(--space-3);
   border: 2px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius);
   font: inherit;
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.2;
   text-align: center;
   text-decoration: none;
@@ -268,13 +266,11 @@ a:hover {
   background: var(--orange);
   color: var(--ink);
   border-color: var(--orange);
-  box-shadow: 0 6px 16px rgb(245 130 32 / 0.3);
 }
 
 .btn-primary:hover {
   background: var(--orange-hover);
   border-color: var(--orange-hover);
-  box-shadow: 0 8px 22px rgb(245 130 32 / 0.4);
 }
 
 .btn-secondary {
@@ -300,17 +296,10 @@ a:hover {
   position: sticky;
   top: 0;
   z-index: 50;
-  background: rgb(255 255 255 / 0.96);
+  background: var(--gray-0);
   border-bottom: 1px solid var(--color-border);
-  box-shadow: 0 2px 12px rgb(16 35 63 / 0.05);
 }
 
-@supports (backdrop-filter: blur(8px)) {
-  .site-header {
-    background: rgb(255 255 255 / 0.88);
-    backdrop-filter: saturate(1.4) blur(10px);
-  }
-}
 
 .header-inner {
   display: flex;
@@ -329,7 +318,6 @@ a:hover {
 
 .logo img {
   width: 8.5rem;
-  mix-blend-mode: multiply; /* lets the white JPG sit on the translucent header */
 }
 
 .menu-toggle {
@@ -338,7 +326,7 @@ a:hover {
   min-height: var(--tap);
   padding: var(--space-1) var(--space-3);
   border: 2px solid var(--gray-200);
-  border-radius: 999px;
+  border-radius: var(--radius);
   background: var(--gray-0);
   color: var(--navy);
   font: inherit;
@@ -369,9 +357,6 @@ a:hover {
   padding-inline: var(--space-2);
 }
 
-.header-actions .btn-primary {
-  box-shadow: none;
-}
 
 .header-phone {
   display: inline-flex;
@@ -417,7 +402,7 @@ a:hover {
   min-height: var(--tap);
   padding: var(--space-1) var(--space-2);
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius);
   background: none;
   color: var(--navy);
   font: inherit;
@@ -566,11 +551,7 @@ a:hover {
 .section--navy {
   --focus-color: var(--orange-soft);
   --color-link: var(--gray-0);
-  position: relative;
-  overflow: hidden;
-  background:
-    radial-gradient(60rem 30rem at 100% 0%, rgb(29 90 166 / 0.55), transparent 60%),
-    linear-gradient(160deg, var(--navy) 0%, var(--navy-deep) 100%);
+  background: var(--navy);
   color: rgb(255 255 255 / 0.9);
 }
 
@@ -581,24 +562,10 @@ a:hover {
 
 .section-header {
   max-width: 44rem;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-5);
 }
 
-/* Short orange rule under section titles */
-.section-header h2::after,
-.section .split > div > h2:first-child::after {
-  content: "";
-  display: block;
-  width: 3rem;
-  height: 4px;
-  margin-top: var(--space-2);
-  border-radius: 2px;
-  background: var(--orange);
-}
 
-.section-header .lead {
-  margin-top: var(--space-2);
-}
 
 @media (min-width: 48em) {
   .section {
@@ -615,67 +582,35 @@ a:hover {
 /* ---------- Home hero ---------- */
 .hero {
   --focus-color: var(--orange-soft);
-  position: relative;
-  overflow: hidden;
-  background:
-    radial-gradient(50rem 32rem at 85% 30%, rgb(29 90 166 / 0.7), transparent 65%),
-    radial-gradient(30rem 20rem at 0% 100%, rgb(245 130 32 / 0.16), transparent 70%),
-    linear-gradient(160deg, var(--navy) 0%, var(--navy-deep) 100%);
+  background: var(--navy);
   color: rgb(255 255 255 / 0.88);
 }
 
 /* Faint grid texture */
-.hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgb(255 255 255 / 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(255 255 255 / 0.04) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: linear-gradient(90deg, #000 0%, transparent 70%);
-  pointer-events: none;
-}
 
 .hero-inner {
-  position: relative;
   display: grid;
   gap: var(--space-6);
-  padding-block: var(--space-8) var(--space-10);
+  padding-block: var(--space-8);
 }
 
 .hero h1 {
   color: var(--gray-0);
   font-size: var(--text-4xl);
-  line-height: 1.05;
-  letter-spacing: -0.035em;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
 }
 
 .hero-since {
-  display: flex;
-  width: fit-content;
-  align-items: center;
-  gap: var(--space-1);
-  margin-top: var(--space-3);
-  padding: 0.35rem 0.9rem;
-  border: 1px solid rgb(255 177 105 / 0.45);
-  border-radius: 999px;
-  background: rgb(245 130 32 / 0.12);
+  display: block;
+  margin-top: var(--space-2);
   font-family: var(--font-family);
-  font-size: var(--text-sm);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: 0;
   color: var(--orange-soft);
 }
 
-.hero-since::before {
-  content: "";
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: var(--orange);
-}
 
 .hero-text {
   max-width: 34rem;
@@ -684,27 +619,14 @@ a:hover {
   line-height: 1.6;
 }
 
-.hero-media {
-  position: relative;
-}
 
 /* Offset orange frame behind the photo */
-.hero-media::before {
-  content: "";
-  position: absolute;
-  inset: var(--space-3) calc(var(--space-3) * -1) calc(var(--space-3) * -1) var(--space-3);
-  border: 3px solid var(--orange);
-  border-radius: calc(var(--radius-lg) + 4px);
-  opacity: 0.85;
-}
 
 .hero-media img {
-  position: relative;
   width: 100%;
   aspect-ratio: 4 / 3;
   object-fit: cover;
   border-radius: var(--radius-lg);
-  box-shadow: 0 30px 60px rgb(0 0 0 / 0.35);
 }
 
 .hero .btn-group {
@@ -716,42 +638,23 @@ a:hover {
   color: var(--gray-0);
 }
 
-@media (max-width: 47.99em) {
-  .hero-media::before {
-    inset: var(--space-2) calc(var(--space-1) * -1) calc(var(--space-2) * -1) var(--space-2);
-  }
-}
 
 @media (min-width: 64em) {
   .hero-inner {
-    grid-template-columns: 1.05fr 1fr;
+    grid-template-columns: 1fr 1fr;
     align-items: center;
-    gap: var(--space-10);
+    gap: var(--space-8);
     padding-block: var(--space-12);
   }
 }
 
 /* ---------- Page hero (inner pages) ---------- */
 .page-hero {
-  position: relative;
-  overflow: hidden;
   padding-block: var(--space-8);
-  background:
-    radial-gradient(40rem 20rem at 100% 0%, rgb(29 90 166 / 0.1), transparent 70%),
-    radial-gradient(30rem 16rem at 0% 100%, rgb(245 130 32 / 0.1), transparent 70%),
-    var(--color-surface);
+  background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
 
-.page-hero h1::after {
-  content: "";
-  display: block;
-  width: 3rem;
-  height: 4px;
-  margin-top: var(--space-2);
-  border-radius: 2px;
-  background: var(--orange);
-}
 
 .page-hero .lead {
   max-width: 40rem;
@@ -773,7 +676,6 @@ a:hover {
   max-height: 28rem;
   object-fit: cover;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
 }
 
 @media (min-width: 64em) {
@@ -836,41 +738,23 @@ a:hover {
 }
 
 .card {
-  position: relative;
   display: flex;
   flex-direction: column;
-  padding: var(--space-4) var(--space-3) var(--space-3);
+  padding: var(--space-3);
   background: var(--gray-0);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: border-color 0.15s ease;
 }
 
-.card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: var(--space-3);
-  width: 2.5rem;
-  height: 4px;
-  border-radius: 0 0 4px 4px;
-  background: var(--orange);
-  transition: width 0.25s ease;
-}
 
 .card:has(.card-link):hover {
-  transform: translateY(-3px);
-  border-color: transparent;
-  box-shadow: var(--shadow-md);
+  border-color: var(--blue);
 }
 
-.card:has(.card-link):hover::before {
-  width: calc(100% - var(--space-3) * 2);
-}
 
 .card h3 {
-  font-size: var(--text-xl);
+  font-size: var(--text-lg);
 }
 
 .card p {
@@ -884,30 +768,16 @@ a:hover {
 .card-link {
   display: inline-flex;
   align-items: center;
-  gap: 0.4em;
   min-height: var(--tap);
   margin-top: auto;
   padding-top: var(--space-1);
-  font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: 700;
   color: var(--blue);
-  text-decoration: none;
 }
 
-.card-link::after {
-  content: "\2192";
-  transition: transform 0.2s ease;
-}
 
-.card-link:hover {
-  text-decoration: underline;
-}
 
-.card:hover .card-link::after {
-  transform: translateX(4px);
-}
 
-/* Cards on the sand background read as tiles */
 .section--alt .card {
   border-color: transparent;
 }
@@ -927,7 +797,6 @@ a:hover {
   max-height: 36rem;
   object-fit: cover;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
 }
 
 @media (min-width: 64em) {
@@ -941,7 +810,7 @@ a:hover {
     align-self: stretch;
     height: 100%;
     min-height: 24rem;
-    max-height: none;
+    max-height: 32rem;
   }
 
   .split:has(> div > .grid) {
@@ -953,37 +822,31 @@ a:hover {
 .stats {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 0;
+  gap: var(--space-3) 0;
   margin: 0;
-  padding: var(--space-2);
-  border-radius: var(--radius-lg);
-  background:
-    radial-gradient(30rem 14rem at 100% 0%, rgb(29 90 166 / 0.6), transparent 70%),
-    linear-gradient(160deg, var(--navy) 0%, var(--navy-deep) 100%);
-  box-shadow: var(--shadow-md);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
 }
 
 .stat {
   display: flex;
   flex-direction: column-reverse;
   justify-content: flex-end;
-  padding: var(--space-3);
-  text-align: center;
+  padding: 0 var(--space-3) 0 0;
 }
 
 .stat dt {
-  color: rgb(255 255 255 / 0.8);
+  color: var(--color-text-muted);
   font-weight: 700;
 }
 
 .stat dd {
-  margin: 0 0 var(--space-0-5);
+  margin: 0;
   font-family: var(--font-display);
   font-size: var(--text-2xl);
   font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-  color: var(--orange-soft);
+  line-height: 1.15;
+  color: var(--navy);
 }
 
 .stats--3 .stat:last-child:nth-child(odd) {
@@ -993,7 +856,6 @@ a:hover {
 @media (min-width: 64em) {
   .stats {
     grid-template-columns: repeat(4, 1fr);
-    padding: var(--space-3) var(--space-2);
   }
 
   .stats--3 {
@@ -1005,14 +867,15 @@ a:hover {
   }
 
   .stat + .stat {
-    border-left: 1px solid rgb(255 255 255 / 0.14);
+    padding-left: var(--space-3);
+    border-left: 1px solid var(--color-border);
   }
 }
 
 /* ---------- Steps ---------- */
 .steps {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-4);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1022,35 +885,24 @@ a:hover {
 .steps > li {
   counter-increment: step;
   position: relative;
-  padding: var(--space-3);
-  padding-top: calc(var(--space-3) + 3.5rem + var(--space-2));
-  background: var(--gray-0);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  padding-top: var(--space-3);
+  border-top: 2px solid var(--navy);
 }
 
 .steps > li::before {
-  content: counter(step);
-  position: absolute;
-  top: var(--space-3);
-  left: var(--space-3);
-  display: grid;
-  place-items: center;
-  width: 3.5rem;
-  height: 3.5rem;
-  border-radius: 50%;
-  background: var(--orange);
-  box-shadow: 0 0 0 6px rgb(245 130 32 / 0.15);
+  content: counter(step, decimal-leading-zero);
+  display: block;
+  margin-bottom: var(--space-1);
   font-family: var(--font-display);
-  font-size: var(--text-xl);
+  font-size: var(--text-lg);
   font-weight: 800;
   line-height: 1;
-  color: var(--ink);
+  color: var(--orange-ink);
 }
 
 .steps p {
   font-size: var(--text-lg);
+  color: var(--gray-800);
 }
 
 .steps p:last-child {
@@ -1081,28 +933,18 @@ a:hover {
 
 .check-list li {
   position: relative;
-  padding-left: 2.25rem;
-  margin-bottom: var(--space-2);
+  padding-left: var(--space-4);
+  margin-bottom: var(--space-1);
 }
 
-.check-list li::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0.15em;
-  width: 1.4rem;
-  height: 1.4rem;
-  border-radius: 50%;
-  background: rgb(245 130 32 / 0.15);
-}
 
 .check-list li::after {
   content: "";
   position: absolute;
-  left: 0.5rem;
-  top: 0.4em;
-  width: 0.4rem;
-  height: 0.75rem;
+  left: var(--space-0-5);
+  top: 0.35em;
+  width: 0.45em;
+  height: 0.85em;
   border-right: 3px solid var(--orange-ink);
   border-bottom: 3px solid var(--orange-ink);
   transform: rotate(45deg);
@@ -1150,10 +992,7 @@ a:hover {
 }
 
 .contact-list dt {
-  font-size: var(--text-sm);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 700;
   color: var(--orange-soft);
 }
 
@@ -1166,10 +1005,9 @@ a:hover {
   overflow-wrap: anywhere;
   align-items: center;
   min-height: var(--tap);
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: 800;
-  text-decoration-color: rgb(255 255 255 / 0.35);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  text-decoration-color: rgb(255 255 255 / 0.4);
 }
 
 .contact-list a:hover {
@@ -1193,7 +1031,6 @@ a:hover {
   background: var(--navy-deep);
   color: rgb(255 255 255 / 0.82);
   padding-block: var(--space-8) var(--space-4);
-  border-top: 4px solid var(--orange);
 }
 
 .site-footer a {
@@ -1213,10 +1050,8 @@ a:hover {
 
 .footer-heading {
   margin-bottom: var(--space-2);
-  font-size: var(--text-sm);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--orange-soft);
+  font-size: var(--text-base);
+  color: var(--gray-0);
 }
 
 .footer-list {
@@ -1323,20 +1158,17 @@ a:hover {
 
 fieldset {
   margin: 0 0 var(--space-4);
-  padding: var(--space-4) var(--space-3) var(--space-3);
+  padding: var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--gray-0);
-  box-shadow: var(--shadow-sm);
 }
 
 legend {
-  padding: 0.25rem 0.9rem;
-  border-radius: 999px;
-  background: var(--navy);
-  font-size: var(--text-base);
+  padding-inline: var(--space-1);
+  font-size: var(--text-lg);
   font-weight: 800;
-  color: var(--gray-0);
+  color: var(--navy);
 }
 
 .field {
@@ -1502,7 +1334,4 @@ address {
     transition: none !important;
   }
 
-  .card:has(.card-link):hover {
-    transform: none;
-  }
 }
