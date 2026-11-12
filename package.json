@@ -29,7 +29,8 @@
     "demo:build": "tsx scripts/demo-prepare.ts && next build",
     "test:e2e:demo": "playwright test --config playwright.demo.config.ts --trace off",
     "check": "npm run typecheck && npm run lint && npm run test && npm run secret-scan",
-    "hhmc:import": "tsx scripts/hhmc-import/index.ts"
+    "hhmc:import": "tsx scripts/hhmc-import/index.ts",
+    "hhmc:sync-to-pilot": "tsx scripts/hhmc-sync/index.ts"
   },
   "dependencies": {
     "arctic": "3.7.0",

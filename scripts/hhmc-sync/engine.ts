@@ -268,7 +268,7 @@ export type Comparison = {
 };
 
 function comparison(plan: Plan, src: Fingerprint, dst: Fingerprint, stored: StoredSync | null): Comparison {
-  const rows = plan.copy.map((t) => {
+  const rows = [...plan.copy].sort().map((t) => {
     const a = src.tables[t];
     const b = dst.tables[t];
     return { table: t, local: a.rows, website: b.rows, matches: a.rows === b.rows && a.md5 === b.md5 };
