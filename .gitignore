@@ -48,3 +48,7 @@ Thumbs.db
 hhmc-data/
 import-output/
 .import/
+
+# Real Movegistics exports, import reports and local backups. Real customer data: never commit.
+/data/
+/backups/
