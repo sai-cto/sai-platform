@@ -109,8 +109,11 @@ export async function PortalHost({
             );
           })}
           {/* The one search box: same as Ctrl/Cmd-K, on every page of the app. */}
-          <span className="ml-auto" />
-          <SearchButton />
+          {/* On a phone the top bar's search button does this; here it would sit off-screen. */}
+          <span className="ml-auto hidden sm:block" />
+          <span className="hidden sm:contents">
+            <SearchButton />
+          </span>
         </nav>
       ) : null}
       {content}

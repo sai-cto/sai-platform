@@ -102,7 +102,7 @@ export function QuoteEditor({
                     <td className="border-b border-zinc-100 px-3 py-2 text-right tabular-nums">{usd(l.rateCents)}</td>
                     <td className="border-b border-zinc-100 px-3 py-2 text-right tabular-nums">{usd(lineTotalCents(l))}</td>
                     {editable && removeLine ? (
-                      <td className="border-b border-zinc-100 px-3 py-2 text-right">
+                      <td className="sticky right-0 border-b border-zinc-100 bg-white px-3 py-2 text-right">
                         <ConfirmButton action={removeLine[l.id]} variant="ghost" title={`Remove ${l.name}`}>Remove</ConfirmButton>
                       </td>
                     ) : null}

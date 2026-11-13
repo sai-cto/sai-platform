@@ -67,7 +67,7 @@ function NavItem({
       onClick={onNavigate}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex h-8 items-center gap-2.5 rounded-md px-2 text-[13px] text-zinc-600 hover:bg-zinc-200/60 hover:text-zinc-900 focus-visible:outline-2 focus-visible:outline-zinc-900',
+        'flex h-11 items-center gap-2.5 lg:h-8 rounded-md px-2 text-[13px] text-zinc-600 hover:bg-zinc-200/60 hover:text-zinc-900 focus-visible:outline-2 focus-visible:outline-zinc-900',
         active && 'bg-zinc-200/80 font-medium text-zinc-900',
       )}
     >
@@ -109,7 +109,7 @@ function SidebarContent({
         <button
           type="button"
           onClick={onOpenPalette}
-          className="flex h-8 w-full items-center gap-2 rounded-md border border-zinc-200 bg-white px-2 text-left text-[13px] text-zinc-500 hover:border-zinc-300 focus-visible:outline-2 focus-visible:outline-zinc-900"
+          className="flex h-11 w-full items-center gap-2 rounded-md border border-zinc-200 bg-white px-2 text-left text-[13px] lg:h-8 text-zinc-500 hover:border-zinc-300 focus-visible:outline-2 focus-visible:outline-zinc-900"
         >
           <Search className="size-3.5" aria-hidden="true" />
           <span className="flex-1">Search…</span>
@@ -146,15 +146,17 @@ function SidebarContent({
           <div className="space-y-0.5">
             {businesses.map((b) => {
               const active = isActive(pathname, `/console/${b.slug}`);
+              // In test mode, the business you are in stays in test mode.
+              const inTestMode = active && pathname.startsWith(`/console/${b.slug}/sandbox/`);
               return (
                 <Link
                   key={b.slug}
-                  href={`/console/${b.slug}`}
+                  href={inTestMode ? `/console/${b.slug}/sandbox/app` : `/console/${b.slug}`}
                   onClick={onNavigate}
                   aria-current={active ? 'page' : undefined}
                   title={b.name}
                   className={cn(
-                    'relative flex h-8 items-center gap-2.5 rounded-md px-2 text-[13px] text-zinc-600 hover:bg-zinc-200/60 hover:text-zinc-900 focus-visible:outline-2 focus-visible:outline-zinc-900',
+                    'relative flex h-11 items-center gap-2.5 rounded-md px-2 text-[13px] lg:h-8 text-zinc-600 hover:bg-zinc-200/60 hover:text-zinc-900 focus-visible:outline-2 focus-visible:outline-zinc-900',
                     active && 'bg-zinc-200/80 font-medium text-zinc-900',
                   )}
                 >

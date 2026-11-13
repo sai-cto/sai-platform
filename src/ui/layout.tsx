@@ -16,7 +16,7 @@ export function PageHeader({
       <div className="min-w-0">
         <h1 className="text-lg font-semibold tracking-tight text-zinc-900">{title}</h1>
         {description ? (
-          <p className="mt-0.5 max-w-2xl text-sm text-zinc-600">{description}</p>
+          <p data-page-description className="mt-0.5 max-w-2xl text-sm text-zinc-600">{description}</p>
         ) : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -43,7 +43,7 @@ export function Card({
   return (
     <section className={cn('min-w-0 rounded-lg border border-zinc-200 bg-white', className)}>
       {title ? (
-        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-4 py-2.5">
+        <header data-card-action className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-4 py-2.5">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-zinc-900">{title}</h2>
             {description ? <p className="mt-0.5 text-xs text-zinc-500">{description}</p> : null}

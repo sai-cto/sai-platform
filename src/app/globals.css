@@ -35,3 +35,14 @@ body {
     align-items: center;
   }
 }
+
+/* Phone: links that open a record (in tables, under a page title, in card headers) are 44px tall. */
+@media (max-width: 639px) {
+  td a[href],
+  [data-page-description] a[href],
+  [data-card-action] a[href] {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+  }
+}

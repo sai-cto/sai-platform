@@ -10,6 +10,7 @@ import { customerName } from '@/core/records/core-entities';
 import { ActionForm } from '@/ui/action-form';
 import { Badge } from '@/ui/badge';
 import { ConfirmButton } from '@/ui/confirm-button';
+import { cn } from '@/ui/cn';
 import { formatClock, formatDateTime, formatMoney } from '@/ui/format';
 import { Card, EmptyState, Field, PageHeader, Table, Td, Th, inputClass } from '@/ui/layout';
 import {
@@ -416,7 +417,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                         <Td>
                           {canWrite && (job.stage === 'booked' || job.stage === 'completed') && !openInvoice ? (
                             <ActionForm action={actualTimeAction.bind(null, slug, mode, job.id, d.id)} submitLabel="Save" submitVariant="ghost" resetOnSuccess={false} className="flex items-center gap-2 space-y-0">
-                              <input aria-label={`Actual hours ${d.dayDate}`} name="hours" inputMode="decimal" defaultValue={d.actualMinutes !== null ? String(d.actualMinutes / 60) : ''} placeholder="h" className={`${inputClass} w-16`} />
+                              <input aria-label={`Actual hours ${d.dayDate}`} name="hours" inputMode="decimal" defaultValue={d.actualMinutes !== null ? String(d.actualMinutes / 60) : ''} placeholder="h" className={cn(inputClass, 'w-20 shrink-0')} />
                             </ActionForm>
                           ) : d.actualMinutes !== null ? (
                             `${(d.actualMinutes / 60).toFixed(2)} h`
@@ -424,7 +425,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                             '—'
                           )}
                         </Td>
-                        <Td className="text-right">
+                        <Td className="sticky right-0 bg-white text-right">
                           {canWrite && quoteEditable(job.stage) ? <ConfirmButton action={removeJobDayAction.bind(null, slug, mode, job.id, d.id)} variant="ghost">Remove</ConfirmButton> : null}
                         </Td>
                       </tr>

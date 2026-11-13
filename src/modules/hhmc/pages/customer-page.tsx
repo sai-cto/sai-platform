@@ -140,7 +140,7 @@ async function EstimateReview({ ctx, searchParams, basePath }: PortalPageProps) 
           </dl>
           <Prices e={e} />
           <p className="mt-3 text-xs text-zinc-600">{`Deposit to hold your date: ${pct(s.depositBp)} = ${formatMoney(deposit.depositCents)}${s.convenienceFeeOn ? ` (+ ${pct(s.convenienceFeeBp)} card fee ${formatMoney(deposit.cardFeeCents)} = ${formatMoney(deposit.totalDueCents)} by card)` : ''}.`}</p>
-          <div className="mt-4 flex justify-end"><Link className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white" href={go('estimate')}>Next: full estimate</Link></div>
+          <div className="mt-4 flex justify-end"><Link className="inline-flex min-h-11 items-center rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white" href={go('estimate')}>Next: full estimate</Link></div>
         </Card>
       ) : null}
 
@@ -172,9 +172,9 @@ async function EstimateReview({ ctx, searchParams, basePath }: PortalPageProps) 
           <h2 className="mt-5 text-sm font-semibold">{s.termsTitle}</h2>
           <p className="max-h-80 overflow-y-auto rounded border border-zinc-200 p-3 text-sm whitespace-pre-wrap text-zinc-700">{s.termsBody}</p>
           <div className="mt-4 flex flex-wrap justify-between gap-2 print:hidden">
-            <Link className="rounded-md border border-zinc-300 px-3 py-2 text-sm" href={go('summary')}>Back</Link>
+            <Link className="inline-flex min-h-11 items-center rounded-md border border-zinc-300 px-3 py-2 text-sm" href={go('summary')}>Back</Link>
             <PrintButton />
-            {e.status !== 'signed' && !expired ? <Link className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white" href={go('sign')}>Next: sign</Link> : <Link className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white" href={go('confirm')}>Confirmation</Link>}
+            {e.status !== 'signed' && !expired ? <Link className="inline-flex min-h-11 items-center rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white" href={go('sign')}>Next: sign</Link> : <Link className="inline-flex min-h-11 items-center rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white" href={go('confirm')}>Confirmation</Link>}
           </div>
         </Card>
       ) : null}
@@ -194,7 +194,7 @@ async function EstimateReview({ ctx, searchParams, basePath }: PortalPageProps) 
             <Field label="Type your full name to sign" htmlFor="signature"><input id="signature" name="signatureName" autoComplete="name" className={inputClass} /></Field>
             <p className="text-xs text-zinc-500">{`We record the time you sign, your IP address and your browser. Total: ${formatMoney(baseTotalCents(e))}${e.snapshot.convenienceFeeOn ? ` (${formatMoney(e.totalCents)} if paid by card)` : ''}.`}</p>
           </ActionForm>
-          <div className="mt-3"><Link className="text-sm underline" href={go('estimate')}>Back to the estimate</Link></div>
+          <div className="mt-3"><Link className="inline-flex min-h-11 items-center text-sm underline" href={go('estimate')}>Back to the estimate</Link></div>
         </Card>
       ) : null}
 

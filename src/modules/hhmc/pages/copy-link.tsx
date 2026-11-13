@@ -31,7 +31,7 @@ export function CopyLinkButton({ action, label = 'Copy link' }: { action: () => 
         {pending ? 'Working…' : label}
       </Button>
       {link ? (
-        <input readOnly value={link} aria-label="Customer link" onFocus={(e) => e.currentTarget.select()} className="h-7 w-56 rounded border border-zinc-300 px-2 text-xs" />
+        <input readOnly value={link} aria-label="Customer link" onFocus={(e) => e.currentTarget.select()} className="h-11 w-56 max-w-full rounded border border-zinc-300 px-2 text-base sm:h-7 sm:text-xs" />
       ) : null}
       {error ? <span role="alert" className="text-xs text-red-700">{error}</span> : null}
     </span>
