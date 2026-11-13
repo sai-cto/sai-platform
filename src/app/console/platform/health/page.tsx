@@ -1,6 +1,8 @@
 import { CircleAlert, CircleCheck } from 'lucide-react';
 import type { Metadata } from 'next';
+import { listServerErrors } from '@/core/health/errors';
 import { runHealthChecks } from '@/core/health/health';
+import { formatDateTime } from '@/ui/format';
 import { Card, PageHeader } from '@/ui/layout';
 import { guarded, requirePlatformContext } from '@/server/session';
 
@@ -10,6 +12,7 @@ export default async function HealthPage() {
   const ctx = await requirePlatformContext();
   const groups = await guarded(() => runHealthChecks(ctx));
   const failing = groups.flatMap((g) => g.checks).filter((c) => !c.ok).length;
+  const errors = await guarded(() => listServerErrors(ctx, 100));
   return (
     <>
       <PageHeader
@@ -50,6 +53,33 @@ export default async function HealthPage() {
           </Card>
         ))}
       </div>
+      <Card
+        title="Server errors"
+        description="Unexpected errors on the server, newest first (the last 100). People who hit one saw a plain message; nothing here was shown to them."
+        className="mt-5"
+        flush
+      >
+        {errors.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-zinc-500">No server errors recorded.</p>
+        ) : (
+          <ul data-testid="server-errors" className="divide-y divide-zinc-100">
+            {errors.map((e) => (
+              <li key={e.id} className="px-4 py-2.5">
+                <div className="text-sm font-medium break-words text-zinc-900">{e.message}</div>
+                <div className="text-xs text-zinc-500">
+                  {[formatDateTime(e.occurredAt), e.source, e.path, e.digest ? `ref ${e.digest}` : null].filter(Boolean).join(' · ')}
+                </div>
+                {e.stack ? (
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-xs text-zinc-500">Stack</summary>
+                    <pre className="mt-1 overflow-x-auto text-[11px] whitespace-pre-wrap text-zinc-600">{e.stack}</pre>
+                  </details>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </>
   );
 }

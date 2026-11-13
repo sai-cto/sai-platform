@@ -192,9 +192,9 @@ describe('business_admin: their own business, no permanent delete, no settings c
 });
 
 describe('business_staff: limited to what their admin grants', () => {
-  it('a new hire with no grants can open the app and overview, nothing else', async () => {
+  it('a new hire with no grants can open the app and overview and send feedback, nothing else', async () => {
     const ctx = await ctxFor(USERS.brssNewHire, 'brss');
-    expect([...ctx.permissions].sort()).toEqual(['business.app.use', 'business.overview.read']);
+    expect([...ctx.permissions].sort()).toEqual(['business.app.use', 'business.feedback.send', 'business.overview.read']);
     await forbidden(createCustomer(ctx, { firstName: 'No', lastName: 'Grant' }));
     await forbidden(buildBusinessContext(await userId(USERS.brssNewHire), 'brss', 'sandbox'));
   });

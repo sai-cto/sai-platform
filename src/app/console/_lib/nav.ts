@@ -6,7 +6,7 @@ import { PLATFORM_ROLES } from '@/core/rbac/roles';
 import type { BusinessContext, PlatformContext } from '@/core/tenancy/context';
 
 export type NavIcon =
-  'home' | 'chart' | 'users' | 'boxes' | 'flag' | 'activity' | 'upload' | 'heart' | 'settings';
+  'home' | 'chart' | 'users' | 'boxes' | 'flag' | 'activity' | 'upload' | 'heart' | 'settings' | 'chat';
 export type NavLink = { label: string; href: string; icon: NavIcon; permission?: string };
 
 const PLATFORM_LINKS: NavLink[] = [
@@ -39,6 +39,12 @@ const PLATFORM_LINKS: NavLink[] = [
     href: '/console/platform/imports',
     icon: 'upload',
     permission: 'platform.imports.read',
+  },
+  {
+    label: 'Feedback',
+    href: '/console/platform/feedback',
+    icon: 'chat',
+    permission: 'platform.feedback.read',
   },
   {
     label: 'System health',

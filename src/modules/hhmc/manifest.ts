@@ -16,6 +16,7 @@ import { JobsPage, NewJobPage } from './pages/jobs';
 import { LeadPage, LeadsPage, NewLeadPage } from './pages/leads';
 import { SchedulePage } from './pages/schedule-page';
 import { SettingsPage } from './pages/settings-page';
+import { HowToTestPage } from './pages/how-to-test';
 import { EstimatePrintPage, InvoicePrintPage } from './pages/print-pages';
 import { CORE, P, permissions } from './permissions';
 import { seedDemoData } from './seed';
@@ -56,6 +57,7 @@ export const hhmcModule = defineModule({
         { label: 'Calendar', path: 'schedule' },
         { label: 'Invoices', path: 'invoices' },
         { label: 'Settings', path: 'settings' },
+        { label: 'How to test', path: 'how-to-test' },
       ],
       // prettier-ignore
       routes: [
@@ -75,6 +77,7 @@ export const hhmcModule = defineModule({
         { path: 'invoices/:id/print', title: 'Print invoice', permission: P.invoicesRead, component: InvoicePrintPage },
         { path: 'estimates/:id/print', title: 'Print estimate', permission: P.jobsRead, component: EstimatePrintPage },
         { path: 'settings', title: 'Settings', permission: P.catalogRead, component: SettingsPage },
+        { path: 'how-to-test', title: 'How to test', permission: P.jobsRead, component: HowToTestPage },
       ],
     },
     // Opened only through a customer link (/l/<token>); see linkPurposes below.

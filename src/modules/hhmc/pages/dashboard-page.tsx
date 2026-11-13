@@ -160,6 +160,9 @@ export async function DashboardPage({ ctx, searchParams, basePath }: PortalPageP
         title="Dashboard"
         description={`How we're doing, ${preset && preset !== 'all' ? `${RANGE_PRESET_LABELS[preset].toLowerCase()} (${rangeLabel})` : rangeLabel}. Click any number to see the people and jobs behind it.`}
       />
+      <p data-testid="how-to-test-banner" className="mb-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 print:hidden">
+        Testing the new app? Read <Link href={`${basePath}/how-to-test`} className="font-medium underline">How to test</Link>: what to try, how to use test mode, and how to send feedback.
+      </p>
 
       <div className="mb-5 flex min-w-0 flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-3 lg:flex-row lg:items-end lg:justify-between">
         <nav aria-label="Date range" className="flex flex-wrap gap-1">

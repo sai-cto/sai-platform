@@ -6,6 +6,7 @@ import { z } from 'zod';
 import {
   appointments,
   customers,
+  feedback,
   files,
   importJobs,
   notifications,
@@ -244,6 +245,24 @@ export const importJobEntity: EntityDef<typeof importJobs> = {
   searchColumns: ['filename', 'entityKey', 'status'],
 };
 
+export const feedbackEntity: EntityDef<typeof feedback> = {
+  key: 'core.feedback',
+  label: 'feedback message',
+  labelPlural: 'Feedback',
+  table: feedback,
+  readPermission: 'business.feedback.read',
+  writePermission: 'business.feedback.send',
+  titleOf: (row) => text(row.message).slice(0, 60),
+  listColumns: [
+    { key: 'createdAt', label: 'Sent', format: 'datetime' },
+    { key: 'authorName', label: 'From' },
+    { key: 'message', label: 'Message' },
+    { key: 'pageUrl', label: 'Page' },
+    { key: 'status', label: 'Status' },
+  ],
+  searchColumns: ['message', 'authorName', 'pageUrl'],
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a list of entities over different tables
 export const CORE_ENTITIES: EntityDef<any>[] = [
   customerEntity,
@@ -255,4 +274,5 @@ export const CORE_ENTITIES: EntityDef<any>[] = [
   notificationEntity,
   fileEntity,
   importJobEntity,
+  feedbackEntity,
 ];

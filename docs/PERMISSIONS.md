@@ -44,6 +44,7 @@ These are not tied to one business. Business roles never hold them.
 | Import a file into a sandbox | `platform.imports.run` | write | ✅ | ✅ | — | — | — |
 | Import a checked file into live data | `platform.imports.run_live` | write | ✅ | ✅ | — | — | — |
 | See system health | `platform.health.read` | read | ✅ | ✅ | — | — | — |
+| Read the feedback people sent from the apps | `platform.feedback.read` | read | ✅ | ✅ | — | — | — |
 | See platform settings | `platform.settings.read` | read | ✅ | ✅ | — | — | — |
 | Change platform settings (e.g. retention window) | `platform.settings.write` | write | ✅ | — | — | — | — |
 
@@ -56,6 +57,8 @@ in any other business they hold nothing and the business does not appear to exis
 |---|---|---|:-:|:-:|:-:|:-:|:-:|
 | See the business overview | `business.overview.read` | read | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Open the staff portal | `business.app.use` | read | ✅ | ✅ | — | ✅ | ✅ |
+| Send feedback about the app (Send feedback button) | `business.feedback.send` | write | ✅ | ✅ | — | ✅ | ✅ |
+| Read this business's app feedback | `business.feedback.read` | read | ✅ | ✅ | — | — | — |
 | See who has access | `business.people.read` | read | ✅ | ✅ | — | ✅ | — |
 | Add people, change roles and staff permissions | `business.people.manage` | write | ✅ | ✅ | — | ✅ | — |
 | Browse records in the Data tab | `business.data.read` | read | ✅ | ✅ | ✅ | ✅ | 🔑 |

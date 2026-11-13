@@ -177,6 +177,7 @@ export const FIXTURES: Record<string, Fixture> = {
     sizeBytes: 5,
   }),
   'core.import_job': async () => ({ entityKey: 'core.customer', filename: 'fixture.csv' }),
+  'core.feedback': async () => ({ message: 'Fixture feedback', pageUrl: '/fixture', status: 'new' }),
 };
 
 /**

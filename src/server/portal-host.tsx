@@ -10,6 +10,8 @@ import { matchRoute } from '@/core/modules/portal';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { cn } from '@/ui/cn';
 import { SearchButton } from '@/ui/search-button';
+import { FeedbackButton } from '@/ui/feedback-button';
+import { sendFeedbackAction } from './feedback-actions';
 import { guarded } from './session';
 
 export async function PortalHost({
@@ -62,7 +64,8 @@ export async function PortalHost({
   ];
 
   return (
-    <div>
+    // Room at the bottom for the floating "Send feedback" button, so it never covers a button.
+    <div className="pb-20 print:pb-0">
       {crumbs.length > 1 ? (
         <nav aria-label="Breadcrumb" data-testid="breadcrumbs" className="mb-2 text-xs text-zinc-500 print:hidden">
           <ol className="flex flex-wrap items-center gap-1">
@@ -110,6 +113,9 @@ export async function PortalHost({
         </nav>
       ) : null}
       {content}
+      {ctx.permissions.has('business.feedback.send') && !ctx.link ? (
+        <FeedbackButton action={sendFeedbackAction.bind(null, ctx.business.slug, ctx.environment)} />
+      ) : null}
     </div>
   );
 }

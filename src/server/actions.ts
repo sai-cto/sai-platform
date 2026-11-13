@@ -5,8 +5,8 @@
  *     return act(async () => { ...call the core...; return 'Saved.'; });
  *   }
  *
- * act() turns the core's "safe to show" errors into a message for the form, and lets
- * everything else surface as a real error.
+ * act() turns the core's "safe to show" errors into a message for the form. Anything else is
+ * recorded (System health › Errors) and shown as a plain "something went wrong" message.
  */
 import { revalidatePath } from 'next/cache';
 import { unstable_rethrow } from 'next/navigation';
@@ -16,6 +16,7 @@ import {
   UnauthenticatedError,
   ValidationError,
 } from '@/core/errors';
+import { logServerError } from '@/core/health/errors';
 import type { ActionResult } from '@/ui/action-form';
 
 export async function act(fn: () => Promise<string | void>): Promise<ActionResult> {
@@ -34,7 +35,9 @@ export async function act(fn: () => Promise<string | void>): Promise<ActionResul
       return { ok: false, message: 'That no longer exists, or you cannot access it.' };
     if (error instanceof UnauthenticatedError)
       return { ok: false, message: 'Your session has ended. Sign in again.' };
-    throw error;
+    // Anything else is our fault: recorded for the tech team, a plain message for the person.
+    await logServerError(error, { source: 'action' });
+    return { ok: false, message: 'Something went wrong on our side, and it has been reported. Please try again; if it keeps happening, use "Send feedback".' };
   }
 }
 

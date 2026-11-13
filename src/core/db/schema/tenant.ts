@@ -184,3 +184,19 @@ export const importJobs = tenantTable(
       ),
   ],
 );
+
+/**
+ * What people tell us from the app's "Send feedback" button: the message, the page it was sent
+ * from and who sent it (created_by / author). Read by the tech team (Platform › Feedback).
+ */
+export const feedback = tenantTable(
+  'feedback',
+  {
+    message: text('message').notNull(),
+    pageUrl: text('page_url').notNull().default(''),
+    authorName: text('author_name').notNull().default(''),
+    authorEmail: text('author_email'),
+    status: text('status').$type<'new' | 'read' | 'done'>().notNull().default('new'),
+  },
+  (t) => [index('feedback_created_idx').on(t.businessId, t.createdAt)],
+);

@@ -192,3 +192,25 @@ export const activityLog = pgTable(
     pgPolicy('activity_log_insert', { for: 'insert', to: appRole, withCheck: sql`true` }),
   ],
 );
+
+/**
+ * Unexpected server errors (System health › Errors, tech team and super admin only). Written by
+ * src/instrumentation.ts and by server actions that fail unexpectedly; never shown to the person
+ * who hit the error (they see a plain message). The message and a short stack, no request body.
+ */
+export const serverErrors = pgTable(
+  'server_errors',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+    /** render / route / action / proxy / client */
+    source: text('source').notNull(),
+    message: text('message').notNull(),
+    /** Next.js's id for the error (also shown to the person, so a report can be matched). */
+    digest: text('digest'),
+    path: text('path'),
+    stack: text('stack'),
+    userId: uuid('user_id'),
+  },
+  (t) => [index('server_errors_occurred_idx').on(t.occurredAt)],
+);

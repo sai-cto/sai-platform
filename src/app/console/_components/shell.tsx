@@ -10,6 +10,7 @@ import {
   House,
   LogOut,
   Menu,
+  MessageSquare,
   Search,
   Settings,
   Upload,
@@ -39,6 +40,7 @@ const ICONS: Record<NavIcon, typeof House> = {
   upload: Upload,
   heart: HeartPulse,
   settings: Settings,
+  chat: MessageSquare,
 };
 
 function isActive(pathname: string, href: string): boolean {

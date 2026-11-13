@@ -61,12 +61,15 @@ export const CORE_ACTIONS: ActionDef[] = [
   action('platform.imports.run', 'Import a file into a sandbox', 'platform', 'write', row(Y, Y, N, N, N)),
   action('platform.imports.run_live', 'Import a checked file into live data', 'platform', 'write', row(Y, Y, N, N, N)),
   action('platform.health.read', 'See system health', 'platform', 'read', row(Y, Y, N, N, N)),
+  action('platform.feedback.read', 'Read the feedback people sent from the apps', 'platform', 'read', row(Y, Y, N, N, N)),
   action('platform.settings.read', 'See platform settings', 'platform', 'read', row(Y, Y, N, N, N)),
   action('platform.settings.write', 'Change platform settings (e.g. retention window)', 'platform', 'write', row(Y, N, N, N, N)),
 
   // ---- Per business: console tabs ------------------------ SA  tech exec admin staff
   action('business.overview.read', 'See the business overview', 'business', 'read', row(Y, Y, Y, Y, Y)),
   action('business.app.use', 'Open the staff portal', 'business', 'read', row(Y, Y, N, Y, Y)),
+  action('business.feedback.send', 'Send feedback about the app (Send feedback button)', 'business', 'write', row(Y, Y, N, Y, Y)),
+  action('business.feedback.read', "Read this business's app feedback", 'business', 'read', row(Y, Y, N, N, N)),
   action('business.people.read', 'See who has access', 'business', 'read', row(Y, Y, N, Y, N)),
   action('business.people.manage', 'Add people, change roles and staff permissions', 'business', 'write', row(Y, Y, N, Y, N)),
   action('business.data.read', 'Browse records in the Data tab', 'business', 'read', row(Y, Y, Y, Y, G)),
