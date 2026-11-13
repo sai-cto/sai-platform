@@ -116,7 +116,10 @@ export async function createInvoice(
       if (hourly.length > 0) {
         const first = hourly[0];
         lines = lines.filter((l) => !hourly.includes(l));
-        lines.unshift({ ...first, qtyHundredths: minutesToQtyHundredths(actualMinutes, settings.roundingMinutes), description: 'Actual time' });
+        // One line for all the time worked, named for it (not after the estimate's first hourly
+        // line, e.g. "2 Men – Load", which would tell the customer all of it was loading).
+        const name = / – /.test(first.name) ? first.name.replace(/ – .*$/, ' – Actual time') : `${first.name} (actual time)`;
+        lines.unshift({ ...first, name, qtyHundredths: minutesToQtyHundredths(actualMinutes, settings.roundingMinutes), description: 'Actual time' });
       }
     }
     const invoiceDate = localDate(now, ctx.business.timeZone);

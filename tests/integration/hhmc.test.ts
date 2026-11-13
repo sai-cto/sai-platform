@@ -12,7 +12,7 @@ import { buildLinkContext, signLink, verifyLink } from '@/core/links/links';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { P } from '@/modules/hhmc/permissions';
 import { canMoveStage, findMatchingCustomer, probableDuplicates, stageMoveProblem } from '@/modules/hhmc/rules';
-import { hhmcAutomationQueue, hhmcAutomationRules, hhmcEstimates, hhmcJobs } from '@/modules/hhmc/schema';
+import { hhmcAutomationQueue, hhmcAutomationRules, hhmcEstimates, hhmcInvoiceLines, hhmcJobDays, hhmcJobs } from '@/modules/hhmc/schema';
 import { enqueue, processDueAutomations, processDueAutomationsInScope } from '@/modules/hhmc/services/automations';
 import { addJobDay, bookJob, markSoldOut, releaseBooking, scheduleBetween, setActualTime, unmarkSoldOut } from '@/modules/hhmc/services/booking';
 import { loadJob } from '@/modules/hhmc/services/common';
@@ -185,6 +185,12 @@ describe('the whole life of one move', () => {
     // The deposit is credited at its base ($136.50); the $5.46 card fee was a fee, not a credit (H4).
     expect(invoice.depositReceivedCents).toBe(13650);
     expect(invoice.status).toBe('draft');
+    // All the time worked is one line named for it, not after the estimate's first hourly line.
+    const lineNames = await withScope(ctx, P.invoicesRead, async (s) =>
+      (await s.db.select().from(hhmcInvoiceLines).where(and(s.where(hhmcInvoiceLines), eq(hhmcInvoiceLines.invoiceId, invoice.id)))).map((l) => l.name),
+    );
+    expect(lineNames.filter((n) => /actual time/i.test(n))).toHaveLength(1);
+    expect(lineNames.some((n) => /Load$/.test(n))).toBe(false);
 
     // Send → past-due reminder queued for +8 days.
     const sent = await sendInvoice(ctx, invoice.id);
@@ -789,12 +795,16 @@ describe('estimate builder on a real work request', () => {
     const ctx = await admin();
     const lead = await newLead(ctx);
     const { customerId } = await convertLead(ctx, lead.id, {});
-    const job = await createJob(ctx, { customerId, serviceType: 'local', jobType: 'Local Full Service Move', crewSize: '2', trucks: '1' });
+    const job = await createJob(ctx, { customerId, serviceType: 'local', jobType: 'Local Full Service Move', crewSize: '2', trucks: '1', moveDate: day(600) });
     const before = await withScope(ctx, P.jobsRead, (s) => quoteSummary(s, job.id));
     expect(before.lines.filter((l) => /truck/i.test(l.name))).toHaveLength(1);
     await applyBuilder(ctx, job.id, { crewSize: '2', hoursMode: 'split', loadHours: '2', driveHours: '0.5', unloadHours: '1.5', truckSize: '16', truckCount: '1', truckDays: '1', miles: '12', valuation: false, replace: false, materials: {} });
     const after = await withScope(ctx, P.jobsRead, (s) => quoteSummary(s, job.id));
     expect(after.lines.filter((l) => /truck/i.test(l.name)).map((l) => l.name)).toEqual(["16' Truck Local"]);
     expect(after.totals.subtotalCents).toBe(4 * 19500 + 19500);
+    // The move day follows the priced crew and hours (the calendar and the booking read the days).
+    await applyBuilder(ctx, job.id, { crewSize: '3', hoursMode: 'total', totalHours: '3', truckSize: '16', truckCount: '1', truckDays: '1', miles: '12', valuation: false, replace: true, materials: {} });
+    const days = await withScope(ctx, P.jobsRead, (s) => s.db.select().from(hhmcJobDays).where(and(s.where(hhmcJobDays), eq(hhmcJobDays.jobId, job.id))));
+    expect(days.map((d) => [d.crewSize, d.trucks, d.durationMinutes])).toEqual([[3, 1, 180]]);
   });
 });

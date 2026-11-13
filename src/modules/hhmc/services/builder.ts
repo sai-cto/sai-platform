@@ -22,9 +22,9 @@ import { isUuid } from '@/core/ids';
 import { archiveRecord, createRecord, updateRecord } from '@/core/records/records';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { and, asc, eq } from 'drizzle-orm';
-import { jobEntity, quoteLineEntity } from '../entities';
+import { jobDayEntity, jobEntity, quoteLineEntity } from '../entities';
 import { P } from '../permissions';
-import { ACCESS_FLAGS, hhmcCatalogItems, hhmcEstimates, type AccessFlag, type Stage } from '../schema';
+import { ACCESS_FLAGS, hhmcCatalogItems, hhmcEstimates, hhmcJobDays, type AccessFlag, type Stage } from '../schema';
 import { loadSettings, type HhmcSettings } from '../settings';
 import { optionalText, parse } from './input';
 import { routeStops, routeThrough, type Route } from './maps';
@@ -307,6 +307,16 @@ export async function applyBuilder(ctx: BusinessContext, jobId: string, raw: unk
       originNotes: f.originNotes,
       destinationNotes: f.destinationNotes,
     });
+    // The move days follow the priced crew and trucks (the calendar's capacity and the booking
+    // read the days, not the job); a one-day move also takes the priced hours.
+    const trucks = f.ownTruck ? 0 : (truckSizes?.length ?? f.truckCount);
+    const hundredths = f.hoursMode === 'total' ? f.totalHours : (f.loadHours ?? 0) + (f.driveHours ?? 0) + (f.unloadHours ?? 0);
+    const days = await s.db.select().from(hhmcJobDays).where(and(s.where(hhmcJobDays), eq(hhmcJobDays.jobId, job.id)));
+    for (const d of days) {
+      const durationMinutes = days.length === 1 && hundredths ? Math.round((hundredths * 60) / 100) : d.durationMinutes;
+      if (d.crewSize !== f.crewSize || d.trucks !== trucks || d.durationMinutes !== durationMinutes)
+        await updateRecord(s, jobDayEntity, d.id, { crewSize: f.crewSize, trucks, durationMinutes });
+    }
     return result;
   });
 }
