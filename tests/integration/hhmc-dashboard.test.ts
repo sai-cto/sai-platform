@@ -44,6 +44,8 @@ function headline(summary: Summary, list: DashboardList): { count: number | null
   switch (list) {
     case 'leads':
       return { count: summary.leads?.count ?? null };
+    case 'enquiries':
+      return { count: summary.leads?.enquiries ?? null };
     case 'converted':
       return { count: summary.leads?.converted ?? null };
     case 'sent':

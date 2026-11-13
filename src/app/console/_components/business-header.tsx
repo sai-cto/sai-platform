@@ -41,7 +41,7 @@ export function BusinessHeader({
   return (
     <div className="border-b border-zinc-200 bg-white">
       <div className="h-0.5" style={{ backgroundColor: business.accentColor }} aria-hidden="true" />
-      <div className="mx-auto max-w-6xl px-4 pt-4 lg:px-6">
+      <div className={cn('mx-auto max-w-6xl px-4 pt-4 lg:px-6', tabs.length <= 1 && 'pb-4')}>
         <div className="flex flex-wrap items-center gap-3">
           <Monogram code={business.code} color={business.accentColor} size="lg" />
           <div className="min-w-0 flex-1 basis-48">
@@ -85,9 +85,10 @@ export function BusinessHeader({
           ) : null}
         </div>
 
+        {/* One tab (the App, for business admins and staff) needs no tab bar. */}
         <nav
           aria-label={`${business.name} sections`}
-          className="-mb-px mt-3 flex gap-1 overflow-x-auto"
+          className={cn('-mb-px mt-3 flex gap-1 overflow-x-auto', tabs.length <= 1 && 'sr-only')}
         >
           {tabs.map((tab) => {
             const active = tab.key === activeKey;

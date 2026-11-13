@@ -100,7 +100,7 @@ export const hhmcModule = defineModule({
       permission: P.leadsRead,
       load: async (s) => {
         const l = await leadsThisMonth(s);
-        return { value: formatNumber(l.leads), hint: `${l.conversionPercent}% converted to jobs` };
+        return { value: formatNumber(l.leads), hint: `${l.conversionPercent}% of enquiries became work requests` };
       },
     },
     {
@@ -116,7 +116,7 @@ export const hhmcModule = defineModule({
       key: 'moves-week',
       label: 'Booked moves · next 7 days',
       permission: P.jobsRead,
-      load: async (s) => ({ value: formatNumber(await upcomingMoves(s)) }),
+      load: async (s) => ({ value: formatNumber(await upcomingMoves(s, new Date(), 7)) }),
     },
     {
       key: 'invoices-open',
@@ -128,6 +128,9 @@ export const hhmcModule = defineModule({
       },
     },
   ],
+
+  // The dashboard's "Booked moves" definition, from today on (one per move, not per truck).
+  upcoming: { label: 'Booked moves · from today', permission: P.jobsRead, load: (s) => upcomingMoves(s) },
 
   workItem: { label: 'Jobs', entityKey: jobEntity.key },
 

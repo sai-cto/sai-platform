@@ -8,6 +8,8 @@ export type ActivitySearch = {
   from?: string;
   to?: string;
   business?: string;
+  /** people (default) · system (the importer, seed, scheduled jobs) · all */
+  who?: string;
   page?: string;
 };
 
@@ -42,6 +44,7 @@ export function parseActivitySearch(
     from: first(raw.from),
     to: first(raw.to),
     business: first(raw.business),
+    who: first(raw.who),
   };
   // "From" and "To" are days in the business's time zone (Ithaca time by default).
   const day = (value: string | undefined, endOfDay: boolean) => {
@@ -71,6 +74,8 @@ export function parseActivitySearch(
       to: day(search.to, true),
       limit: 50,
       offset: (page - 1) * 50,
+      // People's changes by default; the importer and other system jobs on request.
+      actors: (search.who === 'system' || search.who === 'all' ? search.who : 'people') as 'people' | 'system' | 'all',
     },
   };
 }
@@ -124,6 +129,13 @@ export function ActivityFilters({
           </select>
         </Field>
       ) : null}
+      <Field label="Who" htmlFor="who">
+        <select id="who" name="who" defaultValue={search.who ?? ''} className={inputClass}>
+          <option value="">People</option>
+          <option value="system">Import and system</option>
+          <option value="all">Everyone</option>
+        </select>
+      </Field>
       <Field label="From" htmlFor="from">
         <input
           id="from"

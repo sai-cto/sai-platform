@@ -1,12 +1,25 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { isPortalAvailable } from '@/core/modules/config';
+import { matchRoute } from '@/core/modules/portal';
 import { getModule } from '@/core/modules/registry';
 import { Card } from '@/ui/layout';
 import { PortalHost } from '@/server/portal-host';
 import { parseMode, requireBusinessContext } from '@/server/session';
 
-export const metadata: Metadata = { title: 'App' };
+/** The browser tab says which page this is: "<page title> · <business name>". */
+export async function generateMetadata({ params }: { params: Promise<{ business: string; mode: string; path?: string[] }> }): Promise<Metadata> {
+  const { business, mode, path } = await params;
+  try {
+    const ctx = await requireBusinessContext(business, parseMode(mode));
+    const mod = ctx.business.moduleKey ? getModule(ctx.business.moduleKey) : undefined;
+    const route = mod ? matchRoute(mod.portals.staff, path ?? [])?.route : undefined;
+    const where = `${route?.title ?? 'App'} · ${ctx.business.name}`;
+    return { title: ctx.environment === 'sandbox' ? `${where} (test mode)` : where };
+  } catch {
+    return { title: 'App' };
+  }
+}
 
 /** The App tab: the business's staff portal, embedded in the console. */
 export default async function StaffPortalPage({

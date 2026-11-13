@@ -35,6 +35,7 @@
     "hhmc:import:real": "tsx scripts/hhmc-import/index.ts --real",
     "hhmc:import:pilot": "tsx scripts/hhmc-import/index.ts --real --target pilot",
     "hhmc:perf": "tsx scripts/hhmc-perf.ts",
+    "hhmc:numbers": "tsx scripts/hhmc-numbers.ts",
     "hhmc:sync-to-pilot": "tsx scripts/hhmc-sync/index.ts"
   },
   "dependencies": {

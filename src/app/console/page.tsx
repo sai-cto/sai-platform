@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { listPlatformActivity } from '@/core/audit/read';
 import { ROLE_LABELS } from '@/core/rbac/roles';
 import { listAccessibleBusinesses } from '@/core/tenancy/context';
@@ -14,6 +15,8 @@ export const metadata: Metadata = { title: 'Home' };
 export default async function ConsoleHome() {
   const ctx = await requirePlatformContext();
   const businesses = await listAccessibleBusinesses(ctx.actor.id as string);
+  // A manager or staff member of one business goes straight to its app: nothing to choose here.
+  if (!ctx.role && businesses.length === 1) redirect(`/console/${businesses[0].slug}`);
   const recent = ctx.permissions.has('platform.activity.read')
     ? (await listPlatformActivity(ctx, { limit: 8 })).rows
     : null;

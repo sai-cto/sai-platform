@@ -167,6 +167,16 @@ export type ModuleManifest = {
   /** Customer links this module hands out. Served at /l/<token>/… from portals.customer. */
   linkPurposes?: LinkPurposeDef[];
   widgets: WidgetDef[];
+  /**
+   * Replaces the Overview's "Upcoming confirmed appointments" (a count of appointments, one per
+   * resource) with the module's own count of what is coming up, so the Overview never disagrees
+   * with the module's dashboard. Only the label and the count change.
+   */
+  upcoming?: {
+    label: string;
+    permission: string;
+    load: (s: Scope) => Promise<number>;
+  };
   /** The module's main unit of work, counted on the executive dashboard (for example "Orders"). */
   workItem?: {
     label: string;

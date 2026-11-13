@@ -52,9 +52,36 @@ export async function PortalHost({
   const matches = (item: { path: string }) =>
     item.path !== '' && (current === item.path || current.startsWith(`${item.path}/`));
   const activePath = nav.find(matches)?.path ?? '';
+  const section = nav.find((item) => item.path === activePath);
+  // Where you are, always: Business › Section › this page (the page only when it is deeper).
+  const crumbs: { label: string; href?: string }[] = [
+    { label: ctx.business.name, href: basePath },
+    ...(section && section.path !== '' ? [{ label: section.label, href: `${basePath}/${section.path}` }] : []),
+    ...(current !== activePath ? [{ label: match.route.title }] : []),
+  ];
 
   return (
     <div>
+      {crumbs.length > 1 ? (
+        <nav aria-label="Breadcrumb" data-testid="breadcrumbs" className="mb-2 text-xs text-zinc-500">
+          <ol className="flex flex-wrap items-center gap-1">
+            {crumbs.map((c, i) => (
+              <li key={`${c.label}-${i}`} className="flex items-center gap-1">
+                {i > 0 ? <span aria-hidden="true">›</span> : null}
+                {c.href && i < crumbs.length - 1 ? (
+                  <Link href={c.href} className="hover:text-zinc-900 hover:underline">
+                    {c.label}
+                  </Link>
+                ) : (
+                  <span aria-current="page" className="text-zinc-700">
+                    {c.label}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ol>
+        </nav>
+      ) : null}
       {nav.length > 1 ? (
         <nav
           aria-label="App sections"

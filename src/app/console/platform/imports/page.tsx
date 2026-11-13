@@ -20,14 +20,21 @@ export default async function ImportsPage() {
         title="Data imports"
         description="Bring records in from a spreadsheet. A file is always imported into a business's sandbox first; only after checking it there can the same file be imported into live."
         actions={
-          canRun ? (
-            <Link
-              href="/console/platform/imports/new"
-              className={buttonClass({ variant: 'primary' })}
-            >
-              New import
-            </Link>
-          ) : null
+          <>
+            {ctx.permissions.has('platform.activity.read') ? (
+              <Link href="/console/platform/activity?who=system" className={buttonClass({ variant: 'secondary' })}>
+                Import log
+              </Link>
+            ) : null}
+            {canRun ? (
+              <Link
+                href="/console/platform/imports/new"
+                className={buttonClass({ variant: 'primary' })}
+              >
+                New import
+              </Link>
+            ) : null}
+          </>
         }
       />
       <Card flush>

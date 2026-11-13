@@ -53,7 +53,11 @@ export default async function OverviewPage({
       customerCount: can('customers.read')
         ? await s.db.$count(customers, s.where(customers))
         : null,
-      upcoming: can('scheduling.read')
+      upcoming: mod?.upcoming
+        ? can(mod.upcoming.permission)
+          ? await mod.upcoming.load(s)
+          : null
+        : can('scheduling.read')
         ? await s.db.$count(
             appointments,
             and(
@@ -106,10 +110,10 @@ export default async function OverviewPage({
           <Stat label="Customers" value={formatNumber(data.customerCount)} />
         ) : null}
         {data.upcoming !== null ? (
-          <Stat label="Upcoming confirmed appointments" value={formatNumber(data.upcoming)} />
+          <Stat label={mod?.upcoming?.label ?? 'Upcoming confirmed appointments'} value={formatNumber(data.upcoming)} />
         ) : null}
         {data.activity !== null ? (
-          <Stat label="Changes · last 7 days" value={formatNumber(data.activity)} />
+          <Stat label="Changes by people · last 7 days" value={formatNumber(data.activity)} />
         ) : null}
         {data.widgets.map((w) => (
           <Stat key={w.key} label={w.label} value={w.value} hint={w.hint} />

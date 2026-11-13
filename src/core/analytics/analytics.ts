@@ -6,6 +6,7 @@
  */
 import { and, count, eq, gte, isNull, lt, sql, sum, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+import { peopleEntry } from '../audit/read';
 import { staffActivityFilter } from '../audit/visibility';
 import { activityLog, payments, refunds } from '../db/schema';
 import type { PlatformScope, Scope } from '../db/scope';
@@ -126,6 +127,8 @@ export async function activityCount(s: Scope, range: DateRange): Promise<number>
       inRange(activityLog.occurredAt, range),
       // Staff are counted only what they could open in the log itself.
       staffActivityFilter(s.ctx),
+      // Changes people made: the importer and other system jobs are not "changes".
+      peopleEntry(),
     ),
   );
 }
@@ -216,7 +219,7 @@ export async function activityCountByBusiness(
   const rows = await s.db
     .select({ businessId: activityLog.businessId, n: count() })
     .from(activityLog)
-    .where(and(eq(activityLog.environment, 'live'), inRange(activityLog.occurredAt, range)))
+    .where(and(eq(activityLog.environment, 'live'), inRange(activityLog.occurredAt, range), peopleEntry()))
     .groupBy(activityLog.businessId);
   return new Map(rows.filter((r) => r.businessId).map((r) => [String(r.businessId), num(r.n)]));
 }

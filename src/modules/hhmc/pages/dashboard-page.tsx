@@ -190,8 +190,8 @@ export async function DashboardPage({ ctx, searchParams, basePath }: PortalPageP
 
       {summary.leads ? (
         <Section title="Leads" className="grid-cols-2 lg:grid-cols-3">
-          <NumberCard label="Leads created" value={formatNumber(summary.leads.count)} hint={`${summary.leads.conversionPercent}% converted`} href={listHref('leads')} active={isOpen('leads')} />
-          <NumberCard label="Converted to jobs" value={formatNumber(summary.leads.converted)} hint="Of the leads created in this range" href={listHref('converted')} active={isOpen('converted')} />
+          <NumberCard label="Leads created" value={formatNumber(summary.leads.count)} hint="Leads entered in this range" href={listHref('leads')} active={isOpen('leads')} />
+          <NumberCard label="Became work requests" value={formatNumber(summary.leads.converted)} hint={`${summary.leads.conversionPercent}% of ${formatNumber(summary.leads.enquiries)} enquiries (leads + work requests opened directly)`} href={listHref('converted')} active={isOpen('converted')} />
           <Stat label="Lead to first estimate" value={hoursText(summary.medianHours)} hint="Median, leads created in this range" />
         </Section>
       ) : null}

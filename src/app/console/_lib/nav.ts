@@ -2,6 +2,7 @@
  * What appears in the console's navigation for a given person. Built on the server from
  * their permissions, so the sidebar never shows a link the server would refuse.
  */
+import { PLATFORM_ROLES } from '@/core/rbac/roles';
 import type { BusinessContext, PlatformContext } from '@/core/tenancy/context';
 
 export type NavIcon =
@@ -53,8 +54,9 @@ const PLATFORM_LINKS: NavLink[] = [
   },
 ];
 
-export function topLinks(ctx: PlatformContext): NavLink[] {
-  const links: NavLink[] = [{ label: 'Home', href: '/console', icon: 'home' }];
+export function topLinks(ctx: PlatformContext, businessCount = 2): NavLink[] {
+  // Someone who works in one business only has nothing to choose on Home: no Home link.
+  const links: NavLink[] = ctx.role || businessCount !== 1 ? [{ label: 'Home', href: '/console', icon: 'home' }] : [];
   if (ctx.permissions.has('executive.dashboard.read')) {
     links.push({ label: 'Executive view', href: '/console/executive', icon: 'chart' });
   }
@@ -66,7 +68,7 @@ export function platformLinks(ctx: PlatformContext): NavLink[] {
 }
 
 export type BusinessTab = {
-  key: 'overview' | 'app' | 'people' | 'data' | 'activity' | 'settings' | 'test-mode';
+  key: 'overview' | 'app' | 'people' | 'data' | 'activity' | 'settings';
   label: string;
   /** Tabs that show live or sandbox data live under /[mode]/. */
   usesMode: boolean;
@@ -100,23 +102,36 @@ const BUSINESS_TABS: BusinessTab[] = [
     shortcut: 'l',
   },
   {
+    // The console's own settings for a business (module switches, portals, module settings):
+    // the tech team's. A business's day-to-day settings live in its app (App › Settings).
     key: 'settings',
-    label: 'Settings',
+    label: 'Module settings',
     usesMode: false,
     permission: 'business.settings.read',
     shortcut: 's',
   },
-  {
-    key: 'test-mode',
-    label: 'Test mode',
-    usesMode: false,
-    permission: 'business.sandbox.use',
-    shortcut: 't',
-  },
 ];
 
+/** Tech team, super admin, executive: the console's platform tabs. Everyone else works in the app. */
+export function isPlatformPerson(ctx: Pick<BusinessContext, 'role'>): boolean {
+  return (PLATFORM_ROLES as readonly string[]).includes(ctx.role);
+}
+
+/**
+ * The tabs of a business. Business admins and staff see only the App (no tab bar at all): the
+ * Overview, Data, Activity log, People and access and Module settings tabs are the tech team's.
+ * The Live / Test mode switch is the header's (the old "Test mode" tab duplicated it; its page,
+ * with the sandbox reset, stays at /console/<business>/test-mode).
+ */
 export function businessTabs(ctx: BusinessContext): BusinessTab[] {
-  return BUSINESS_TABS.filter((tab) => ctx.permissions.has(tab.permission));
+  const allowed = BUSINESS_TABS.filter((tab) => ctx.permissions.has(tab.permission));
+  return isPlatformPerson(ctx) ? allowed : allowed.filter((tab) => tab.key === 'app');
+}
+
+/** Where /console/<business> lands: the App when there is one, else the first tab. */
+export function homeTab(ctx: BusinessContext): BusinessTab | undefined {
+  const tabs = businessTabs(ctx);
+  return tabs.find((t) => t.key === 'app') ?? tabs[0];
 }
 
 export function tabHref(slug: string, mode: 'live' | 'sandbox', tab: BusinessTab): string {

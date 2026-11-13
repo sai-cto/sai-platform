@@ -1,5 +1,5 @@
 /** Reading the activity log, for one business or for the whole platform. */
-import { and, desc, eq, gte, ilike, lt, or, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, isNotNull, isNull, lt, ne, or, type SQL } from 'drizzle-orm';
 import { activityLog } from '../db/schema';
 import { withPlatformScope, withScope } from '../db/scope';
 import type { BusinessContext, PlatformContext } from '../tenancy/context';
@@ -16,14 +16,35 @@ export type ActivityFilters = {
   to?: Date;
   limit?: number;
   offset?: number;
+  /**
+   * Whose entries: "people" (default: people, and customers acting through a link), "system"
+   * (the importer, the seed, scheduled jobs: no person behind them; the admin-only import log),
+   * or "all".
+   */
+  actors?: 'people' | 'system' | 'all';
 };
+
+/**
+ * An entry made by the system inside a business: no person (actor_user_id null) and not a
+ * customer's link. Imports write thousands of these; they are not "changes" anyone made.
+ */
+export function systemEntry(): SQL {
+  return and(isNull(activityLog.actorUserId), isNotNull(activityLog.businessId), ne(activityLog.actorRole, 'customer_link'))!;
+}
+
+/** Entries made by people (and customers through a link), and platform events such as sign-ins. */
+export function peopleEntry(): SQL {
+  return or(isNotNull(activityLog.actorUserId), isNull(activityLog.businessId), eq(activityLog.actorRole, 'customer_link'))!;
+}
 
 export type ActivityRow = typeof activityLog.$inferSelect;
 
 function conditions(filters: ActivityFilters): (SQL | undefined)[] {
   const term = filters.search?.trim();
   const pattern = term ? `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
+  const actors = filters.actors ?? 'people';
   return [
+    actors === 'people' ? peopleEntry() : actors === 'system' ? systemEntry() : undefined,
     filters.action ? eq(activityLog.action, filters.action) : undefined,
     filters.entityType ? eq(activityLog.entityType, filters.entityType) : undefined,
     filters.entityId ? eq(activityLog.entityId, filters.entityId) : undefined,

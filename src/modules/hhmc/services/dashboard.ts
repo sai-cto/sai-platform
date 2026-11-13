@@ -10,7 +10,7 @@
  * Each function takes a Scope and checks its own permission (ARCHITECTURE: "read helpers that
  * take a scope check their own permission too").
  */
-import { and, Column, desc, is, eq, gte, inArray, isNotNull, lt, lte, min, ne, sql, type SQL, type SQLWrapper } from 'drizzle-orm';
+import { and, Column, desc, eq, gte, inArray, is, isNotNull, isNull, lt, lte, min, ne, notLike, sql, type SQL, type SQLWrapper } from 'drizzle-orm';
 import { customers, payments } from '@/core/db/schema/tenant';
 import type { Scope } from '@/core/db/scope';
 import { authorize, can } from '@/core/rbac/permissions';
@@ -134,6 +134,7 @@ function dayIn(column: SQLWrapper, b: Bounds): SQL | undefined {
 
 export const DASHBOARD_LISTS = [
   'leads',
+  'enquiries',
   'converted',
   'sent',
   'viewed',
@@ -174,7 +175,7 @@ export type DashboardRow = {
   marks?: { viewed?: boolean; signed?: boolean; pastDue?: boolean };
 };
 
-type Base = 'leads' | 'estimates' | 'booked' | 'moves' | 'invoiced' | 'collected' | 'open';
+type Base = 'leads' | 'enquiries' | 'estimates' | 'booked' | 'moves' | 'invoiced' | 'collected' | 'open';
 
 export type ListDef = {
   label: string;
@@ -190,7 +191,10 @@ export type ListDef = {
 
 export const LIST_DEFS: Record<DashboardList, ListDef> = {
   leads: { label: 'Leads created', dateLabel: 'Created', measure: 'count', base: 'leads' },
-  converted: { label: 'Leads converted to jobs', dateLabel: 'Created', measure: 'count', base: 'leads', keep: (r) => r.status.kind === 'lead' && r.status.value === 'converted' },
+  // Conversion counts every enquiry: leads, and work requests opened without a lead (every work
+  // request imported from Movegistics: there a converted lead stops being a lead).
+  enquiries: { label: 'Enquiries (leads and work requests opened directly)', dateLabel: 'Created', measure: 'count', base: 'enquiries' },
+  converted: { label: 'Became work requests', dateLabel: 'Created', measure: 'count', base: 'enquiries', keep: (r) => (r.status.kind === 'lead' ? r.status.value === 'converted' : true) },
   sent: { label: 'Estimates sent', dateLabel: 'Sent', measure: 'count', base: 'estimates' },
   viewed: { label: 'Estimates viewed', dateLabel: 'Sent', measure: 'count', base: 'estimates', keep: (r) => !!r.marks?.viewed },
   signed: { label: 'Estimates signed', dateLabel: 'Sent', measure: 'count', base: 'estimates', keep: (r) => !!r.marks?.signed },
@@ -205,7 +209,7 @@ export const LIST_DEFS: Record<DashboardList, ListDef> = {
 /** The permissions a list needs besides hhmc.jobs.read (checked by the scope). */
 function listPermissions(list: DashboardList): string[] {
   const base = LIST_DEFS[list].base;
-  if (base === 'leads') return [P.leadsRead];
+  if (base === 'leads' || base === 'enquiries') return [P.leadsRead];
   if (base === 'invoiced' || base === 'open') return [P.invoicesRead];
   if (base === 'collected') return [P.invoicesRead, CORE.paymentsRead];
   return [];
@@ -252,6 +256,7 @@ const JOB_FIELDS = {
   source: hhmcJobs.source,
   stage: hhmcJobs.stage,
   bookedAt: hhmcJobs.bookedAt,
+  createdAt: hhmcJobs.createdAt,
 };
 const CUSTOMER_FIELDS = {
   id: customers.id,
@@ -369,6 +374,34 @@ async function bookedRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
     source: job.source,
     // Base total (no card fee): revenue is never overstated by a fee that may not be charged.
     amountCents: e ? baseTotalCents(e) : (fallback.get(job.id)?.valueCents ?? null),
+    paid: null,
+    status: { kind: 'stage', value: job.stage },
+  }));
+}
+
+/**
+ * Work requests opened in the range WITHOUT a lead (typed in directly, or imported from
+ * Movegistics, where a converted lead stops being a lead). Placeholder work requests the import
+ * made for an invoice or an estimate that named none are not enquiries.
+ */
+async function directRequestRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
+  const tz = s.ctx.business.timeZone;
+  const rows = await s.db
+    .select({ job: JOB_FIELDS, customer: CUSTOMER_FIELDS })
+    .from(hhmcJobs)
+    .innerJoin(customers, eq(customers.id, hhmcJobs.customerId))
+    .where(and(s.where(hhmcJobs), s.where(customers, 'include'), isNull(hhmcJobs.leadId), notLike(hhmcJobs.jobNumber, '%-job:%'), atIn(hhmcJobs.createdAt, b)))
+    .orderBy(desc(hhmcJobs.createdAt));
+  return rows.map(({ job, customer }) => ({
+    id: job.id,
+    reference: job.jobNumber,
+    href: { kind: 'job', id: job.id },
+    jobId: job.id,
+    customerName: personName(customer),
+    moveDate: job.moveDate,
+    date: localDate(job.createdAt, tz),
+    source: job.source,
+    amountCents: null,
     paid: null,
     status: { kind: 'stage', value: job.stage },
   }));
@@ -507,6 +540,8 @@ async function baseRows(s: Scope, base: Base, b: Bounds, today: string): Promise
   switch (base) {
     case 'leads':
       return leadRows(s, b);
+    case 'enquiries':
+      return [...(await leadRows(s, b)), ...(await directRequestRows(s, b))].sort((x, y) => y.date.localeCompare(x.date));
     case 'estimates':
       return estimateRows(s, b);
     case 'booked':
@@ -638,7 +673,8 @@ export async function dashboardSummary(s: Scope, range: DashboardRange, now: Dat
   const keep = (list: DashboardList, rows: DashboardRow[]) => (LIST_DEFS[list].keep ? rows.filter(LIST_DEFS[list].keep!) : rows);
 
   const leadCount = leads?.length ?? 0;
-  const converted = leads ? keep('converted', leads).length : 0;
+  const enquiries = leads ? [...leads, ...(await directRequestRows(s, b))] : null;
+  const converted = enquiries ? keep('converted', enquiries).length : 0;
 
   const sources = new Map<string, SourceRow>(LEAD_SOURCES.map((src) => [src, { source: src, leads: seesLeads ? 0 : null, booked: 0, bookedCents: seesMoney ? 0 : null }]));
   const sourceRow = (src: string) => {
@@ -681,7 +717,7 @@ export async function dashboardSummary(s: Scope, range: DashboardRange, now: Dat
 
   return {
     today,
-    leads: leads ? { count: leadCount, converted, conversionPercent: leadCount ? Math.round((converted / leadCount) * 100) : 0 } : null,
+    leads: leads && enquiries ? { count: leadCount, enquiries: enquiries.length, converted, conversionPercent: conversionPercent(converted, enquiries.length) } : null,
     estimates: { sent: estimates.length, viewed: keep('viewed', estimates).length, signed: keep('signed', estimates).length },
     booked: { count: booked.length, amountCents: seesMoney ? listTotals(booked).amountCents : null },
     moves: moves.length,
@@ -703,11 +739,18 @@ function thisMonth(s: Scope, now: Date) {
   return boundsOf(presetRange('this_month', now, s.ctx.business.timeZone), s.ctx.business.timeZone);
 }
 
+/** Whole percent of enquiries that became work requests (0 with no enquiries). */
+export function conversionPercent(converted: number, enquiries: number): number {
+  return enquiries ? Math.round((converted / enquiries) * 100) : 0;
+}
+
 export async function leadsThisMonth(s: Scope, now: Date = new Date()) {
   authorize(s.ctx, P.leadsRead);
-  const rows = await leadRows(s, thisMonth(s, now));
-  const converted = rows.filter(LIST_DEFS.converted.keep!).length;
-  return { leads: rows.length, converted, conversionPercent: rows.length ? Math.round((converted / rows.length) * 100) : 0 };
+  const b = thisMonth(s, now);
+  const leads = await leadRows(s, b);
+  const enquiries = [...leads, ...(await directRequestRows(s, b))];
+  const converted = enquiries.filter(LIST_DEFS.converted.keep!).length;
+  return { leads: leads.length, enquiries: enquiries.length, converted, conversionPercent: conversionPercent(converted, enquiries.length) };
 }
 
 export async function estimateFunnel(s: Scope, now: Date = new Date()) {
@@ -760,12 +803,13 @@ export async function medianLeadToEstimateHours(s: Scope, now: Date = new Date()
   return hours.length % 2 ? hours[mid] : (hours[mid - 1] + hours[mid]) / 2;
 }
 
-/** Jobs moving in the next 7 days (for the overview). */
-export async function upcomingMoves(s: Scope, now: Date = new Date()) {
+/**
+ * Booked moves from today for `days` days (all of them ahead: no `days`). The SAME definition as
+ * the dashboard's "Booked moves" (moveRows), so the overview, the widget and the dashboard agree.
+ */
+export async function upcomingMoves(s: Scope, now: Date = new Date(), days?: number) {
   authorize(s.ctx, P.jobsRead);
   const today = localDate(now, s.ctx.business.timeZone);
-  return s.db.$count(
-    hhmcJobs,
-    and(s.where(hhmcJobs), eq(hhmcJobs.stage, 'booked'), gte(hhmcJobs.moveDate, today), lt(hhmcJobs.moveDate, addDays(today, 7))),
-  );
+  const range: DashboardRange = { from: today, to: days ? addDays(today, days - 1) : null };
+  return (await moveRows(s, boundsOf(range, s.ctx.business.timeZone))).length;
 }

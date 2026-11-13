@@ -23,7 +23,7 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
   const shell = (
     <Shell
       user={{ name: ctx.actor.name, email: ctx.actor.email, roleLabel }}
-      top={topLinks(ctx)}
+      top={topLinks(ctx, businesses.length)}
       platform={platformLinks(ctx)}
       businesses={businesses.map((b) => ({
         slug: b.slug,
