@@ -13,7 +13,12 @@ import type { PlatformContext } from '../tenancy/context';
 /** Message and stack with anything that could be data (query parameters) removed. */
 export function scrubError(error: unknown): { message: string; stack: string | null; digest: string | null } {
   const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';
-  const scrub = (text: string) => text.replace(/params:[\s\S]*/i, 'params: [hidden]').replace(/\u0000/g, '');
+  // Query parameters, and quoted values (Postgres quotes the bad input: invalid input syntax … "<value>").
+  const scrub = (text: string) =>
+    text
+      .replace(/params:[\s\S]*/i, 'params: [hidden]')
+      .replace(/"[^"\n]{0,200}"/g, '"[hidden]"')
+      .replace(/\u0000/g, '');
   const digest = typeof error === 'object' && error !== null && 'digest' in error ? String((error as { digest: unknown }).digest).slice(0, 100) : null;
   const stack = error instanceof Error && error.stack ? scrub(error.stack).slice(0, 4000) : null;
   return { message: scrub(raw).slice(0, 1000) || 'Unknown error', stack, digest };

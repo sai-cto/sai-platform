@@ -22,7 +22,9 @@ export async function sendFeedback(ctx: BusinessContext, input: { message: strin
   let pageUrl = '';
   try {
     const url = new URL(input.pageUrl ?? '', 'http://app.local');
-    pageUrl = url.origin === 'http://app.local' || url.pathname.startsWith('/console') ? `${url.pathname}${url.search}`.slice(0, 500) : '';
+    // Only the path of a console page is kept (never a host). A path starting "//" would link to another site.
+    const inApp = /^\/console(\/|$)/.test(url.pathname) && !url.pathname.startsWith('//');
+    pageUrl = inApp ? `${url.pathname}${url.search}`.slice(0, 500) : '';
   } catch {
     pageUrl = '';
   }

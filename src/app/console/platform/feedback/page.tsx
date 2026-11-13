@@ -60,7 +60,7 @@ export default async function FeedbackPage({ searchParams }: { searchParams: Pro
                     <Badge>{f.status}</Badge>
                   </div>
                   <p className="mt-1 text-sm whitespace-pre-wrap text-zinc-900">{f.message}</p>
-                  {f.pageUrl ? (
+                  {f.pageUrl.startsWith('/console/') && !f.pageUrl.startsWith('//') ? (
                     <Link href={f.pageUrl} className="mt-1 inline-block text-xs break-all text-zinc-600 underline hover:text-zinc-900">
                       {f.pageUrl}
                     </Link>

@@ -32,6 +32,7 @@ const BUSINESS_PATHS = [
 const PLATFORM_PATHS = [
   '/console/executive',
   '/console/platform/users',
+  '/console/platform/feedback',
   '/console/platform/modules',
   '/console/platform/flags',
   '/console/platform/activity',
