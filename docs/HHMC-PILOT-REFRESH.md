@@ -9,8 +9,9 @@ updated, never duplicated, and anything a person changed in SAI is kept.
 
 1. **`.env.pilot`** in the repository folder (git-ignored), holding the pilot's
    `DATABASE_OWNER_URL` from Neon › Connect (owner role, `sslmode=require`). Never commit it.
-2. **`pg_dump` at least as new as Neon's PostgreSQL** (Mac: `brew install postgresql@17`, then
-   follow brew's note to put it on your PATH). The pilot import uses it to back Neon up first.
+2. **A `pg_dump` at least as new as Neon's PostgreSQL.** Nothing to install if the local database
+   runs in Docker (`npm run db:up`): its container has `pg_dump` 17 and the pilot import uses it to
+   back Neon up first. Without Docker: `brew install postgresql@17` and put it on your PATH.
 3. **The site runs the latest `main`.** Deploying runs the migrations on Neon; the pilot import
    refuses while Neon's migrations differ from the code's.
 
@@ -45,7 +46,14 @@ updated, never duplicated, and anything a person changed in SAI is kept.
    Then open each site's HHMC dashboard with "All time": the numbers match.
 
 Numbers differ only if someone changed or added HHMC records on one of the two by hand (the import
-keeps their changes): that record is listed as "kept" in the run's output.
+keeps their changes): that record is listed as "kept" in the run's output. Test records made in
+test mode never count: the dashboard and the reconciliation read live mode only.
+
+**Open balance** counts issued invoices only (Sent / Partially paid), after payments recorded
+against each invoice and any deposit Movegistics left "Unapplied" on its work request (DECISIONS
+PAR-9, PAR-11, PAR-12). Movegistics' own list shows more, because it ignores both; the
+reconciliation prints that figure too. Invoices still open more than a year past due are listed by
+id in the report for a manager to settle in Movegistics or write off.
 
 ## Restoring the pilot
 
@@ -75,6 +83,6 @@ npm run db:restore -- backups/<file>.dump --yes
 | `.env.pilot not found` / `DATABASE_OWNER_URL is not in .env.pilot` | Step "Once per laptop" 1 |
 | `not marked as the pilot` | The URL is not the pilot's database |
 | `migrations (…) are not this code's` | Deploy the latest `main`, wait for Vercel, re-run |
-| `no pg_dump … or newer` | Install it (step 2), or make a Neon restore branch and add `--no-backup` |
+| `no pg_dump … or newer on this machine or in the database container` | `npm run db:up`, or install it (step 2), or make a Neon restore branch and add `--no-backup` |
 | `the <list> export is missing` | Seven CSVs in the dated folder, one per list |
 | `Movegistics values this importer does not know` | A new status in Movegistics: add it to the maps in `scripts/hhmc-import/movegistics.ts` on purpose |

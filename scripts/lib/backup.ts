@@ -125,28 +125,40 @@ export async function holdsImportedData(ownerUrl: string): Promise<boolean> {
 
 /**
  * A full backup of the HOSTED pilot database (Neon), before the pilot import writes to it. Reads
- * only. Needs this machine's pg_dump at least the server's version (on a Mac: `brew install
- * postgresql@17`): there is no container for a hosted database. The password goes through the
+ * only. Uses this machine's pg_dump when it is at least the server's version, else the local database
+ * container's (`npm run db:up`); failing both, install one (Mac: `brew install postgresql@17`).
+ * The password goes through the
  * environment, never the command line. Written to backups/pilot-<date>.dump (git-ignored).
  */
 export async function backupPilotDatabase(ownerUrl: string): Promise<string> {
   const url = new URL(ownerUrl);
   if (LOCAL.includes(url.hostname.toLowerCase())) throw new Error('Refusing: that is a local database; use npm run db:backup.');
   const major = await serverMajor(ownerUrl);
-  const have = localMajor('pg_dump');
-  if ((have ?? 0) < major)
-    throw new Error(
-      `Refusing: no pg_dump ${major} or newer on this machine (found ${have ?? 'none'}). Install it (Mac: brew install postgresql@${major}), or make a Neon restore branch by hand and re-run with --no-backup.`,
-    );
   const file = path.join(backupDir(), `pilot-${stamp()}.dump`);
   const env = {
     ...process.env,
     PGPASSWORD: decodeURIComponent(url.password),
     PGSSLMODE: url.searchParams.get('sslmode') ?? 'require',
   };
-  const args = ['-h', url.hostname, '-p', url.port || '5432', '-U', decodeURIComponent(url.username), '-d', url.pathname.replace(/^\//, ''), '--format=custom', '--no-owner', `--file=${file}`];
-  const r = spawnSync('pg_dump', args, { env, encoding: 'utf8', cwd: ROOT });
-  if (r.status !== 0) throw new Error(`pg_dump of the pilot failed: ${(r.stderr ?? '').trim().split('\n').slice(-2).join(' ')}`);
+  const conn = ['-h', url.hostname, '-p', url.port || '5432', '-U', decodeURIComponent(url.username), '-d', url.pathname.replace(/^\//, ''), '--format=custom', '--no-owner'];
+  let r: ReturnType<typeof spawnSync>;
+  if ((localMajor('pg_dump') ?? 0) >= major) {
+    r = spawnSync('pg_dump', [...conn, `--file=${file}`], { env, cwd: ROOT, maxBuffer: 2 ** 31 - 1 });
+  } else {
+    // No new-enough pg_dump on this machine: the local database container's (docker-compose.yml,
+    // service "db") reaches Neon over the network. The password and SSL mode go in by NAME (-e),
+    // so they are read from this process's environment and never appear on a command line.
+    const compose = ['compose', ...(fs.existsSync(path.join(ROOT, '.env.local')) ? ['--env-file', '.env.local'] : []), 'exec', '-T', '-e', 'PGPASSWORD', '-e', 'PGSSLMODE', 'db'];
+    const probe = spawnSync('docker', [...compose, 'pg_dump', '--version'], { cwd: ROOT, env, encoding: 'utf8' });
+    const inContainer = probe.status === 0 ? Number(/(\d+)/.exec(probe.stdout)?.[1] ?? 0) : 0;
+    if (inContainer < major)
+      throw new Error(
+        `Refusing: no pg_dump ${major} or newer on this machine or in the database container. Install it (Mac: brew install postgresql@${major}), or make a Neon restore branch by hand and re-run with --no-backup.`,
+      );
+    r = spawnSync('docker', [...compose, 'pg_dump', ...conn], { env, cwd: ROOT, maxBuffer: 2 ** 31 - 1 });
+    if (r.status === 0) fs.writeFileSync(file, r.stdout as Buffer, { mode: 0o600 });
+  }
+  if (r.status !== 0) throw new Error(`pg_dump of the pilot failed: ${String(r.stderr ?? '').trim().split('\n').slice(-2).join(' ')}`);
   fs.chmodSync(file, 0o600);
   if (fs.statSync(file).size === 0) throw new Error('The pilot backup came out empty.');
   return file;
