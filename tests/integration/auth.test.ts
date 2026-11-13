@@ -49,6 +49,17 @@ describe('sessions', () => {
     expect(await findSessionUserId(session.token)).toBeNull();
   });
 
+  it('a session nobody has used for 8 hours ends; using it keeps it alive', async () => {
+    const session = await loginWithDev(await userId(USERS.brssAdmin));
+    await asOwner((q) => q`update sessions set last_seen_at = now() - interval '7 hours 50 minutes' where expires_at = ${session.expiresAt}`);
+    expect(await findSessionUserId(session.token)).not.toBeNull();
+    // That use was recorded, so it is not idle any more.
+    const [seen] = await asOwner((q) => q`select last_seen_at from sessions where expires_at = ${session.expiresAt}`);
+    expect(Date.now() - new Date(seen.last_seen_at).getTime()).toBeLessThan(60_000);
+    await asOwner((q) => q`update sessions set last_seen_at = now() - interval '8 hours 1 minute' where expires_at = ${session.expiresAt}`);
+    expect(await findSessionUserId(session.token)).toBeNull();
+  });
+
   it('deactivating a user signs them out everywhere and blocks sign-in', async () => {
     const sa = await platformCtxFor(USERS.superAdmin);
     const id = await createUser(sa, { name: 'Soon Gone', email: `gone.${Date.now()}@sai.example` });
