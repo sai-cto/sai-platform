@@ -10,7 +10,7 @@ import { payments } from '../../src/core/db/schema/tenant';
 import { hhmcImportRefs, hhmcInvoices, hhmcJobs, hhmcLeads } from '../../src/modules/hhmc/schema';
 import { balanceOf } from '../../src/modules/hhmc/services/invoices';
 import Papa from 'papaparse';
-import { leadSource, type Files } from './movegistics';
+import { leadSource, type Files, type Followups } from './movegistics';
 
 // ---- Movegistics' side is read with its OWN minimal parsing (not the importer's helpers), so a
 // bug in the mapping's amount, date or CSV handling cannot show up identically on both sides.
@@ -32,11 +32,16 @@ function monthOf(v: string): string {
 }
 
 type Month = string; // YYYY-MM
-type Side = { jobs: Map<Month, number>; invoiced: Map<Month, number>; collected: Map<Month, number>; leads: Map<string, number>; leadsPerMonth: Map<Month, number>; openBalance: number; openBalanceAsExported?: number; invoiceCount: number; paymentCount: number; unverifiedMonths?: Set<Month>; paidNotCovered?: { count: number; cents: number }; paidWithBalance?: number };
+type Side = { jobs: Map<Month, number>; invoiced: Map<Month, number>; collected: Map<Month, number>; leads: Map<string, number>; leadsPerMonth: Map<Month, number>; openBalance: number; openBalanceAsExported?: number; openBalanceAsShown?: number; invoiceCount: number; paymentCount: number; unverifiedMonths?: Set<Month>; paidNotCovered?: { count: number; cents: number }; paidWithBalance?: number };
 const add = (m: Map<string, number>, k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v);
 
-export function movegisticsSide(files: Files): Side {
-  const side: Side = { jobs: new Map(), invoiced: new Map(), collected: new Map(), leads: new Map(), leadsPerMonth: new Map(), openBalance: 0, openBalanceAsExported: 0, invoiceCount: 0, paymentCount: 0, unverifiedMonths: new Set(), paidNotCovered: { count: 0, cents: 0 }, paidWithBalance: 0 };
+/** `refunds`: hand-entered partial refund amounts (refund-amounts.csv), the same input the import uses. */
+/**
+ * Movegistics' side, from its CSVs. `openDepositCredits` (from normalize) is the work-request deposit
+ * the import credits to an open invoice; open balance counts issued invoices only (never a draft).
+ */
+export function movegisticsSide(files: Files, refunds: Map<string, number> = new Map(), openDepositCredits: Map<string, number> = new Map()): Side {
+  const side: Side = { jobs: new Map(), invoiced: new Map(), collected: new Map(), leads: new Map(), leadsPerMonth: new Map(), openBalance: 0, openBalanceAsExported: 0, openBalanceAsShown: 0, invoiceCount: 0, paymentCount: 0, unverifiedMonths: new Set(), paidNotCovered: { count: 0, cents: 0 }, paidWithBalance: 0 };
   for (const r of rowsOf(files.workRequests)) add(side.jobs, monthOf(val(r, 'Work Request Created Date')), 1);
   const received = new Map<string, number>(); // invoice id → money received against it
   for (const r of rowsOf(files.payments)) {
@@ -44,9 +49,10 @@ export function movegisticsSide(files: Files): Side {
     if (!['SUCCESSFUL', 'RECORDED', 'REFUNDED', 'PARTIAL_REFUNDED'].includes(tx)) continue;
     const amount = money(val(r, 'Amount Recd'));
     const m = monthOf(val(r, 'Payment Date') || val(r, 'Created At'));
-    add(side.collected, m, tx === 'REFUNDED' ? 0 : amount);
-    if (tx === 'PARTIAL_REFUNDED') side.unverifiedMonths!.add(m);
-    if (val(r, 'Invoice No.') && tx !== 'REFUNDED') received.set(val(r, 'Invoice No.'), (received.get(val(r, 'Invoice No.')) ?? 0) + amount);
+    const refunded = tx === 'PARTIAL_REFUNDED' && refunds.has(val(r, 'Payment ID')) && refunds.get(val(r, 'Payment ID'))! <= amount ? refunds.get(val(r, 'Payment ID'))! : 0;
+    add(side.collected, m, tx === 'REFUNDED' ? 0 : amount - refunded);
+    if (tx === 'PARTIAL_REFUNDED' && !refunded) side.unverifiedMonths!.add(m);
+    if (val(r, 'Invoice No.') && tx !== 'REFUNDED') received.set(val(r, 'Invoice No.'), (received.get(val(r, 'Invoice No.')) ?? 0) + amount - refunded);
     side.paymentCount++;
   }
   for (const r of rowsOf(files.invoices)) {
@@ -56,7 +62,15 @@ export function movegisticsSide(files: Files): Side {
     const exported = Math.max(0, Math.min(money(val(r, 'Balance Due')), amount));
     side.openBalanceAsExported! += exported;
     // An invoice Movegistics marks PAID (or void) owes nothing, whatever its stale "Balance Due" says.
-    side.openBalance += status === 'PAID' || status.startsWith('VOID') || status.startsWith('CANCEL') ? 0 : exported;
+    const closed = status === 'PAID' || status.startsWith('VOID') || status.startsWith('CANCEL');
+    side.openBalanceAsShown! += closed ? 0 : exported;
+    // An open one owes at most what the payments recorded against it leave (Movegistics often
+    // leaves Balance Due untouched after the money came in).
+    const left = Math.max(0, amount - (received.get(val(r, 'Invoice ID')) ?? 0));
+    // A draft was never sent: nobody owes it yet. A deposit left unapplied on the work request pays it down.
+    const draft = status === 'DRAFT' || status === 'CREATED';
+    const owed = closed || draft || left <= 1 ? 0 : Math.min(exported, left) - (openDepositCredits.get(val(r, 'Invoice ID')) ?? 0);
+    side.openBalance += owed > 1 ? owed : 0;
     if (status === 'PAID' && exported > 0) side.paidWithBalance!++;
     if (status === 'PAID' && (received.get(val(r, 'Invoice ID')) ?? 0) < amount - 1) {
       side.paidNotCovered!.count++;
@@ -81,14 +95,14 @@ export async function ourSide(s: Scope, tz: string): Promise<Side> {
   const jobs = await s.db
     .select({ m: localMonth(hhmcJobs.createdAt), n: sql<number>`count(*)::int` })
     .from(hhmcJobs)
-    .where(and(s.where(hhmcJobs), inArray(hhmcJobs.id, imported('work_request')), sql`${hhmcJobs.jobNumber} not like 'invoice-job:%'`))
+    .where(and(s.where(hhmcJobs), inArray(hhmcJobs.id, imported('work_request')), sql`${hhmcJobs.jobNumber} not like 'invoice-job:%' and ${hhmcJobs.jobNumber} not like 'estimate-job:%'`))
     .groupBy(sql`1`);
   for (const r of jobs) add(side.jobs, r.m, r.n);
 
   const invoices = await s.db.select().from(hhmcInvoices).where(and(s.where(hhmcInvoices), inArray(hhmcInvoices.id, imported('invoice'))));
   for (const i of invoices) {
     add(side.invoiced, i.invoiceDate.slice(0, 7), i.totalCents);
-    if (i.status !== 'void') side.openBalance += Math.max(0, balanceOf(i));
+    if (i.status === 'sent' || i.status === 'partially_paid') side.openBalance += Math.max(0, balanceOf(i));
     side.invoiceCount++;
   }
 
@@ -116,7 +130,13 @@ export async function ourSide(s: Scope, tz: string): Promise<Side> {
 
 const usd = (c: number) => `${c < 0 ? '−' : ''}$${(Math.abs(c) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-export function reconciliationReport(mg: Side, ours: Side, issues: Record<string, number>, explanations: Record<string, string>): { markdown: string; differences: number } {
+export function reconciliationReport(
+  mg: Side,
+  ours: Side,
+  issues: Record<string, number>,
+  explanations: Record<string, string>,
+  followups: Followups = { partialRefundsWithoutAmount: [], paidInvoicesNotCovered: [], estimatesOnPlaceholder: [] },
+): { markdown: string; differences: number; summary: string } {
   let differences = 0;
   const months = [...new Set([...mg.jobs.keys(), ...mg.invoiced.keys(), ...mg.collected.keys(), ...ours.jobs.keys(), ...ours.invoiced.keys(), ...ours.collected.keys()])].sort();
   const cell = (a: number, b: number, money: boolean) => {
@@ -147,7 +167,7 @@ export function reconciliationReport(mg: Side, ours: Side, issues: Record<string
   const md = [
     '# HHMC: Movegistics → SAI platform reconciliation',
     '',
-    `Generated ${new Date().toISOString()} by \`scripts/hhmc-import\`. Movegistics' side is computed directly from its own CSV exports (\`~/Documents/SAI/hhmc-data/raw/\`); ours from the local database's HHMC live data. Totals only: no names.`,
+    `Generated ${new Date().toISOString()} by \`scripts/hhmc-import\`. Movegistics' side is computed directly from its own CSV exports; ours from the local database's HHMC live data. Totals and Movegistics ids only: no names.`,
     '',
     '@@HEADLINE@@',
     '',
@@ -159,11 +179,12 @@ export function reconciliationReport(mg: Side, ours: Side, issues: Record<string
     '',
     '## Open balance today',
     '',
-    `Movegistics leaves the "Balance Due" column above zero on ${mg.paidWithBalance ?? 0} invoices it marks **PAID**; its invoice list shows the same contradiction on screen. A PAID (or void) invoice is counted here as owing $0, and the column as exported is shown for transparency. Check against Movegistics' own payments export: **${mg.paidNotCovered?.count ?? 0} PAID invoices (${usd(mg.paidNotCovered?.cents ?? 0)}) are not fully covered by payments recorded against them** — paid some other way (e.g. a deposit not applied to the invoice), or a Movegistics data error: NEEDS JAI REVIEW.`,
+    `Movegistics leaves the "Balance Due" column above zero on ${mg.paidWithBalance ?? 0} invoices it marks **PAID**; its invoice list shows the same contradiction on screen. A PAID (or void) invoice is counted here as owing $0, and the column as exported is shown for transparency. Check against Movegistics' own payments export: **${mg.paidNotCovered?.count ?? 0} PAID invoices (${usd(mg.paidNotCovered?.cents ?? 0)}) are not fully covered by payments recorded against them**. The import credits each work request's deposit to its invoice; ${followups.paidInvoicesNotCovered.length} remain uncovered after that (listed by id at the end): paid some other way, or a Movegistics data error.`,
     '',
     `| | Movegistics | Ours | |`,
     `|---|---|---|---|`,
-    `| Open balance (all invoices; PAID = $0) | ${usd(mg.openBalance)} | ${usd(ours.openBalance)} | ${open} |`,
+    `| Open balance (sent / partially paid only; an open invoice owes at most what its own payments and its work request's unapplied deposit leave) | ${usd(mg.openBalance)} | ${usd(ours.openBalance)} | ${open} |`,
+    `| Open balance as Movegistics' own list shows it (unpaid statuses, Balance Due as exported) | ${usd(mg.openBalanceAsShown ?? mg.openBalance)} | | higher: it ignores payments recorded against those invoices |`,
     `| "Balance Due" column as Movegistics exports it | ${usd(mg.openBalanceAsExported ?? mg.openBalance)} | | explained below |`,
     `| Invoices | ${mg.invoiceCount} | ${ours.invoiceCount} | ${cell(mg.invoiceCount, ours.invoiceCount, false)} |`,
     `| Payments received | ${mg.paymentCount} | ${ours.paymentCount} | ${cell(mg.paymentCount, ours.paymentCount, false)} |`,
@@ -184,12 +205,22 @@ export function reconciliationReport(mg: Side, ours: Side, issues: Record<string
     '',
     ...Object.entries(issues).map(([k, v]) => `- **${v}** ${k}.${explanations[k] ? ` ${explanations[k]}` : ''}`),
     '',
+    '## To look up in Movegistics (ids only)',
+    '',
+    `- Partial refunds with no amount (add each to \`data/movegistics/refund-amounts.csv\` as "Payment ID","Refunded Amount", then re-run): ${followups.partialRefundsWithoutAmount.join(', ') || 'none'}`,
+    `- PAID invoices not covered by any payment or deposit in the export: ${followups.paidInvoicesNotCovered.join(', ') || 'none'}`,
+    `- Estimates kept on a placeholder work request (no work request for their contact): ${followups.estimatesOnPlaceholder.join(', ') || 'none'}`,
+    `- Invoices still open more than a year past due (paid outside Movegistics, or to write off?): ${followups.staleOpenInvoices?.join(', ') || 'none'}`,
+    '',
   ].join('\n');
   // The headline is written last, after every cell above has counted its difference.
   const warnings = [
     mg.unverifiedMonths?.size ? `${mg.unverifiedMonths.size} month(s) hold a partial refund of unknown size (equal, but unverified)` : null,
-    mg.paidNotCovered?.count ? `${mg.paidNotCovered.count} PAID invoice(s) (${usd(mg.paidNotCovered.cents)}) are not covered by payments in Movegistics' own export` : null,
+    // Counted after crediting each work request's deposit (the normalizer's list), not the raw count above.
+    followups.paidInvoicesNotCovered.length ? `${followups.paidInvoicesNotCovered.length} PAID invoice(s) are not covered by any payment or deposit in the export` : null,
   ].filter(Boolean);
   const headline = `**Result: ${differences === 0 ? 'every number matches to the cent ✅' : `${differences} difference(s): each is explained below ❌`}${warnings.length ? `; ⚠️ unverified: ${warnings.join('; ')} — NEEDS JAI REVIEW` : ''}**`;
-  return { markdown: md.replace('@@HEADLINE@@', headline), differences };
+  const allTime = `All time: work requests ${sum.mj} / ${sum.oj}, invoiced ${usd(sum.mi)} / ${usd(sum.oi)}, collected ${usd(sum.mc)} / ${usd(sum.oc)}, open balance ${usd(mg.openBalance)} / ${usd(ours.openBalance)} (Movegistics / ours).`;
+  const summary = [headline.replace(/\*\*/g, ''), allTime, ...Object.entries(issues).map(([k, v]) => `  ${v} ${k}`)].join('\n');
+  return { markdown: md.replace('@@HEADLINE@@', headline), differences, summary };
 }

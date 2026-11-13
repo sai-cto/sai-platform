@@ -117,6 +117,9 @@ export const hhmcLeads = tenantTable(
   (t) => [
     sameTenant('hhmc_leads_customer_fk', t, t.customerId, customers),
     uniqueIndex('hhmc_leads_number').on(t.businessId, t.environment, t.leadNumber),
+    // Lookups by a parent id lead with business_id only: under row-level security the environment
+    // (an enum) cannot be an index condition, so (business, environment, x) indexes scan a whole business.
+    index('hhmc_leads_customer_idx').on(t.businessId, t.customerId),
   ],
 );
 
@@ -199,6 +202,9 @@ export const hhmcJobs = tenantTable(
     sameTenant('hhmc_jobs_lead_fk', t, t.leadId, hhmcLeads),
     uniqueIndex('hhmc_jobs_number').on(t.businessId, t.environment, t.jobNumber),
     index('hhmc_jobs_stage_idx').on(t.businessId, t.environment, t.stage),
+    index('hhmc_jobs_customer_idx').on(t.businessId, t.customerId),
+    index('hhmc_jobs_lead_idx').on(t.businessId, t.leadId),
+    index('hhmc_jobs_move_date_idx').on(t.businessId, t.moveDate),
   ],
 );
 
@@ -220,7 +226,7 @@ export const hhmcJobDays = tenantTable(
     /** Actual time worked, entered after the job (feeds the invoice). */
     actualMinutes: integer('actual_minutes'),
   },
-  (t) => [sameTenant('hhmc_job_days_job_fk', t, t.jobId, hhmcJobs)],
+  (t) => [sameTenant('hhmc_job_days_job_fk', t, t.jobId, hhmcJobs), index('hhmc_job_days_job_idx').on(t.businessId, t.jobId), index('hhmc_job_days_day_idx').on(t.businessId, t.dayDate)],
 );
 
 // ---------------------------------------------------------------- quote
@@ -236,6 +242,7 @@ export const hhmcQuotes = tenantTable(
   (t) => [
     sameTenant('hhmc_quotes_job_fk', t, t.jobId, hhmcJobs),
     uniqueIndex('hhmc_quotes_one_per_job').on(t.businessId, t.environment, t.jobId),
+    index('hhmc_quotes_job_idx').on(t.businessId, t.jobId),
   ],
 );
 
@@ -261,6 +268,7 @@ export const hhmcQuoteLines = tenantTable(
   (t) => [
     sameTenant('hhmc_quote_lines_quote_fk', t, t.quoteId, hhmcQuotes),
     sameTenant('hhmc_quote_lines_item_fk', t, t.catalogItemId, hhmcCatalogItems),
+    index('hhmc_quote_lines_quote_idx').on(t.businessId, t.quoteId),
   ],
 );
 
@@ -350,6 +358,8 @@ export const hhmcEstimates = tenantTable(
     uniqueIndex('hhmc_estimates_one_live')
       .on(t.businessId, t.environment, t.jobId)
       .where(sql`${t.status} in ('sent', 'viewed', 'signed') and ${t.archivedAt} is null`),
+    index('hhmc_estimates_job_idx').on(t.businessId, t.jobId),
+    index('hhmc_estimates_sent_idx').on(t.businessId, t.sentAt),
   ],
 );
 
@@ -393,6 +403,8 @@ export const hhmcInvoices = tenantTable(
     sameTenant('hhmc_invoices_estimate_fk', t, t.estimateId, hhmcEstimates),
     sameTenant('hhmc_invoices_customer_fk', t, t.customerId, customers),
     uniqueIndex('hhmc_invoices_number').on(t.businessId, t.environment, t.invoiceNumber),
+    index('hhmc_invoices_job_idx').on(t.businessId, t.jobId),
+    index('hhmc_invoices_customer_idx').on(t.businessId, t.customerId),
   ],
 );
 
@@ -410,7 +422,7 @@ export const hhmcInvoiceLines = tenantTable(
     serviceDate: date('service_date'),
     sortOrder: integer('sort_order').notNull().default(0),
   },
-  (t) => [sameTenant('hhmc_invoice_lines_invoice_fk', t, t.invoiceId, hhmcInvoices)],
+  (t) => [sameTenant('hhmc_invoice_lines_invoice_fk', t, t.invoiceId, hhmcInvoices), index('hhmc_invoice_lines_invoice_idx').on(t.businessId, t.invoiceId)],
 );
 
 // ---------------------------------------------------------------- notes and calls
@@ -431,6 +443,8 @@ export const hhmcNotes = tenantTable(
   (t) => [
     sameTenant('hhmc_notes_job_fk', t, t.jobId, hhmcJobs),
     sameTenant('hhmc_notes_lead_fk', t, t.leadId, hhmcLeads),
+    index('hhmc_notes_job_idx').on(t.businessId, t.jobId),
+    index('hhmc_notes_lead_idx').on(t.businessId, t.leadId),
   ],
 );
 
@@ -494,6 +508,8 @@ export const hhmcAutomationQueue = tenantTable(
     sameTenant('hhmc_queue_payment_fk', t, t.paymentId, payments),
     sameTenant('hhmc_queue_notification_fk', t, t.notificationId, notifications),
     index('hhmc_queue_due_idx').on(t.businessId, t.environment, t.status, t.dueAt),
+    index('hhmc_queue_job_idx').on(t.businessId, t.jobId),
+    index('hhmc_queue_lead_idx').on(t.businessId, t.leadId),
   ],
 );
 
@@ -504,8 +520,9 @@ export type ImportSource = (typeof IMPORT_SOURCES)[number];
 
 /**
  * Which local record an imported outside record became (Phase 5C). Re-running the import looks
- * the outside id up here and updates that record instead of creating a duplicate. Holds ids and
- * a content hash only: no personal data.
+ * the outside id up here and updates that record instead of creating a duplicate. Since the
+ * parity work it also keeps the outside row exactly as exported (`sourceData`, every column), so
+ * nothing Movegistics showed is lost: real customer data, scoped like every tenant row.
  */
 export const hhmcImportRefs = tenantTable(
   'hhmc_import_refs',
@@ -520,6 +537,8 @@ export const hhmcImportRefs = tenantTable(
     /** Hash of the imported fields: unchanged rows are skipped on a re-run. */
     contentHash: text('content_hash').notNull(),
     importedAt: timestamp('imported_at', { withTimezone: true }).notNull().defaultNow(),
+    /** The exported row(s) as Movegistics gave them: column name → value (blank columns left out). */
+    sourceData: jsonb('source_data').$type<Record<string, string>>().notNull().default({}),
   },
   (t) => [
     uniqueIndex('hhmc_import_refs_source')

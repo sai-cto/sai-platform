@@ -42,6 +42,7 @@ import {
 } from './common';
 import { jobDaysOf } from './booking';
 import { moveStage } from './jobs';
+import { describeManual, manualDetails, type ManualPaymentInput } from './manual-payment';
 import { balanceDueCents, baseTotalCents, cardChargeCents, minutesToQtyHundredths, parseMoney, parseQty, SECTION_KEYS } from './pricing';
 
 export const INVOICES_PAGE_SIZE = 25;
@@ -282,7 +283,7 @@ async function afterPaidInFull(s: Scope, invoice: typeof hhmcInvoices.$inferSele
 async function applyPayment(
   s: Scope,
   invoice: typeof hhmcInvoices.$inferSelect,
-  input: { amountCents: number; method: 'card' | 'cash' | 'check'; cardToken?: string; attemptKey: string },
+  input: { amountCents: number; method: 'card' | 'cash' | 'check' | 'other'; cardToken?: string; attemptKey: string; manual?: { paidAt: Date; reference: string | null } },
   now: Date,
 ) {
   if (invoice.status !== 'sent' && invoice.status !== 'partially_paid')
@@ -294,21 +295,23 @@ async function applyPayment(
   const job = await loadJob(s, invoice.jobId);
   // input.amountCents is what is credited; a card pays the card fee on top (H4).
   const chargeCents = input.method === 'card' ? cardChargeCents(input.amountCents, invoice) : input.amountCents;
+  const base = `Payment on ${invoice.invoiceNumber} (${job.jobNumber})`;
   const payment = await takePayment(s, {
     amountCents: chargeCents,
-    description: `Payment on ${invoice.invoiceNumber} (${job.jobNumber})`,
+    description: input.manual ? describeManual(base, input.method, input.manual.reference) : base,
     idempotencyKey: `hhmc-invoice:${invoice.id}:${input.attemptKey}`,
     customerId: invoice.customerId,
     method: input.method,
     paymentMethodToken: input.cardToken,
     subjectType: invoiceEntity.key,
     subjectId: invoice.id,
+    ...(input.manual ? { recordOnly: true, paidAt: input.manual.paidAt } : {}),
   });
   if (payment.status !== 'succeeded')
     return { ok: false as const, message: payment.failureReason ?? 'The payment did not go through.' };
   const paidCents = invoice.paidCents + input.amountCents;
   const status = invoiceStatusAfterPayment(balanceDueCents(baseTotalCents(invoice), invoice.depositReceivedCents, paidCents), true);
-  const updated = await updateRecord(s, invoiceEntity, invoice.id, { paidCents, status, paidAt: status === 'paid' ? now : null });
+  const updated = await updateRecord(s, invoiceEntity, invoice.id, { paidCents, status, paidAt: status === 'paid' ? (input.manual?.paidAt ?? now) : null });
   const customer = await loadCustomer(s, invoice.customerId);
   await enqueue(s, 'payment_received', { jobId: job.id, invoiceId: invoice.id, paymentId: payment.id, recipient: customer.email, optIn: job.automationOptIn }, now);
   if (status === 'paid') await afterPaidInFull(s, updated, now);
@@ -316,21 +319,25 @@ async function applyPayment(
 }
 
 /** Receive Payment (ref §7.2), by staff: card, cash or check. */
+/**
+ * Receive Payment (ref §7.2), by staff: money already taken (cash, check, card via Shopify,
+ * other). Recorded only; never sent to a card processor.
+ */
 export async function recordInvoicePayment(
   ctx: BusinessContext,
   invoiceId: string,
-  input: { amount: string; method: 'card' | 'cash' | 'check'; cardToken?: string; attemptKey: string },
+  input: ManualPaymentInput & { amount: string },
   now: Date = new Date(),
 ) {
   const amountCents = parseMoney(input.amount);
   if (amountCents === null) throw new ValidationError('Enter the amount in dollars.');
-  if (!['card', 'cash', 'check'].includes(input.method)) throw new ValidationError('Choose how it was paid.');
+  const manual = manualDetails(input, ctx.business.timeZone, now);
   return withScope(ctx, P.invoicesWrite, async (s) => {
     authorize(ctx, CORE.paymentsWrite);
     authorize(ctx, P.jobsWrite);
     await takeLock(s, `hhmc-invoice-pay:${invoiceId}`);
     const invoice = await loadInvoice(s, invoiceId);
-    return applyPayment(s, invoice, { ...input, amountCents }, now);
+    return applyPayment(s, invoice, { amountCents, method: input.method, attemptKey: input.attemptKey, manual }, now);
   });
 }
 

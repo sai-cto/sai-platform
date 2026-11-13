@@ -7,6 +7,7 @@
  * customer actions build it from the link token in the URL (requireLinkContext). Nothing the
  * browser sends is trusted: every check is in the services.
  */
+import { isPaymentMethod } from './services/manual-payment';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { ValidationError } from '@/core/errors';
@@ -19,6 +20,7 @@ import {
   addJobDay,
   addTruck,
   bookJob,
+  rescheduleJob,
   markSoldOut,
   releaseBooking,
   removeJobDay,
@@ -234,7 +236,8 @@ export async function markLostAction(slug: string, mode: string, id: string, _p:
 
 export async function cancelJobAction(slug: string, mode: string, id: string, _p: Form, form: FormData) {
   return run(slug, mode, async (ctx) => {
-    await cancelJob(ctx, id, text(form, 'reason'));
+    const deposit = text(form, 'deposit');
+    await cancelJob(ctx, id, text(form, 'reason'), { deposit: deposit === 'kept' || deposit === 'refund' ? deposit : undefined });
     return 'Cancelled.';
   });
 }
@@ -369,15 +372,22 @@ export async function estimateLinkAction(slug: string, mode: string, estimateId:
 export async function recordDepositAction(slug: string, mode: string, estimateId: string, _p: Form, form: FormData) {
   return run(slug, mode, async (ctx) => {
     const method = text(form, 'method');
-    if (method !== 'card' && method !== 'cash' && method !== 'check') throw new ValidationError('Choose how the deposit was paid.');
-    const result = await recordDeposit(ctx, estimateId, { method, cardToken: text(form, 'cardToken') || undefined, attemptKey: text(form, 'attemptKey') });
+    if (!isPaymentMethod(method)) throw new ValidationError('Choose how the deposit was paid.');
+    const result = await recordDeposit(ctx, estimateId, { method, reference: text(form, 'reference'), paidOn: text(form, 'paidOn'), attemptKey: text(form, 'attemptKey') });
     if (!result.ok) throw new ValidationError(result.message);
     return 'Deposit recorded.';
   });
 }
 
-export async function bookJobAction(slug: string, mode: string, jobId: string) {
-  return run(slug, mode, (ctx) => bookJob(ctx, jobId));
+export async function bookJobAction(slug: string, mode: string, jobId: string, allowNoTruck = false) {
+  return run(slug, mode, (ctx) => bookJob(ctx, jobId, new Date(), { allowNoTruck }));
+}
+
+export async function rescheduleJobAction(slug: string, mode: string, jobId: string, _p: Form, form: FormData) {
+  return run(slug, mode, async (ctx) => {
+    await rescheduleJob(ctx, jobId, { date: text(form, 'date'), startTime: text(form, 'startTime'), reason: text(form, 'reason'), allowNoTruck: form.get('allowNoTruck') === 'on' });
+    return 'Rescheduled.';
+  });
 }
 
 export async function releaseBookingAction(slug: string, mode: string, jobId: string) {
@@ -481,8 +491,8 @@ export async function voidInvoiceAction(slug: string, mode: string, id: string) 
 export async function invoicePaymentAction(slug: string, mode: string, id: string, _p: Form, form: FormData) {
   return run(slug, mode, async (ctx) => {
     const method = text(form, 'method');
-    if (method !== 'card' && method !== 'cash' && method !== 'check') throw new ValidationError('Choose how it was paid.');
-    const result = await recordInvoicePayment(ctx, id, { amount: text(form, 'amount'), method, cardToken: text(form, 'cardToken') || undefined, attemptKey: text(form, 'attemptKey') });
+    if (!isPaymentMethod(method)) throw new ValidationError('Choose how it was paid.');
+    const result = await recordInvoicePayment(ctx, id, { amount: text(form, 'amount'), method, reference: text(form, 'reference'), paidOn: text(form, 'paidOn'), attemptKey: text(form, 'attemptKey') });
     if (!result.ok) throw new ValidationError(result.message);
     return 'Payment recorded.';
   });

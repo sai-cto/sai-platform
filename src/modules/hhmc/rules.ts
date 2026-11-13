@@ -256,9 +256,19 @@ export function addDays(day: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Building an Intl.DateTimeFormat is slow (tens of microseconds); lists over all of HHMC's
+// history format thousands of dates, so one formatter per time zone is kept and reused.
+const dayFormats = new Map<string, Intl.DateTimeFormat>();
+const clockFormats = new Map<string, Intl.DateTimeFormat>();
+
 /** Today's date in a time zone, "yyyy-mm-dd". */
 export function localDate(at: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
+  let format = dayFormats.get(timeZone);
+  if (!format) {
+    format = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+    dayFormats.set(timeZone, format);
+  }
+  return format.format(at);
 }
 
 /** The instant of a local wall-clock time ("2026-11-12", "08:30") in a time zone. */
@@ -268,15 +278,12 @@ export function localTime(day: string, time: string, timeZone: string): Date {
   // Find the zone's offset at that moment and correct for it (twice, for clock changes).
   let result = guess;
   for (let i = 0; i < 2; i++) {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      hourCycle: 'h23',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).formatToParts(result);
+    let format = clockFormats.get(timeZone);
+    if (!format) {
+      format = new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      clockFormats.set(timeZone, format);
+    }
+    const parts = format.formatToParts(result);
     const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
     const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'));
     result = new Date(guess.getTime() - (asUtc - result.getTime()));

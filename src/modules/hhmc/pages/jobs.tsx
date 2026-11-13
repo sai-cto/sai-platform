@@ -112,7 +112,7 @@ export function TruckPicker({ trucks, picked = [], idPrefix }: { trucks: TruckCh
 }
 
 /** The fields of a job, used by "New job" and "Change details" on the Job page. */
-export function JobFields({ job, trucks = [] }: { job?: typeof hhmcJobs.$inferSelect; trucks?: TruckChoice[] }) {
+export function JobFields({ job, trucks = [], dateLocked }: { job?: typeof hhmcJobs.$inferSelect; trucks?: TruckChoice[]; dateLocked?: string }) {
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -130,7 +130,7 @@ export function JobFields({ job, trucks = [] }: { job?: typeof hhmcJobs.$inferSe
             ))}
           </Select>
         </Field>
-        <Field label="Move date" htmlFor="jf-date"><input id="jf-date" name="moveDate" type="date" defaultValue={job?.moveDate ?? ''} className={inputClass} /></Field>
+        <Field label="Move date" htmlFor="jf-date" help={dateLocked}><input id="jf-date" name="moveDate" type="date" defaultValue={job?.moveDate ?? ''} readOnly={!!dateLocked} aria-readonly={!!dateLocked} className={`${inputClass}${dateLocked ? ' bg-zinc-50 text-zinc-500' : ''}`} /></Field>
         <Field label="Arrival window" htmlFor="jf-window"><input id="jf-window" name="arrivalWindow" defaultValue={job?.arrivalWindow ?? ''} placeholder="8:00–9:00 AM" className={inputClass} /></Field>
         <Field label="Movers" htmlFor="jf-crew"><input id="jf-crew" name="crewSize" type="number" min={1} max={20} defaultValue={job?.crewSize ?? 2} className={inputClass} /></Field>
         <Field label="Trucks" htmlFor="jf-trucks"><input id="jf-trucks" name="trucks" type="number" min={0} max={10} defaultValue={job?.trucks ?? 1} className={inputClass} /></Field>

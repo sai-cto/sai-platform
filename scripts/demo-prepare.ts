@@ -25,16 +25,19 @@ const MARKS = { demo: 'sai-demo-database', pilot: 'sai-pilot-database' } as cons
 
 async function main() {
   loadEnv();
+  // First: preview builds (any branch but production) never touch a database, whatever their
+  // environment holds. Checked before anything else so a preview without DEMO_MODE / PILOT_MODE
+  // builds instead of failing.
+  if (process.env.VERCEL && process.env.VERCEL_ENV !== 'production') {
+    console.log(`  Not a production deploy (${process.env.VERCEL_ENV}): the database is left alone.`);
+    return;
+  }
   const demo = process.env.DEMO_MODE === 'true';
   const pilot = process.env.PILOT_MODE === 'true';
   if (demo && pilot) throw new Error('DEMO_MODE and PILOT_MODE cannot both be on.');
   if (!demo && !pilot) throw new Error('This script only runs with DEMO_MODE=true or PILOT_MODE=true.');
   const mode = demo ? 'demo' : 'pilot';
   const DEMO_MARK = MARKS[mode];
-  if (process.env.VERCEL && process.env.VERCEL_ENV !== 'production') {
-    console.log(`  Not a production deploy (${process.env.VERCEL_ENV}): the database is left alone.`);
-    return;
-  }
   const ownerUrl = requireEnv('DATABASE_OWNER_URL');
   const reset = process.argv.includes('--reset') || process.env.DEMO_RESET_ON_DEPLOY === 'yes';
   // The pilot holds REAL data: nothing here may ever wipe it.

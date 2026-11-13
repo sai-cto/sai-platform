@@ -48,7 +48,8 @@ async function newLead(ctx: BusinessContext, extra: Record<string, unknown> = {}
     email: `avery.${t}@example.com`,
     phone: `607-555-${String(counter % 10000).padStart(4, '0')}`,
     source: 'Google',
-    moveDate: day(20),
+    // Each move on its own day: the fleet has three trucks, and a day with none free cannot be booked.
+    moveDate: day(20 + (counter % 300)),
     originAddress: '1 Test St, Ithaca, NY',
     destinationAddress: '2 Test St, Ithaca, NY',
     ...extra,

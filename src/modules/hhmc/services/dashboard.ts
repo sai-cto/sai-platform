@@ -224,6 +224,46 @@ export function listTotals(rows: DashboardRow[]) {
   };
 }
 
+/**
+ * The estimate columns the dashboard reads. Never the frozen snapshot: with all of HHMC's history
+ * that is thousands of documents to load for a few numbers.
+ */
+const ESTIMATE_FIELDS = {
+  id: hhmcEstimates.id,
+  jobId: hhmcEstimates.jobId,
+  estimateNumber: hhmcEstimates.estimateNumber,
+  version: hhmcEstimates.version,
+  status: hhmcEstimates.status,
+  sentAt: hhmcEstimates.sentAt,
+  viewedAt: hhmcEstimates.viewedAt,
+  signedAt: hhmcEstimates.signedAt,
+  subtotalCents: hhmcEstimates.subtotalCents,
+  serviceTaxCents: hhmcEstimates.serviceTaxCents,
+  depositCents: hhmcEstimates.depositCents,
+  depositPaidCents: hhmcEstimates.depositPaidCents,
+};
+
+/** The job and customer columns the dashboard rows show. */
+const JOB_FIELDS = {
+  id: hhmcJobs.id,
+  jobNumber: hhmcJobs.jobNumber,
+  customerId: hhmcJobs.customerId,
+  moveDate: hhmcJobs.moveDate,
+  source: hhmcJobs.source,
+  stage: hhmcJobs.stage,
+  bookedAt: hhmcJobs.bookedAt,
+};
+const CUSTOMER_FIELDS = {
+  id: customers.id,
+  kind: customers.kind,
+  firstName: customers.firstName,
+  lastName: customers.lastName,
+  organizationName: customers.organizationName,
+  email: customers.email,
+};
+type DashJob = { [K in keyof typeof JOB_FIELDS]: (typeof hhmcJobs.$inferSelect)[K] };
+type DashCustomer = { [K in keyof typeof CUSTOMER_FIELDS]: (typeof customers.$inferSelect)[K] };
+
 type InvoiceMoney = Pick<typeof hhmcInvoices.$inferSelect, 'subtotalCents' | 'serviceTaxCents' | 'depositReceivedCents' | 'paidCents'>;
 
 /** An invoice's paid state. Base money (no card fee), as everywhere in the invoices. */
@@ -262,7 +302,7 @@ async function leadRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
 async function estimateRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
   const tz = s.ctx.business.timeZone;
   const rows = await s.db
-    .select({ e: hhmcEstimates, job: hhmcJobs, customer: customers })
+    .select({ e: ESTIMATE_FIELDS, job: JOB_FIELDS, customer: CUSTOMER_FIELDS })
     .from(hhmcEstimates)
     .innerJoin(hhmcJobs, eq(hhmcJobs.id, hhmcEstimates.jobId))
     .innerJoin(customers, eq(customers.id, hhmcJobs.customerId))
@@ -294,18 +334,21 @@ async function estimateRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
 
 const BOOKED_STAGES: Stage[] = ['booked', 'completed', 'closed'];
 
-/** Jobs booked in the range (still booked, completed or closed), at their signed estimate's base total. */
+/**
+ * Jobs booked in the range (still booked, completed or closed), at their signed estimate's base
+ * total; a booked move with no signed estimate (Movegistics history booked without one) at its
+ * invoice's, else unvalued. Every booked move counts.
+ */
 async function bookedRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
   const tz = s.ctx.business.timeZone;
   const rows = await s.db
-    .select({ job: hhmcJobs, e: hhmcEstimates, customer: customers })
+    .select({ job: JOB_FIELDS, e: ESTIMATE_FIELDS, customer: CUSTOMER_FIELDS })
     .from(hhmcJobs)
-    .innerJoin(hhmcEstimates, and(eq(hhmcEstimates.jobId, hhmcJobs.id), eq(hhmcEstimates.status, 'signed')))
+    .leftJoin(hhmcEstimates, and(eq(hhmcEstimates.jobId, hhmcJobs.id), eq(hhmcEstimates.status, 'signed'), s.where(hhmcEstimates)))
     .innerJoin(customers, eq(customers.id, hhmcJobs.customerId))
     .where(
       and(
         s.where(hhmcJobs),
-        s.where(hhmcEstimates),
         s.where(customers, 'include'),
         inArray(hhmcJobs.stage, BOOKED_STAGES),
         isNotNull(hhmcJobs.bookedAt),
@@ -313,6 +356,8 @@ async function bookedRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
       ),
     )
     .orderBy(desc(hhmcJobs.bookedAt));
+  const unvalued = rows.filter((r) => !r.e).map((r) => r.job.id);
+  const fallback = unvalued.length && can(s.ctx, P.invoicesRead) ? await jobMoney(s, unvalued) : new Map<string, { valueCents: number }>();
   return rows.map(({ job, e, customer }) => ({
     id: job.id,
     reference: job.jobNumber,
@@ -323,7 +368,7 @@ async function bookedRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
     date: localDate(job.bookedAt!, tz),
     source: job.source,
     // Base total (no card fee): revenue is never overstated by a fee that may not be charged.
-    amountCents: baseTotalCents(e),
+    amountCents: e ? baseTotalCents(e) : (fallback.get(job.id)?.valueCents ?? null),
     paid: null,
     status: { kind: 'stage', value: job.stage },
   }));
@@ -332,7 +377,7 @@ async function bookedRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
 /** Booked (or since completed / closed) jobs whose move date is in the range. */
 async function moveRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
   const rows = await s.db
-    .select({ job: hhmcJobs, customer: customers })
+    .select({ job: JOB_FIELDS, customer: CUSTOMER_FIELDS })
     .from(hhmcJobs)
     .innerJoin(customers, eq(customers.id, hhmcJobs.customerId))
     .where(and(s.where(hhmcJobs), s.where(customers, 'include'), inArray(hhmcJobs.stage, BOOKED_STAGES), isNotNull(hhmcJobs.moveDate), dayIn(hhmcJobs.moveDate, b)))
@@ -353,7 +398,7 @@ async function moveRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
 }
 
 function invoiceRow(
-  { invoice, job, customer }: { invoice: typeof hhmcInvoices.$inferSelect; job: typeof hhmcJobs.$inferSelect; customer: typeof customers.$inferSelect },
+  { invoice, job, customer }: { invoice: typeof hhmcInvoices.$inferSelect; job: DashJob; customer: DashCustomer },
   date: string,
   today: string,
 ): DashboardRow {
@@ -378,7 +423,7 @@ function invoiceRow(
 async function invoicedRows(s: Scope, b: Bounds, today: string): Promise<DashboardRow[]> {
   authorize(s.ctx, P.invoicesRead);
   const rows = await s.db
-    .select({ invoice: hhmcInvoices, job: hhmcJobs, customer: customers })
+    .select({ invoice: hhmcInvoices, job: JOB_FIELDS, customer: CUSTOMER_FIELDS })
     .from(hhmcInvoices)
     .innerJoin(hhmcJobs, eq(hhmcJobs.id, hhmcInvoices.jobId))
     .innerJoin(customers, eq(customers.id, hhmcInvoices.customerId))
@@ -388,14 +433,15 @@ async function invoicedRows(s: Scope, b: Bounds, today: string): Promise<Dashboa
 }
 
 /** Non-void invoices not fully paid, as of today (drafts included); their balance in base money. */
+/** Open balance: what customers were billed and still owe. A draft was never sent, so it is not owed yet (PAR-11). */
 async function openRows(s: Scope, today: string): Promise<DashboardRow[]> {
   authorize(s.ctx, P.invoicesRead);
   const rows = await s.db
-    .select({ invoice: hhmcInvoices, job: hhmcJobs, customer: customers })
+    .select({ invoice: hhmcInvoices, job: JOB_FIELDS, customer: CUSTOMER_FIELDS })
     .from(hhmcInvoices)
     .innerJoin(hhmcJobs, eq(hhmcJobs.id, hhmcInvoices.jobId))
     .innerJoin(customers, eq(customers.id, hhmcInvoices.customerId))
-    .where(and(s.where(hhmcInvoices), s.where(hhmcJobs, 'include'), s.where(customers, 'include'), inArray(hhmcInvoices.status, ['draft', 'sent', 'partially_paid'])))
+    .where(and(s.where(hhmcInvoices), s.where(hhmcJobs, 'include'), s.where(customers, 'include'), inArray(hhmcInvoices.status, ['sent', 'partially_paid'])))
     .orderBy(hhmcInvoices.dueDate, hhmcInvoices.createdAt);
   return rows.map((r) => invoiceRow(r, r.invoice.dueDate, today)).filter((r) => (r.paid?.balanceCents ?? 0) > 0);
 }
@@ -412,8 +458,8 @@ async function collectedRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
   authorize(s.ctx, CORE.paymentsRead);
   const tz = s.ctx.business.timeZone;
   const paidOn = sql<Date>`coalesce(${payments.paidAt}, ${payments.createdAt})`.mapWith(payments.paidAt);
-  const rows = await s.db
-    .select({ p: payments, paidOn, estimate: hhmcEstimates, invoice: hhmcInvoices, job: hhmcJobs, customer: customers })
+  const paid = await s.db
+    .select({ p: payments, paidOn, estimate: ESTIMATE_FIELDS, invoice: hhmcInvoices })
     .from(payments)
     .leftJoin(
       hhmcEstimates,
@@ -423,18 +469,22 @@ async function collectedRows(s: Scope, b: Bounds): Promise<DashboardRow[]> {
       hhmcInvoices,
       and(eq(payments.subjectType, invoiceEntity.key), eq(hhmcInvoices.id, payments.subjectId), s.where(hhmcInvoices, 'include')),
     )
-    // Every payment HHMC received counts, also one linked straight to a work request or to no
-    // record at all (e.g. history imported from Movegistics): money in is money in.
-    .leftJoin(
-      hhmcJobs,
-      and(
-        sql`${hhmcJobs.id} = coalesce(${hhmcEstimates.jobId}, ${hhmcInvoices.jobId}, case when ${payments.subjectType} = ${jobEntity.key} then ${payments.subjectId} end)`,
-        s.where(hhmcJobs, 'include'),
-      ),
-    )
-    .leftJoin(customers, and(sql`${customers.id} = coalesce(${hhmcJobs.customerId}, ${payments.customerId})`, s.where(customers, 'include')))
     .where(and(s.where(payments), eq(payments.kind, 'charge'), eq(payments.status, 'succeeded'), atIn(paidOn, b)))
     .orderBy(desc(paidOn));
+  // Every payment HHMC received counts, also one linked straight to a work request or to no
+  // record at all (e.g. history imported from Movegistics): money in is money in. The work
+  // requests and customers are read by id (a join on "whichever id is set" scans every pair).
+  const jobIdOf = (r: (typeof paid)[number]) => r.estimate?.jobId ?? r.invoice?.jobId ?? (r.p.subjectType === jobEntity.key ? r.p.subjectId : null);
+  const jobIds = [...new Set(paid.map(jobIdOf).filter((id): id is string => !!id))];
+  const jobRows = jobIds.length ? await s.db.select(JOB_FIELDS).from(hhmcJobs).where(and(s.where(hhmcJobs, 'include'), inArray(hhmcJobs.id, jobIds))) : [];
+  const jobsById = new Map(jobRows.map((j) => [j.id, j]));
+  const customerIds = [...new Set(paid.map((r) => jobsById.get(jobIdOf(r) ?? '')?.customerId ?? r.p.customerId).filter((id): id is string => !!id))];
+  const customerRows = customerIds.length ? await s.db.select(CUSTOMER_FIELDS).from(customers).where(and(s.where(customers, 'include'), inArray(customers.id, customerIds))) : [];
+  const customersById = new Map(customerRows.map((c) => [c.id, c]));
+  const rows = paid.map((r) => {
+    const job = jobsById.get(jobIdOf(r) ?? '') ?? null;
+    return { ...r, job, customer: customersById.get(job?.customerId ?? r.p.customerId ?? '') ?? null };
+  });
   return rows.map(({ p, paidOn: at, estimate, invoice, job, customer }) => {
     const refunded = p.refundedCents;
     const method = METHOD_LABELS[p.method] ?? p.method;
@@ -481,7 +531,7 @@ async function jobMoney(s: Scope, jobIds: string[]) {
   const result = new Map<string, { valueCents: number; paid: { state: PaidState; balanceCents: number | null } }>();
   if (jobIds.length === 0) return result;
   const signed = await s.db
-    .select()
+    .select(ESTIMATE_FIELDS)
     .from(hhmcEstimates)
     .where(and(s.where(hhmcEstimates), inArray(hhmcEstimates.jobId, jobIds), eq(hhmcEstimates.status, 'signed')));
   for (const e of signed) {

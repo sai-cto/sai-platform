@@ -5,7 +5,7 @@
  */
 import { and, asc, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { customers } from '@/core/db/schema/tenant';
+import { customers, payments } from '@/core/db/schema/tenant';
 import { withScope, type Scope } from '@/core/db/scope';
 import { ValidationError } from '@/core/errors';
 import { takeLock } from '@/core/db/lock';
@@ -30,7 +30,7 @@ import { loadSettings } from '../settings';
 import { cancelQueued } from './automations';
 import { releaseAppointments } from './booking';
 import { isTruckLine, sameName } from './builder';
-import { loadCustomer, loadJob, loadLead, trucksOf } from './common';
+import { loadCustomer, loadJob, loadLead, money, trucksOf } from './common';
 import { optionalText, parse, requiredId } from './input';
 
 export const JOBS_PAGE_SIZE = 25;
@@ -296,6 +296,11 @@ export async function updateJob(ctx: BusinessContext, jobId: string, raw: unknow
     const job = await loadJob(s, jobId);
     if (job.stage === 'closed' || job.stage === 'cancelled')
       throw new ValidationError(`A ${STAGE_LABELS[job.stage].toLowerCase()} job cannot be changed.`);
+    // The move date of a booked (or done) move is its first booked day: it changes only by
+    // rescheduling, so the calendar, the lists and the booking can never disagree.
+    const newDate = input.moveDate ?? null;
+    if (newDate !== job.moveDate && (job.stage === 'booked' || job.stage === 'completed'))
+      throw new ValidationError(job.stage === 'booked' ? 'This move is booked: use "Reschedule" to change its date.' : 'This move is done: its date can no longer change.');
     const picked = await pickedTrucks(s, input.truckIds);
     // New addresses make the old mileage wrong: clear it, so it is looked up again (or retyped).
     const stops = (j: { originAddress: string | null; extraStops: string[]; destinationAddress: string | null }) =>
@@ -306,6 +311,16 @@ export async function updateJob(ctx: BusinessContext, jobId: string, raw: unknow
     if (picked.length && job.stage !== 'booked' && job.stage !== 'completed') {
       const days = await s.db.select().from(hhmcJobDays).where(and(s.where(hhmcJobDays), eq(hhmcJobDays.jobId, jobId)));
       for (const d of days) if (d.trucks !== picked.length) await updateRecord(s, jobDayEntity, d.id, { trucks: picked.length });
+    }
+    // Not booked yet: the day on the old move date moves with it (or one is added).
+    if (newDate && newDate !== job.moveDate && (job.stage === 'qualified' || job.stage === 'estimate_sent')) {
+      const days = await s.db.select().from(hhmcJobDays).where(and(s.where(hhmcJobDays), eq(hhmcJobDays.jobId, jobId))).orderBy(hhmcJobDays.dayDate);
+      const onOld = days.find((d) => d.dayDate === job.moveDate);
+      if (onOld) await updateRecord(s, jobDayEntity, onOld.id, { dayDate: newDate });
+      else if (days.length === 0) {
+        const settings = await loadSettings(ctx);
+        await createRecord(s, jobDayEntity, { jobId, dayDate: newDate, startTime: '08:00', durationMinutes: Math.round(settings.defaultJobHours * 60), crewSize: input.crewSize ?? job.crewSize, trucks: picked.length || (input.trucks ?? job.trucks) });
+      }
     }
     return updateRecord(s, jobEntity, jobId, {
       ...input,
@@ -338,17 +353,53 @@ export async function reopenJob(ctx: BusinessContext, jobId: string) {
   return withScope(ctx, P.jobsWrite, (s) => moveStage(s, jobId, 'qualified'));
 }
 
-/** Cancelling a booked job also releases its booking (needs the booking permission). */
-export async function cancelJob(ctx: BusinessContext, jobId: string, reason: string) {
+export type DepositOutcome = 'kept' | 'refund';
+export const DEPOSIT_OUTCOME_LABELS: Record<DepositOutcome, string> = {
+  kept: 'kept (not refunded)',
+  refund: 'to be refunded outside the software',
+};
+
+/** Money received for this move before an invoice: deposits on its estimates, and payments on the job itself. */
+export async function depositsReceived(s: Scope, jobId: string): Promise<number> {
+  const estimates = await s.db.select({ id: hhmcEstimates.id }).from(hhmcEstimates).where(and(s.where(hhmcEstimates, 'include'), eq(hhmcEstimates.jobId, jobId)));
+  const rows = await s.db
+    .select({ amount: payments.amountCents, refunded: payments.refundedCents })
+    .from(payments)
+    .where(
+      and(
+        s.where(payments),
+        eq(payments.status, 'succeeded'),
+        or(
+          and(eq(payments.subjectType, jobEntity.key), eq(payments.subjectId, jobId)),
+          estimates.length ? and(eq(payments.subjectType, estimateEntity.key), inArray(payments.subjectId, estimates.map((e) => e.id))) : undefined,
+        ),
+      ),
+    );
+  return rows.reduce((t, r) => t + r.amount - r.refunded, 0);
+}
+
+/**
+ * Cancel (ref §2.1 step 14): records why and, when a deposit was paid, what happens to it. The
+ * software takes no refund itself: a refund is made where the money was taken (Shopify, check)
+ * and recorded here as "to be refunded". Cancelling a booked job releases its booking (needs the
+ * booking permission).
+ */
+export async function cancelJob(ctx: BusinessContext, jobId: string, reason: string, options: { deposit?: DepositOutcome } = {}) {
   return withScope(ctx, P.jobsWrite, async (s) => {
     await takeLock(s, `hhmc-estimates:${jobId}`);
     await takeLock(s, `hhmc-booking:${jobId}`);
     const job = await loadJob(s, jobId);
-    if (job.stage === 'booked') {
-      authorize(ctx, P.jobsBook); // cancelling a booked job releases its booking
-      await releaseAppointments(s, jobId, 'Job cancelled');
-    }
-    return moveStage(s, jobId, 'cancelled', { cancelledReason: reason });
+    if (job.stage === 'booked') authorize(ctx, P.jobsBook); // cancelling a booked job releases its booking
+    const why = reason.trim();
+    if (!why) throw new ValidationError('Give a reason the job was cancelled.');
+    const deposit = await depositsReceived(s, jobId);
+    if (deposit > 0 && !options.deposit) throw new ValidationError(`A deposit of ${money(deposit)} was paid: say whether it is kept or to be refunded.`);
+    if (options.deposit && !(options.deposit in DEPOSIT_OUTCOME_LABELS)) throw new ValidationError('Choose what happens to the deposit.');
+    if (job.stage === 'booked') await releaseAppointments(s, jobId, 'Job cancelled');
+    const depositNote = deposit > 0 && options.deposit ? ` · Deposit ${money(deposit)}: ${DEPOSIT_OUTCOME_LABELS[options.deposit]}` : '';
+    const updated = await moveStage(s, jobId, 'cancelled', { cancelledReason: `${why}${depositNote}` });
+    await createRecord(s, noteEntity, { jobId, kind: 'note', body: `Cancelled: ${why}${depositNote}.`, authorName: ctx.actor.name });
+    return updated;
   });
 }
 

@@ -5,7 +5,6 @@
  */
 import Link from 'next/link';
 import type { PortalPageProps } from '@/core/modules/contract';
-import { isPilotMode } from '@/core/demo/pilot';
 import { can } from '@/core/rbac/permissions';
 import { customerName } from '@/core/records/core-entities';
 import { ActionForm } from '@/ui/action-form';
@@ -28,6 +27,7 @@ import {
   quoteOptionsAction,
   recordDepositAction,
   releaseBookingAction,
+  rescheduleJobAction,
   removeJobDayAction,
   removeQuoteLineAction,
   reopenJobAction,
@@ -37,7 +37,7 @@ import {
   voidEstimateAction,
 } from '../actions';
 import { CORE, P } from '../permissions';
-import { CALL_OUTCOME_LABELS, quoteEditable, SERVICE_TYPE_LABELS, TERMS_LABELS } from '../rules';
+import { CALL_OUTCOME_LABELS, localDate, quoteEditable, SERVICE_TYPE_LABELS, TERMS_LABELS } from '../rules';
 import { INVOICE_TERMS } from '../schema';
 import { depositDueByCard } from '../services/estimates';
 import { balanceOf } from '../services/invoices';
@@ -47,17 +47,20 @@ import { CopyLinkButton } from './copy-link';
 import { AttemptKey } from './attempt-key';
 import { Disclosure } from './disclosure';
 import { JobFields, areaClass } from './jobs';
-import { EstimateStatusBadge, Fact, InvoiceStatusBadge, Note, Select, StageBadge, formatDay, formatTime } from './parts';
+import { ManualPaymentFields } from './payment-fields';
+import { Check, EstimateStatusBadge, Fact, InvoiceStatusBadge, Note, Select, StageBadge, formatDay, formatTime } from './parts';
 import { QuoteEditor } from './quote-editor';
 import { ACCESS_LABELS, EstimateBuilder } from './estimate-builder';
 import { loadSettings } from '../settings';
 import { directionsLink, embedMapUrl, formatRoute, mapsConfigured, routeStops } from '../services/maps';
 import { listTrucks } from '../services/booking';
 import { lookupMileageAction } from '../actions';
+import { SourceRecords } from './source-records';
 
 export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
   const data = await jobPage(ctx, params.id);
-  const { job, customer, quote, estimates, liveEstimate, days, booked, invoices, notes, queue } = data;
+  const { job, customer, quote, estimates, liveEstimate, days, booked, invoices, notes, queue, source } = data;
+  const depositPaid = data.depositPaid;
   const activity = await jobActivity(ctx, job.id, [...estimates.map((e) => e.id), ...(invoices ?? []).map((i) => i.id)]);
   const slug = ctx.business.slug;
   const mode = ctx.environment;
@@ -124,6 +127,16 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                 confirmLabel="Book"
               >
                 Book this move
+              </ConfirmButton>
+            ) : null}
+            {canBook && job.stage === 'estimate_sent' && signed && days.length > 0 ? (
+              <ConfirmButton
+                action={bookJobAction.bind(null, slug, mode, job.id, true)}
+                confirmTitle="Book without a truck for now?"
+                confirmBody="Books the move even if no truck is free on a day; the calendar shows it as having no truck yet until you sort the trucks out."
+                confirmLabel="Book without a truck"
+              >
+                Book without a truck
               </ConfirmButton>
             ) : null}
             {canBook && job.stage === 'booked' ? (
@@ -236,7 +249,20 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
             {canWrite && job.stage !== 'closed' && job.stage !== 'cancelled' ? (
               <Disclosure summary="Change details">
                 <ActionForm action={updateJobAction.bind(null, slug, mode, job.id)} submitLabel="Save" resetOnSuccess={false}>
-                  <JobFields job={job} trucks={fleet} />
+                  <JobFields job={job} trucks={fleet} dateLocked={job.stage === 'booked' ? 'Booked: change the date with Reschedule.' : job.stage === 'completed' ? 'The move is done.' : undefined} />
+                </ActionForm>
+              </Disclosure>
+            ) : null}
+            {canBook && job.stage === 'booked' ? (
+              <Disclosure summary="Reschedule">
+                <ActionForm action={rescheduleJobAction.bind(null, slug, mode, job.id)} submitLabel="Reschedule">
+                  <p className="text-sm text-zinc-600">{`Every day moves by the same number of days (now ${days.map((d) => formatDay(d.dayDate)).join(', ')}). Trucks are checked again for the new days.`}</p>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Field label="New move date" htmlFor="rs-date"><input id="rs-date" name="date" type="date" required min={localDate(new Date(), ctx.business.timeZone)} defaultValue={days[0]?.dayDate ?? ''} className={inputClass} /></Field>
+                    <Field label="New start time (optional)" htmlFor="rs-time"><input id="rs-time" name="startTime" type="time" className={inputClass} /></Field>
+                    <Field label="Reason (optional)" htmlFor="rs-reason"><input id="rs-reason" name="reason" maxLength={300} className={inputClass} placeholder="e.g. Customer asked" /></Field>
+                  </div>
+                  <Check name="allowNoTruck" label="Book without a truck if none is free" />
                 </ActionForm>
               </Disclosure>
             ) : null}
@@ -251,6 +277,15 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
               <Disclosure summary="Cancel job">
                 <ActionForm action={cancelJobAction.bind(null, slug, mode, job.id)} submitLabel="Cancel job" submitVariant="danger">
                   <Field label="Reason" htmlFor="cancel-reason"><input id="cancel-reason" name="reason" required className={inputClass} /></Field>
+                  {depositPaid > 0 ? (
+                    <Field label={`The deposit (${formatMoney(depositPaid)})`} htmlFor="cancel-deposit" help="Nothing is refunded by the software: refund it where it was taken (Shopify, check) and record it here.">
+                      <Select id="cancel-deposit" name="deposit" required defaultValue="">
+                        <option value="" disabled>Choose…</option>
+                        <option value="kept">Kept (not refunded)</option>
+                        <option value="refund">To be refunded outside the software</option>
+                      </Select>
+                    </Field>
+                  ) : null}
                 </ActionForm>
               </Disclosure>
             ) : null}
@@ -316,17 +351,11 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                         e.depositPaidCents > 0 ? (
                           <Note tone="green" title={`Deposit paid: ${formatMoney(e.depositPaidCents)}`} />
                         ) : (
-                          <Note title={`Deposit not paid yet (${formatMoney(due.totalDueCents)} by card)`}>
+                          <Note title={`Deposit not paid yet: ${formatMoney(due.depositCents)}${due.totalDueCents !== due.depositCents ? ` (${formatMoney(due.totalDueCents)} by card)` : ''}`}>
                             {can(ctx, CORE.paymentsWrite) && canWrite && can(ctx, P.estimatesWrite) && (job.stage === 'estimate_sent' || job.stage === 'booked') && !openInvoice ? (
                               <ActionForm action={recordDepositAction.bind(null, slug, mode, e.id)} submitLabel="Record deposit" submitVariant="secondary">
                                 <AttemptKey />
-                                <Field label="Paid by" htmlFor={`dep-${e.id}`}>
-                                  <Select id={`dep-${e.id}`} name="method" defaultValue={isPilotMode() && ctx.environment === 'live' ? 'cash' : 'card'}>
-                                    {isPilotMode() && ctx.environment === 'live' ? null : <option value="card">{`Card (test card) · ${formatMoney(due.totalDueCents)}`}</option>}
-                                    <option value="cash">{`Cash · ${formatMoney(due.depositCents)}`}</option>
-                                    <option value="check">{`Check · ${formatMoney(due.depositCents)}`}</option>
-                                  </Select>
-                                </Field>
+                                <ManualPaymentFields id={`dep-${e.id}`} today={localDate(new Date(), ctx.business.timeZone)} amountFor={(m) => formatMoney(m === 'card' ? due.totalDueCents : due.depositCents)} />
                               </ActionForm>
                             ) : null}
                           </Note>
@@ -524,6 +553,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
               </ul>
             </Card>
           ) : null}
+          <SourceRecords records={source} />
         </div>
       </div>
     </>

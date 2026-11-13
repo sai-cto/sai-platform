@@ -15,6 +15,7 @@ import { P } from '../permissions';
 import { CONTACTS_PAGE_SIZE, contactPage, listContacts } from '../services/directory';
 import { baseTotalCents } from '../services/pricing';
 import { EstimateStatusBadge, Fact, InvoiceStatusBadge, LeadStatusBadge, StageBadge, formatDay, hrefWith } from './parts';
+import { SourceRecords } from './source-records';
 
 export async function ContactsPage({ ctx, searchParams, basePath }: PortalPageProps) {
   const page = Math.max(1, Number.parseInt(searchParams.page ?? '1', 10) || 1);
@@ -66,7 +67,7 @@ export async function ContactsPage({ ctx, searchParams, basePath }: PortalPagePr
 }
 
 export async function ContactPage({ ctx, params, basePath }: PortalPageProps) {
-  const { customer, leads, jobs, estimates, invoices } = await contactPage(ctx, params.id);
+  const { customer, leads, jobs, estimates, invoices, source } = await contactPage(ctx, params.id);
   const open = (invoices ?? []).reduce((sum, i) => sum + i.balanceCents, 0);
   return (
     <>
@@ -165,6 +166,7 @@ export async function ContactPage({ ctx, params, basePath }: PortalPageProps) {
             </ul>
           </Card>
         ) : null}
+        <SourceRecords records={source} />
       </div>
     </>
   );

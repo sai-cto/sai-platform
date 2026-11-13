@@ -57,7 +57,10 @@ describe('Movegistics exports → normalized records', () => {
     const blake = n.estimates.filter((e) => e.jobSid === 'WR900002');
     expect(blake.map((e) => [e.sid, e.version, e.status])).toEqual([['ES900002', 1, 'void'], ['ES900003', 2, 'sent']]);
     expect(blake[0].voidReason).toMatch(/later estimate/);
-    expect(n.issues['estimates with no matching work request (not imported)']).toBe(1);
+    // An estimate naming no work request (and a contact with none) is kept on a placeholder, never dropped.
+    expect(n.issues['estimates with no work request for their contact (a placeholder work request was made)']).toBe(1);
+    expect(n.estimates.find((e) => e.sid === 'ES900004')!.jobSid).toBe('estimate-job:ES900004');
+    expect(n.followups.estimatesOnPlaceholder).toEqual(['ES900004']);
   });
 
   it('a PAID invoice owes nothing, whatever its stale "Balance Due" says', () => {

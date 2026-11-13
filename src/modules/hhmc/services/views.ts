@@ -28,7 +28,9 @@ import { jobDaysOf, trucksOf } from './booking';
 import { estimatesOf, loadCustomer, loadJob, loadLead } from './common';
 import { invoiceLines, invoicesOfJob } from './invoices';
 import { jobOfLead } from './leads';
+import { depositsReceived } from './jobs';
 import { quoteSummary } from './quote';
+import { sourceRecordsFor } from './source';
 
 export async function jobPage(ctx: BusinessContext, jobId: string) {
   return withScope(ctx, P.jobsRead, async (s) => {
@@ -48,7 +50,8 @@ export async function jobPage(ctx: BusinessContext, jobId: string) {
     const lead = job.leadId ? await loadLead(s, job.leadId).catch(() => null) : null;
     let jobPayments: (typeof payments.$inferSelect)[] | null = null;
     if (can(ctx, CORE.paymentsRead)) {
-      const subjectIds = [...estimates.map((e) => e.id), ...(invoices ?? []).map((i) => i.id)];
+      // Imported payments with no estimate in force are recorded against the work request itself.
+      const subjectIds = [jobId, ...estimates.map((e) => e.id), ...(invoices ?? []).map((i) => i.id)];
       jobPayments = subjectIds.length
         ? await s.db
             .select()
@@ -73,10 +76,19 @@ export async function jobPage(ctx: BusinessContext, jobId: string) {
     const discounts = can(ctx, P.catalogRead)
       ? await s.db.select().from(hhmcDiscounts).where(and(s.where(hhmcDiscounts), eq(hhmcDiscounts.isActive, true)))
       : [];
+    const source = await sourceRecordsFor(s, [
+      jobId,
+      ...estimates.map((e) => e.id),
+      ...(invoices ?? []).map((i) => i.id),
+      ...(jobPayments ?? []).map((p) => p.id),
+    ]);
     return {
       job,
       customer,
       lead,
+      source,
+      // Deposits taken before an invoice (cancel asks what happens to them).
+      depositPaid: await depositsReceived(s, jobId),
       quote,
       estimates,
       liveEstimate: live,
@@ -112,7 +124,7 @@ export async function leadPage(ctx: BusinessContext, leadId: string) {
       .where(and(s.where(hhmcNotes), eq(hhmcNotes.leadId, leadId)))
       .orderBy(desc(hhmcNotes.createdAt));
     const queue = can(ctx, P.jobsRead) ? await queueFor(s, { leadId }) : [];
-    return { lead, job, notes, queue };
+    return { lead, job, notes, queue, source: await sourceRecordsFor(s, [leadId]) };
   });
 }
 
@@ -143,7 +155,8 @@ export async function invoicePage(ctx: BusinessContext, invoiceId: string) {
             .limit(1)
         )[0] ?? null
       : null;
-    return { ...row, lines, payments: invoicePayments, estimate };
+    const source = await sourceRecordsFor(s, [invoiceId, ...(invoicePayments ?? []).map((p) => p.id)]);
+    return { ...row, lines, payments: invoicePayments, estimate, source };
   });
 }
 

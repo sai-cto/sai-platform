@@ -1,0 +1,1 @@
+ALTER TABLE "hhmc_import_refs" ADD COLUMN "source_data" jsonb DEFAULT '{}'::jsonb NOT NULL;
