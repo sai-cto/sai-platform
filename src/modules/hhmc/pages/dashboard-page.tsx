@@ -177,7 +177,7 @@ export async function DashboardPage({ ctx, searchParams, basePath }: PortalPageP
             </Link>
           ))}
         </nav>
-        <form action={basePath} method="get" className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
+        <form action={basePath} method="get" className="grid min-w-0 grid-cols-2 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
           {list ? <input type="hidden" name="list" value={list} /> : null}
           <Field label="From" htmlFor="dashboard-from">
             <input id="dashboard-from" type="date" name="from" defaultValue={range.from ?? ''} className={inputClass} />
@@ -185,7 +185,7 @@ export async function DashboardPage({ ctx, searchParams, basePath }: PortalPageP
           <Field label="To" htmlFor="dashboard-to">
             <input id="dashboard-to" type="date" name="to" defaultValue={range.to ?? ''} className={inputClass} />
           </Field>
-          <button type="submit" className={buttonClass({ variant: 'secondary', size: 'md' })}>
+          <button type="submit" className={buttonClass({ variant: 'secondary', size: 'md', className: 'col-span-2 sm:col-span-1' })}>
             Show
           </button>
         </form>
