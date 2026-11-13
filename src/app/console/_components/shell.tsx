@@ -225,8 +225,8 @@ export function Shell({
   const pendingG = useRef(false);
   // Search: what is typed in the box, and the current business's records that match it.
   const [query, setQuery] = useState('');
-  const [hits, setHits] = useState<SearchHit[]>([]);
-  const [searching, setSearching] = useState(false);
+  // The last answer and what it answered; hits show only while they answer what is typed now.
+  const [answer, setAnswer] = useState<{ key: string; hits: SearchHit[] }>({ key: '', hits: [] });
 
   const current = useMemo(() => {
     const [, , slug, maybeMode] = pathname.split('/');
@@ -256,28 +256,22 @@ export function Shell({
     openPaletteRef.current = openPalette;
   });
 
+  const searchKey = paletteOpen && current && query.trim().length >= 2 ? `${current.business.slug}/${current.mode}/${query.trim()}` : '';
+  const hits = searchKey && answer.key === searchKey ? answer.hits : [];
+  const searching = searchKey !== '' && answer.key !== searchKey;
   useEffect(() => {
-    const q = query.trim();
-    if (!paletteOpen || !current || q.length < 2) {
-      setHits([]);
-      setSearching(false);
-      return;
-    }
+    if (!searchKey || !current) return;
     let stale = false;
-    setSearching(true);
     // A short pause after typing, so a fast typist sends one search, not one per letter.
     const timer = setTimeout(async () => {
-      const found = await searchAction(current.business.slug, current.mode, q).catch(() => []);
-      if (!stale) {
-        setHits(found);
-        setSearching(false);
-      }
+      const found = await searchAction(current.business.slug, current.mode, query.trim()).catch(() => []);
+      if (!stale) setAnswer({ key: searchKey, hits: found });
     }, 180);
     return () => {
       stale = true;
       clearTimeout(timer);
     };
-  }, [query, paletteOpen, current]);
+  }, [searchKey, current, query]);
 
   const paletteItems = useMemo<PaletteItem[]>(
     () => [
