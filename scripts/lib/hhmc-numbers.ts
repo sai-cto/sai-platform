@@ -31,9 +31,9 @@ export async function sqlNumbers(sql: postgres.Sql, businessId: string, environm
     invoicedCents: await one(sql`select coalesce(sum(subtotal_cents + service_tax_cents), 0) as n from hhmc_invoices where ${live('hhmc_invoices')} and status <> 'void'`),
     collectedCents: await one(sql`select coalesce(sum(amount_cents - refunded_cents), 0) as n from payments where ${live('payments')} and kind = 'charge' and status = 'succeeded'`),
     openCents: await one(sql`select coalesce(sum(subtotal_cents + service_tax_cents - deposit_received_cents - paid_cents), 0) as n from hhmc_invoices
-      where ${live('hhmc_invoices')} and status in ('draft','sent','partially_paid') and subtotal_cents + service_tax_cents - deposit_received_cents - paid_cents > 0`),
+      where ${live('hhmc_invoices')} and status in ('sent','partially_paid') and subtotal_cents + service_tax_cents - deposit_received_cents - paid_cents > 0`),
     openCount: await one(sql`select count(*) as n from hhmc_invoices
-      where ${live('hhmc_invoices')} and status in ('draft','sent','partially_paid') and subtotal_cents + service_tax_cents - deposit_received_cents - paid_cents > 0`),
+      where ${live('hhmc_invoices')} and status in ('sent','partially_paid') and subtotal_cents + service_tax_cents - deposit_received_cents - paid_cents > 0`),
     pastDueCents: await one(sql`select coalesce(sum(subtotal_cents + service_tax_cents - deposit_received_cents - paid_cents), 0) as n from hhmc_invoices
       where ${live('hhmc_invoices')} and status in ('sent','partially_paid') and due_date < ${today} and subtotal_cents + service_tax_cents - deposit_received_cents - paid_cents > 0`),
   };

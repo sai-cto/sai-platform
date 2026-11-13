@@ -465,7 +465,6 @@ async function invoicedRows(s: Scope, b: Bounds, today: string): Promise<Dashboa
   return rows.map((r) => invoiceRow(r, r.invoice.invoiceDate, today));
 }
 
-/** Non-void invoices not fully paid, as of today (drafts included); their balance in base money. */
 /** Open balance: what customers were billed and still owe. A draft was never sent, so it is not owed yet (PAR-11). */
 async function openRows(s: Scope, today: string): Promise<DashboardRow[]> {
   authorize(s.ctx, P.invoicesRead);

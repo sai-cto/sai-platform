@@ -219,7 +219,7 @@ export async function DashboardPage({ ctx, searchParams, basePath }: PortalPageP
           {summary.collectedCents !== null ? (
             <NumberCard label="Payments collected" value={formatMoney(summary.collectedCents)} hint={`${plural(summary.collectedCount ?? 0, 'payment')}, net of refunds`} href={listHref('collected')} active={isOpen('collected')} />
           ) : null}
-          <NumberCard label="Open balance" value={formatMoney(summary.open.cents)} hint={`${plural(summary.open.count, 'invoice')}, drafts included · as of today`} href={listHref('open')} active={isOpen('open')} />
+          <NumberCard label="Open balance" value={formatMoney(summary.open.cents)} hint={`${plural(summary.open.count, 'invoice')}, sent and not yet paid · as of today`} href={listHref('open')} active={isOpen('open')} />
           <NumberCard label="Past due" value={formatMoney(summary.pastDue.cents)} hint={`${plural(summary.pastDue.count, 'invoice')} · as of today`} href={listHref('past_due')} active={isOpen('past_due')} />
         </Section>
       ) : null}
