@@ -12,7 +12,7 @@ import { appointments, payments } from '@/core/db/schema';
 import { withScope, type Scope } from '@/core/db/scope';
 import { updateRecord } from '@/core/records/records';
 import { jobDayEntity } from '@/modules/hhmc/entities';
-import { hhmcImportRefs, hhmcInvoices, hhmcJobDays, hhmcJobs, hhmcLeads } from '@/modules/hhmc/schema';
+import { hhmcEstimates, hhmcImportRefs, hhmcInvoices, hhmcJobDays, hhmcJobs, hhmcLeads } from '@/modules/hhmc/schema';
 import { loadIntoHhmc } from '../../scripts/hhmc-import/load';
 import { daysBetween, FILE_NAMES, normalize, parseRefundOverrides, type Files } from '../../scripts/hhmc-import/movegistics';
 import { movegisticsSide, ourSide, reconciliationReport } from '../../scripts/hhmc-import/reconcile';
@@ -178,6 +178,28 @@ describe('normalizing: more fields, nothing dropped', () => {
     expect(covered.jobs.find((j) => j.sid === 'invoice-job:IN900002')!.stage).toBe('closed');
   });
 
+  it("an open invoice is paid down by its work request's deposit left unapplied; reconciliation agrees", () => {
+    // Movegistics shows Avery's invoice "Sent" owing exactly the $160.08 deposit it left "Unapplied".
+    const sent = fixture.invoices.replace('"01/21/2026","800.40","800.40","PAID"', '"01/21/2026","800.40","160.08","SENT"');
+    const n = normalize({ ...fixture, invoices: sent });
+    expect(n.invoices.find((i) => i.sid === 'IN900001')).toMatchObject({ status: 'paid', balanceCents: 0, depositCreditCents: 16008 });
+    expect(n.issues["open invoices paid off by their work request's unapplied deposit (imported as paid)"]).toBe(1);
+    expect(movegisticsSide({ ...fixture, invoices: sent }).openBalance).toBe(16008 + 10000); // its own payments alone leave the deposit (+ Blake's $100)
+    expect(movegisticsSide({ ...fixture, invoices: sent }, new Map(), n.openDepositCredits).openBalance).toBe(10000); // only Blake's $100
+    // Nothing paid on it yet: the deposit lowers the balance, the rest is still owed.
+    const unpaid = { ...fixture, invoices: fixture.invoices.replace('"01/21/2026","800.40","800.40","PAID"', '"01/21/2026","800.40","800.40","SENT"'), payments: fixture.payments.replace(/"01\/21\/2026","PM900002".*\n/, '') };
+    const m = normalize(unpaid);
+    expect(m.invoices.find((i) => i.sid === 'IN900001')).toMatchObject({ status: 'partially_paid', balanceCents: 64032, depositCreditCents: 16008 });
+    expect(movegisticsSide(unpaid, new Map(), m.openDepositCredits).openBalance).toBe(64032 + 10000);
+  });
+
+  it('a draft invoice was never sent: it counts as invoiced, not as open balance', () => {
+    const draft = fixture.invoices.replace('"02/01/2026","250.0000000000001","100","PARTIAL_PAID"', '"02/01/2026","250.0000000000001","250","DRAFT"');
+    const side = movegisticsSide({ ...fixture, invoices: draft, payments: fixture.payments.replace(/"02\/02\/2026","PM900003".*\n/, '') });
+    expect(side.openBalance).toBe(0);
+    expect([...side.invoiced.values()].reduce((a, b) => a + b, 0)).toBe(80040 + 25000);
+  });
+
   it('invoices open more than a year past due are listed for a manager, still counted as open', () => {
     const n = normalize(fixture, { today: '2027-03-01' });
     expect(n.followups.staleOpenInvoices).toEqual(['IN900002']);
@@ -315,6 +337,23 @@ describe('loading: raw rows kept, deposits credited, days follow re-exports', ()
     expect(report.markdown).toMatch(/\| 2026-02 \|.*\| \$110\.00 \/ \$110\.00 \| ✅ \|/);
     expect(report.summary).toContain('All time:');
     await loadIntoHhmc(batch, normalize(fixture)); // back to the shared fixture state
+  });
+
+  it('a re-export that voids the estimate in force and lists a new one above it loads without two live estimates', async () => {
+    const { batch } = await batchOf('sandbox');
+    const first = await loadIntoHhmc(batch, normalize(fixture));
+    const [head, ...rows] = fixture.estimates.trimEnd().split('\n');
+    const blake = rows.find((r) => r.startsWith('"ES900002"'))!;
+    const replaced = blake.replace('"ES900002"', '"ES900099"').replace('"Viewed"', '"Sent"').replace('"02/12/2026","02/12/2026"', '"02/10/2026","02/10/2026"');
+    // ES900003 (Sent) is in force after the first load; the re-export voids it (and ES900002).
+    const voided = (r: string) => (r.startsWith('"ES900002"') || r.startsWith('"ES900003"') ? r.replace(/"(Viewed|Sent)"/, '"Void"') : r);
+    const estimates = [head, replaced, ...rows.map(voided)].join('\n') + '\n';
+    const second = await loadIntoHhmc(batch, normalize({ ...fixture, estimates }));
+    const jobId = first.ids.get('work_request:WR900002')!;
+    const onJob = await batch((s) => s.db.select().from(hhmcEstimates).where(and(s.where(hhmcEstimates), eq(hhmcEstimates.jobId, jobId))));
+    const byNumber = Object.fromEntries(onJob.map((e) => [e.estimateNumber, e.status]));
+    expect(byNumber).toMatchObject({ ES900002: 'void', ES900003: 'void', ES900099: 'sent' });
+    expect(second.ids.get('estimate:ES900099')).toBeDefined();
   });
 });
 

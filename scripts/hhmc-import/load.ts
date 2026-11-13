@@ -380,7 +380,12 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
   const depositBp = bp(settings.depositPercent);
   const jobBySid = new Map(n.jobs.map((j) => [j.sid, j]));
   const contactBySid = new Map(n.contacts.map((c) => [c.sid, c]));
-  await each(n.estimates as NEstimate[], async (e) => {
+  // Estimates that are no longer in force (void / draft) go first: a re-export can void a work
+  // request's estimate in force and add a new one listed ABOVE it, and two live estimates for one
+  // work request are never allowed (hhmc_estimates_one_live), not even for a moment.
+  const isLive = (e: NEstimate) => e.status === 'sent' || e.status === 'viewed' || e.status === 'signed';
+  const estimatesInOrder = [...n.estimates.filter((e) => !isLive(e)), ...n.estimates.filter(isLive)];
+  await each(estimatesInOrder, async (e) => {
     const jobId = ids.get(`work_request:${e.jobSid}`)!;
     const job = jobBySid.get(e.jobSid)!;
     const contact = contactBySid.get(job.contactSid);
