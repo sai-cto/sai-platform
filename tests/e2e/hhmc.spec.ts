@@ -17,7 +17,7 @@ test('a move from lead to Closed, with the customer signing and paying from thei
   const tag = Date.now().toString(36);
   await loginAs(page, SEED.hhmcAdmin);
   await page.goto(APP);
-  await expect(page.getByRole('navigation', { name: 'App sections' }).getByRole('link')).toHaveText(['Dashboard', 'Leads', 'Estimates', 'Work Requests', 'Contacts', 'Calendar', 'Invoices', 'Settings']);
+  await expect(page.getByRole('navigation', { name: 'App sections' }).getByRole('link')).toHaveText(['Dashboard', 'Leads', 'Estimates', 'Work Requests', 'Contacts', 'Calendar', 'Invoices', 'Settings', 'How to test']);
 
   // Lead.
   await page.goto(`${APP}/leads/new`);

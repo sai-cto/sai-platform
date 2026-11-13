@@ -64,7 +64,7 @@ test('the orders dashboard filters by status, region and search', async ({ page 
 
   await page.getByRole('link', { name: 'Clear' }).click();
   await expect(page).toHaveURL(/\/app$/);
-  await page.getByLabel('Search').fill('O-000005');
+  await page.getByLabel('Search', { exact: true }).fill('O-000005');
   await page.getByRole('button', { name: 'Show' }).click();
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText('$213.00 to pay');

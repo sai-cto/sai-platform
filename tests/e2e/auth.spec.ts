@@ -45,7 +45,12 @@ for (const [label, email, codes] of EXPECTED) {
       if (codes.includes(code)) await expect(item).toBeVisible();
       else await expect(item).toHaveCount(0);
     }
-    await expect(page.getByTestId('home-businesses').getByRole('link')).toHaveCount(codes.length);
+    // Someone with one business and no platform role goes straight into it; everyone else gets the list.
+    if (codes.length === 1 && !/super_admin|tech|executive/.test(label)) {
+      await expect(page).toHaveURL(new RegExp(`/console/${codes[0].toLowerCase()}/live/app$`));
+    } else {
+      await expect(page.getByTestId('home-businesses').getByRole('link')).toHaveCount(codes.length);
+    }
   });
 }
 

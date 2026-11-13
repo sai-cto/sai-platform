@@ -2,8 +2,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { SEED, asOwner, businessCount, loginAs, tabLabels } from './helpers';
 
-const ALL_TABS = ['Overview', 'App', 'People and access', 'Data', 'Activity log', 'Settings', 'Test mode'];
-const PLATFORM_LINKS = ['Users and roles', 'Module registry', 'Feature flags', 'Activity log', 'Data imports', 'System health', 'Platform settings'];
+// Platform people see every tab; a business's own admins and staff see only the App (the rest stay reachable by URL).
+const ALL_TABS = ['Overview', 'App', 'People and access', 'Data', 'Activity log', 'Module settings'];
+const PLATFORM_LINKS = ['Users and roles', 'Module registry', 'Feature flags', 'Activity log', 'Data imports', 'Feedback', 'System health', 'Platform settings'];
 
 const sidebar = (page: Page) => page.getByRole('navigation', { name: 'Main' }).first();
 
@@ -14,7 +15,7 @@ test.describe('each role sees exactly its own navigation', () => {
       for (const label of PLATFORM_LINKS) await expect(page.getByTestId('nav-platform').first().getByRole('link', { name: label })).toBeVisible();
       await expect(sidebar(page).getByRole('link', { name: 'Executive view' })).toBeVisible();
       await page.goto('/console/brss');
-      await expect(page).toHaveURL(/\/console\/brss\/live\/overview/);
+      await expect(page).toHaveURL(/\/console\/brss\/live\/app/);
       expect(await tabLabels(page)).toEqual(ALL_TABS);
     }
   });
@@ -38,7 +39,8 @@ test.describe('each role sees exactly its own navigation', () => {
     await expect(sidebar(page).getByRole('link', { name: 'Executive view' })).toHaveCount(0);
     await expect(page.getByTestId('nav-businesses').first().getByRole('link')).toHaveCount(1);
     await page.goto('/console/brss');
-    expect(await tabLabels(page)).toEqual(ALL_TABS);
+    await expect(page).toHaveURL(/\/console\/brss\/live\/app/);
+    expect(await tabLabels(page)).toEqual(['App']);
     await page.goto('/console/brss/live/data/core.customer?show=all');
     await expect(page.getByRole('button', { name: 'Archive' }).first()).toBeVisible();
     await expect(page.getByRole('link', { name: 'Export CSV' })).toBeVisible();
@@ -52,7 +54,9 @@ test.describe('each role sees exactly its own navigation', () => {
   test('staff: only what they were granted', async ({ page }) => {
     await loginAs(page, SEED.brssStaff);
     await page.goto('/console/brss');
-    expect(await tabLabels(page)).toEqual(['Overview', 'App']);
+    expect(await tabLabels(page)).toEqual(['App']);
+    // The Overview has no tab for staff but still opens by its address.
+    await page.goto('/console/brss/live/overview');
     await expect(page.getByRole('group', { name: 'Data mode' })).toHaveCount(0);
     // Granted customers.read and scheduling.read, but not payments: no revenue on the overview.
     await expect(page.getByText('Customers', { exact: true })).toBeVisible();
@@ -125,7 +129,7 @@ test('test mode: a persistent indicator, and sandbox data that is separate from 
   await expect(page.getByTestId('sandbox-banner')).toHaveCount(0);
 
   await page.getByRole('group', { name: 'Data mode' }).getByRole('link', { name: 'Test mode' }).click();
-  await expect(page).toHaveURL(/\/console\/brss\/sandbox\/overview/);
+  await expect(page).toHaveURL(/\/console\/brss\/sandbox\/app/);
   // The banner and frame are on every page that shows data.
   for (const tab of ['overview', 'app', 'data', 'data/core.customer', 'activity']) {
     await page.goto(`/console/brss/sandbox/${tab}`);
@@ -133,10 +137,9 @@ test('test mode: a persistent indicator, and sandbox data that is separate from 
     await expect(page.getByTestId('sandbox-banner')).toContainText('TEST MODE');
     await expect(page.getByTestId('sandbox-frame')).toBeVisible();
   }
-  // Tabs keep you in test mode.
+  // Tabs keep you in test mode (a business admin's one tab is the App).
   await page.goto('/console/brss/sandbox/overview');
-  await page.locator('a[data-business-tab="data"]').click();
-  await expect(page).toHaveURL(/\/console\/brss\/sandbox\/data/);
+  await expect(page.locator('a[data-business-tab="app"]')).toHaveAttribute('href', /\/console\/brss\/sandbox\/app/);
 
   // Archiving a sandbox customer does not touch live.
   const liveBefore = await asOwner(async (sql) => Number((await sql`select count(*)::int as n from customers c join businesses b on b.id = c.business_id where b.slug = 'brss' and c.environment = 'live' and c.archived_at is null`)[0].n));
@@ -346,14 +349,14 @@ test('keyboard: command palette and business shortcuts', async ({ page }) => {
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/console\/platform\/health/);
   await page.keyboard.press(']');
-  await expect(page).toHaveURL(/\/console\/hhmc\/live\/overview/);
+  await expect(page).toHaveURL(/\/console\/hhmc\/live\/app/);
   await page.keyboard.press(']');
-  await expect(page).toHaveURL(/\/console\/sare\/live\/overview/);
+  await expect(page).toHaveURL(/\/console\/sare\/live\/app/);
   await page.keyboard.press('g');
   await page.keyboard.press('d');
   await expect(page).toHaveURL(/\/console\/sare\/live\/data/);
   await page.keyboard.press('[');
-  await expect(page).toHaveURL(/\/console\/hhmc\/live\/overview/);
+  await expect(page).toHaveURL(/\/console\/hhmc\/live\/app/);
 });
 
 test('works on a phone: the menu opens as a drawer and nothing scrolls sideways', async ({ page }) => {
@@ -364,8 +367,10 @@ test('works on a phone: the menu opens as a drawer and nothing scrolls sideways'
   await page.getByRole('button', { name: 'Open menu' }).click();
   const drawer = page.getByRole('dialog', { name: 'Menu' });
   await expect(drawer.getByRole('link', { name: 'Big Red Shipping & Storage' })).toBeVisible();
-  await drawer.getByRole('link', { name: 'Home' }).click();
-  await expect(page).toHaveURL(/\/console$/);
+  // One business and no platform role: no Home page; the business is the start.
+  await expect(drawer.getByRole('link', { name: 'Home' })).toHaveCount(0);
+  await drawer.getByRole('link', { name: 'Big Red Shipping & Storage' }).click();
+  await expect(page).toHaveURL(/\/console\/brss/);
   // Make sure there is recent activity, so the Overview shows its widest content (a table).
   await page.goto('/console/brss/sandbox/data/core.customer');
   await page.getByRole('button', { name: 'Archive' }).first().click();
@@ -391,7 +396,7 @@ test('a super admin acts as someone, sees exactly their console, and stops', asy
   expect((await page.request.get('/console/platform/users')).status()).toBe(404);
   expect((await page.request.get('/console/hhmc')).status()).toBe(404);
   await page.goto('/console/brss');
-  await expect(page).toHaveURL(/\/console\/brss\/live\/overview/);
+  await expect(page).toHaveURL(/\/console\/brss\/live\/app/);
   await page.getByRole('button', { name: 'Stop acting' }).click();
   await expect(page).toHaveURL(/\/console\/platform\/users$/);
   await expect(page.getByTestId('acting-as-banner')).toHaveCount(0);

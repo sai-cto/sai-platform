@@ -416,7 +416,7 @@ export function Shell({
           </span>
           <button
             type="button"
-            aria-label="Search"
+            aria-label="Open search"
             onClick={openPalette}
             className="ml-auto flex size-11 items-center justify-center rounded-md text-zinc-700 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-zinc-900"
           >

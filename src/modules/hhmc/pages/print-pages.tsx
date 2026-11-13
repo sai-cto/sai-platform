@@ -40,7 +40,7 @@ function Sheet({ brand, title, number, back, children }: { brand: ReturnType<typ
             {brand.contact ? <div className="text-xs text-zinc-600">{brand.contact}</div> : null}
           </div>
           <div className="text-right">
-            <div className="text-lg font-semibold">{title}</div>
+            <h1 className="text-lg font-semibold">{title}</h1>
             <div className="text-xs text-zinc-600">{number}</div>
           </div>
         </header>
