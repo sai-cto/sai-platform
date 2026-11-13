@@ -54,6 +54,7 @@ test.describe('each role sees exactly its own navigation', () => {
   test('staff: only what they were granted', async ({ page }) => {
     await loginAs(page, SEED.brssStaff);
     await page.goto('/console/brss');
+    await expect(page).toHaveURL(/\/console\/brss\/live\/app/);
     expect(await tabLabels(page)).toEqual(['App']);
     // The Overview has no tab for staff but still opens by its address.
     await page.goto('/console/brss/live/overview');
@@ -62,9 +63,10 @@ test.describe('each role sees exactly its own navigation', () => {
     await expect(page.getByText('Customers', { exact: true })).toBeVisible();
     await expect(page.getByText(/Revenue/)).toHaveCount(0);
 
+    // A new hire with no grants cannot open the App's pages yet: they start on the Overview.
     await loginAs(page, SEED.brssNewHire);
-    await page.goto('/console/brss');
-    expect(await tabLabels(page)).toEqual(['Overview', 'App']);
+    await expect(page).toHaveURL(/\/console\/brss\/live\/overview/);
+    expect(await tabLabels(page)).toEqual(['App']);
     await expect(page.getByText('Customers', { exact: true })).toHaveCount(0);
     await expect(page.getByText(/Revenue/)).toHaveCount(0);
   });

@@ -135,9 +135,15 @@ export function businessTabs(ctx: BusinessContext): BusinessTab[] {
 }
 
 /** Where /console/<business> lands: the App when there is one, else the first tab. */
-export function homeTab(ctx: BusinessContext): BusinessTab | undefined {
+/**
+ * Where /console/<business> goes: the App when this person can open its home page (a new hire
+ * with no grants yet cannot), otherwise the Overview, otherwise their first tab.
+ */
+export function homeTab(ctx: BusinessContext, appHomeOpen = true): BusinessTab | undefined {
   const tabs = businessTabs(ctx);
-  return tabs.find((t) => t.key === 'app') ?? tabs[0];
+  const app = appHomeOpen ? tabs.find((t) => t.key === 'app') : undefined;
+  const overview = ctx.permissions.has('business.overview.read') ? BUSINESS_TABS.find((t) => t.key === 'overview') : undefined;
+  return app ?? overview ?? tabs.find((t) => t.key !== 'app') ?? tabs[0];
 }
 
 export function tabHref(slug: string, mode: 'live' | 'sandbox', tab: BusinessTab): string {
