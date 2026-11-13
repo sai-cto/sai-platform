@@ -26,6 +26,7 @@ import { searchAction } from '@/server/search-actions';
 import { cn } from '@/ui/cn';
 import { Monogram } from '@/ui/monogram';
 import { NavProgress } from '@/ui/nav-progress';
+import { SearchShortcut } from '@/ui/shortcut-key';
 import type { NavIcon, NavLink } from '../_lib/nav';
 
 export type ShellBusiness = { slug: string; code: string; name: string; accentColor: string };
@@ -113,7 +114,7 @@ function SidebarContent({
           <Search className="size-3.5" aria-hidden="true" />
           <span className="flex-1">Search…</span>
           <kbd className="rounded border border-zinc-200 bg-zinc-50 px-1 font-sans text-[10px] text-zinc-500">
-            ⌘K
+            <SearchShortcut />
           </kbd>
         </button>
       </div>

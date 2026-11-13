@@ -47,6 +47,14 @@ export function formatTime(at: Date | string | null | undefined, timeZone: strin
 }
 
 /** US numbers as "(607) 555-0101" (a leading 1 dropped); anything else as typed. */
+/** A wall-clock time of day as typed in a form ("08:00" or "14:30:00") → "8:00 AM", "2:30 PM". */
+export function formatClock(hhmm: string | null | undefined): string {
+  const m = /^(\d{1,2}):(\d{2})/.exec(hhmm ?? '');
+  if (!m) return hhmm ?? '';
+  const h = Number(m[1]);
+  return `${h % 12 === 0 ? 12 : h % 12}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
 export function formatPhone(phone: string | null | undefined): string {
   if (!phone || !phone.trim()) return '—';
   const digits = phone.replace(/\D/g, '');

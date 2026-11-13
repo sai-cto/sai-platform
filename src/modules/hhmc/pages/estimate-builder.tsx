@@ -66,7 +66,7 @@ export function EstimateBuilder({
         ) : null}
       </div>
       {!mapsReady ? (
-        <Note title="Automatic mileage is not set up yet (NEEDS JAI REVIEW)">
+        <Note title="Automatic mileage is not set up yet">
           No maps key is configured, so type the miles and drive time below. Once a Google Maps key is added, &quot;Look up mileage&quot; fills them in.
         </Note>
       ) : null}

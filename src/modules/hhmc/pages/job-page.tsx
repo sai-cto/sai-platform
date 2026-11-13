@@ -10,7 +10,7 @@ import { customerName } from '@/core/records/core-entities';
 import { ActionForm } from '@/ui/action-form';
 import { Badge } from '@/ui/badge';
 import { ConfirmButton } from '@/ui/confirm-button';
-import { formatDateTime, formatMoney } from '@/ui/format';
+import { formatClock, formatDateTime, formatMoney } from '@/ui/format';
 import { Card, EmptyState, Field, PageHeader, Table, Td, Th, inputClass } from '@/ui/layout';
 import {
   actualTimeAction,
@@ -167,7 +167,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                         ? 'Add both addresses to get the mileage.'
                         : mapsReady
                           ? 'Not looked up yet.'
-                          : 'Automatic mileage needs a Google Maps key (NEEDS JAI REVIEW). Type the miles in the estimate builder for now.'}
+                          : 'Automatic mileage is not set up yet. Type the miles in the estimate builder for now.'}
                   {routeText ? (longDistance ? ` Long distance (over ${settings.longDistanceMiles} mi).` : ` Local (up to ${settings.longDistanceMiles} mi).`) : ''}
                 </p>
                 <ol className="mt-2 space-y-0.5 text-sm">
@@ -409,7 +409,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                     return (
                       <tr key={d.id}>
                         <Td className="whitespace-nowrap">{formatDay(d.dayDate)}</Td>
-                        <Td>{d.startTime}</Td>
+                        <Td className="whitespace-nowrap">{formatClock(d.startTime)}</Td>
                         <Td>{(d.durationMinutes / 60).toFixed(1)}</Td>
                         <Td className="whitespace-nowrap">{`M:${d.crewSize} / T:${d.trucks}`}</Td>
                         <Td>{appts.length ? appts.map((a) => `${formatTime(a.appointment.startsAt, tz)} ${a.truck ?? 'no truck free'}`).join(', ') : '—'}</Td>
@@ -520,7 +520,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                 <ul className="space-y-1 text-sm">
                   {data.payments.map((p) => (
                     <li key={p.id} className="flex justify-between gap-2">
-                      <span className="min-w-0 truncate">{p.description}<span className="block text-xs text-zinc-500">{`${p.method}${p.cardLast4 ? ` ·· ${p.cardLast4}` : ''} · ${formatDateTime(p.paidAt ?? p.createdAt)}`}</span></span>
+                      <span className="min-w-0 truncate">{p.description}<span className="block text-xs text-zinc-500">{`${p.method ? p.method.charAt(0).toUpperCase() + p.method.slice(1) : ''}${p.cardLast4 ? ` ·· ${p.cardLast4}` : ''} · ${formatDateTime(p.paidAt ?? p.createdAt)}`}</span></span>
                       <span className={p.status === 'succeeded' ? 'tabular-nums' : 'text-red-700 tabular-nums'}>{p.status === 'succeeded' ? formatMoney(p.amountCents) : 'Failed'}</span>
                     </li>
                   ))}

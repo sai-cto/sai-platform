@@ -8,7 +8,7 @@ import { Select } from './parts';
  */
 export function ManualPaymentFields({ id, today, amountFor }: { id: string; today: string; amountFor?: (method: PaymentMethod) => string }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-3">
       <Field label="Paid by" htmlFor={`${id}-method`}>
         <Select id={`${id}-method`} name="method" defaultValue="check">
           {PAYMENT_METHODS.map((m) => (

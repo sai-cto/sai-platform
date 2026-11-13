@@ -1,6 +1,7 @@
 'use client';
 
 import { Search } from 'lucide-react';
+import { SearchShortcut } from './shortcut-key';
 
 /** Opens the console's search box (the same one as Ctrl/Cmd-K). */
 export function SearchButton() {
@@ -12,7 +13,7 @@ export function SearchButton() {
     >
       <Search className="size-3.5" aria-hidden="true" />
       Search
-      <kbd className="hidden rounded border border-zinc-200 bg-white px-1 font-sans text-[10px] text-zinc-500 sm:inline">⌘K</kbd>
+      <kbd className="hidden rounded border border-zinc-200 bg-white px-1 font-sans text-[10px] text-zinc-500 sm:inline"><SearchShortcut /></kbd>
     </button>
   );
 }

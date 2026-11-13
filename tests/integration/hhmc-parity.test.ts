@@ -9,6 +9,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { appointments } from '@/core/db/schema';
 import { withScope, type Scope } from '@/core/db/scope';
+import { formatDay } from '@/ui/format';
 import { hhmcInvoices, hhmcJobDays, hhmcJobs, hhmcNotes } from '@/modules/hhmc/schema';
 import { P } from '@/modules/hhmc/permissions';
 import { addJobDay, bookJob, markSoldOut, rescheduleJob } from '@/modules/hhmc/services/booking';
@@ -69,7 +70,7 @@ describe('reschedule a booked move (OPS-2) and the move date (OPS-MD)', () => {
     expect(appts.filter((a) => a.status === 'confirmed')).toHaveLength(2);
     expect(appts.filter((a) => a.status === 'canceled')).toHaveLength(2);
     const notes = await withScope(ctx, P.jobsRead, (s) => s.db.select().from(hhmcNotes).where(and(s.where(hhmcNotes), eq(hhmcNotes.jobId, j.id))));
-    expect(notes.some((n) => n.body.startsWith(`Rescheduled from ${first} 08:00`) && n.body.includes('Reason: Customer asked'))).toBe(true);
+    expect(notes.some((n) => n.body.startsWith(`Rescheduled from ${formatDay(first)}, 8:00 AM`) && n.body.includes('Reason: Customer asked'))).toBe(true);
   });
 
   it('a sold-out new date is refused and nothing changes; only booked moves, never into the past', async () => {

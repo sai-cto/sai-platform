@@ -12,6 +12,7 @@ import { formatDay, formatPhone } from '@/ui/format';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { CORE, P } from '../permissions';
 import { hhmcEstimates, hhmcInvoices, hhmcJobs, hhmcLeads } from '../schema';
+import { ESTIMATE_STATUS_LABELS, INVOICE_STATUS_LABELS, LEAD_STATUS_LABELS, STAGE_LABELS } from '../rules';
 import { personName } from './common';
 
 const PER_KIND = 6;
@@ -53,7 +54,7 @@ export async function searchHhmc(ctx: BusinessContext, raw: string, basePath: st
         .orderBy(desc(hhmcLeads.createdAt))
         .limit(PER_KIND);
       for (const l of leads)
-        hits.push({ group: 'Leads', label: `${l.leadNumber} · ${`${l.firstName} ${l.lastName}`.trim() || l.email || 'No name'}`, detail: l.status, href: `${basePath}/leads/${l.id}` });
+        hits.push({ group: 'Leads', label: `${l.leadNumber} · ${`${l.firstName} ${l.lastName}`.trim() || l.email || 'No name'}`, detail: LEAD_STATUS_LABELS[l.status], href: `${basePath}/leads/${l.id}` });
     }
 
     const jobs = await s.db
@@ -64,25 +65,27 @@ export async function searchHhmc(ctx: BusinessContext, raw: string, basePath: st
       .orderBy(desc(sql`coalesce(${hhmcJobs.moveDate}, '0001-01-01')`))
       .limit(PER_KIND);
     for (const j of jobs)
-      hits.push({ group: 'Work requests', label: `${j.jobNumber} · ${seesCustomers ? personName(j.customer) : ''}`.replace(/ · $/, ''), detail: [j.moveDate ? formatDay(j.moveDate) : null, j.stage.replace('_', ' ')].filter(Boolean).join(' · '), href: `${basePath}/jobs/${j.id}` });
+      hits.push({ group: 'Work requests', label: `${j.jobNumber} · ${seesCustomers ? personName(j.customer) : ''}`.replace(/ · $/, ''), detail: [j.moveDate ? formatDay(j.moveDate) : null, STAGE_LABELS[j.stage]].filter(Boolean).join(' · '), href: `${basePath}/jobs/${j.id}` });
 
     const estimates = await s.db
-      .select({ id: hhmcEstimates.id, number: hhmcEstimates.estimateNumber, version: hhmcEstimates.version, status: hhmcEstimates.status, jobId: hhmcEstimates.jobId })
+      .select({ id: hhmcEstimates.id, number: hhmcEstimates.estimateNumber, version: hhmcEstimates.version, status: hhmcEstimates.status, jobId: hhmcEstimates.jobId, customer: { kind: customers.kind, firstName: customers.firstName, lastName: customers.lastName, organizationName: customers.organizationName, email: customers.email } })
       .from(hhmcEstimates)
       .innerJoin(hhmcJobs, eq(hhmcJobs.id, hhmcEstimates.jobId))
+      .innerJoin(customers, eq(customers.id, hhmcJobs.customerId))
       .where(and(s.where(hhmcEstimates), or(ilike(hhmcEstimates.estimateNumber, pattern), customerIds.length ? inArray(hhmcJobs.customerId, customerIds) : undefined)))
       .orderBy(desc(hhmcEstimates.createdAt))
       .limit(PER_KIND);
-    for (const e of estimates) hits.push({ group: 'Estimates', label: `${e.number} v${e.version}`, detail: e.status, href: `${basePath}/jobs/${e.jobId}` });
+    for (const e of estimates) hits.push({ group: 'Estimates', label: `${e.number} v${e.version}${seesCustomers ? ` · ${personName(e.customer)}` : ''}`, detail: ESTIMATE_STATUS_LABELS[e.status], href: `${basePath}/jobs/${e.jobId}` });
 
     if (can(ctx, P.invoicesRead)) {
       const invoices = await s.db
-        .select({ id: hhmcInvoices.id, number: hhmcInvoices.invoiceNumber, status: hhmcInvoices.status, date: hhmcInvoices.invoiceDate })
+        .select({ id: hhmcInvoices.id, number: hhmcInvoices.invoiceNumber, status: hhmcInvoices.status, date: hhmcInvoices.invoiceDate, customer: { kind: customers.kind, firstName: customers.firstName, lastName: customers.lastName, organizationName: customers.organizationName, email: customers.email } })
         .from(hhmcInvoices)
+        .innerJoin(customers, eq(customers.id, hhmcInvoices.customerId))
         .where(and(s.where(hhmcInvoices), or(ilike(hhmcInvoices.invoiceNumber, pattern), customerIds.length ? inArray(hhmcInvoices.customerId, customerIds) : undefined)))
         .orderBy(desc(hhmcInvoices.invoiceDate))
         .limit(PER_KIND);
-      for (const i of invoices) hits.push({ group: 'Invoices', label: i.number, detail: `${formatDay(i.date)} · ${i.status.replace('_', ' ')}`, href: `${basePath}/invoices/${i.id}` });
+      for (const i of invoices) hits.push({ group: 'Invoices', label: `${i.number}${seesCustomers ? ` · ${personName(i.customer)}` : ''}`, detail: `${formatDay(i.date)} · ${INVOICE_STATUS_LABELS[i.status]}`, href: `${basePath}/invoices/${i.id}` });
     }
     return hits;
   });

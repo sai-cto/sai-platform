@@ -17,6 +17,7 @@ import { isUuid } from '@/core/ids';
 import { authorize } from '@/core/rbac/permissions';
 import { appointmentEntity, resourceEntity, unavailabilityEntity } from '@/core/records/core-entities';
 import { archiveRecord, createRecord, updateRecord } from '@/core/records/records';
+import { formatClock, formatDay } from '@/ui/format';
 import { bookAppointment, findConflicts } from '@/core/scheduling/scheduling';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { jobDayEntity, jobEntity, noteEntity } from '../entities';
@@ -251,13 +252,13 @@ export async function rescheduleJob(ctx: BusinessContext, jobId: string, raw: un
     const shift = Math.round((Date.parse(`${input.date}T12:00:00Z`) - Date.parse(`${days[0].dayDate}T12:00:00Z`)) / 86_400_000);
     const startTime = input.startTime || null;
     if (shift === 0 && (!startTime || days.every((d) => d.startTime === startTime))) throw new ValidationError('That is the date and time the move already has.');
-    const from = days.map((d) => `${d.dayDate} ${d.startTime}`).join(', ');
+    const from = days.map((d) => `${formatDay(d.dayDate)}, ${formatClock(d.startTime)}`).join(', ');
     await releaseAppointments(s, jobId, 'Rescheduled');
     const moved = [];
     for (const d of days) moved.push(await updateRecord(s, jobDayEntity, d.id, { dayDate: addDays(d.dayDate, shift), ...(startTime ? { startTime } : {}) }));
     await bookDays(s, job, moved, { allowNoTruck: input.allowNoTruck });
     await updateRecord(s, jobEntity, jobId, { moveDate: moved[0].dayDate });
-    const to = moved.map((d) => `${d.dayDate} ${d.startTime}`).join(', ');
+    const to = moved.map((d) => `${formatDay(d.dayDate)}, ${formatClock(d.startTime)}`).join(', ');
     await createRecord(s, noteEntity, {
       jobId,
       kind: 'note',
