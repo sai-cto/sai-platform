@@ -36,7 +36,11 @@ type Side = { jobs: Map<Month, number>; invoiced: Map<Month, number>; collected:
 const add = (m: Map<string, number>, k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v);
 
 /** `refunds`: hand-entered partial refund amounts (refund-amounts.csv), the same input the import uses. */
-export function movegisticsSide(files: Files, refunds: Map<string, number> = new Map()): Side {
+/**
+ * Movegistics' side, from its CSVs. `openDepositCredits` (from normalize) is the work-request deposit
+ * the import credits to an open invoice; open balance counts issued invoices only (never a draft).
+ */
+export function movegisticsSide(files: Files, refunds: Map<string, number> = new Map(), openDepositCredits: Map<string, number> = new Map()): Side {
   const side: Side = { jobs: new Map(), invoiced: new Map(), collected: new Map(), leads: new Map(), leadsPerMonth: new Map(), openBalance: 0, openBalanceAsExported: 0, openBalanceAsShown: 0, invoiceCount: 0, paymentCount: 0, unverifiedMonths: new Set(), paidNotCovered: { count: 0, cents: 0 }, paidWithBalance: 0 };
   for (const r of rowsOf(files.workRequests)) add(side.jobs, monthOf(val(r, 'Work Request Created Date')), 1);
   const received = new Map<string, number>(); // invoice id → money received against it
@@ -63,7 +67,10 @@ export function movegisticsSide(files: Files, refunds: Map<string, number> = new
     // An open one owes at most what the payments recorded against it leave (Movegistics often
     // leaves Balance Due untouched after the money came in).
     const left = Math.max(0, amount - (received.get(val(r, 'Invoice ID')) ?? 0));
-    side.openBalance += closed || left <= 1 ? 0 : Math.min(exported, left);
+    // A draft was never sent: nobody owes it yet. A deposit left unapplied on the work request pays it down.
+    const draft = status === 'DRAFT' || status === 'CREATED';
+    const owed = closed || draft || left <= 1 ? 0 : Math.min(exported, left) - (openDepositCredits.get(val(r, 'Invoice ID')) ?? 0);
+    side.openBalance += owed > 1 ? owed : 0;
     if (status === 'PAID' && exported > 0) side.paidWithBalance!++;
     if (status === 'PAID' && (received.get(val(r, 'Invoice ID')) ?? 0) < amount - 1) {
       side.paidNotCovered!.count++;
@@ -95,7 +102,7 @@ export async function ourSide(s: Scope, tz: string): Promise<Side> {
   const invoices = await s.db.select().from(hhmcInvoices).where(and(s.where(hhmcInvoices), inArray(hhmcInvoices.id, imported('invoice'))));
   for (const i of invoices) {
     add(side.invoiced, i.invoiceDate.slice(0, 7), i.totalCents);
-    if (i.status !== 'void') side.openBalance += Math.max(0, balanceOf(i));
+    if (i.status === 'sent' || i.status === 'partially_paid') side.openBalance += Math.max(0, balanceOf(i));
     side.invoiceCount++;
   }
 
@@ -176,7 +183,7 @@ export function reconciliationReport(
     '',
     `| | Movegistics | Ours | |`,
     `|---|---|---|---|`,
-    `| Open balance (PAID = $0; an open invoice owes at most what its own payments leave) | ${usd(mg.openBalance)} | ${usd(ours.openBalance)} | ${open} |`,
+    `| Open balance (sent / partially paid only; an open invoice owes at most what its own payments and its work request's unapplied deposit leave) | ${usd(mg.openBalance)} | ${usd(ours.openBalance)} | ${open} |`,
     `| Open balance as Movegistics' own list shows it (unpaid statuses, Balance Due as exported) | ${usd(mg.openBalanceAsShown ?? mg.openBalance)} | | higher: it ignores payments recorded against those invoices |`,
     `| "Balance Due" column as Movegistics exports it | ${usd(mg.openBalanceAsExported ?? mg.openBalance)} | | explained below |`,
     `| Invoices | ${mg.invoiceCount} | ${ours.invoiceCount} | ${cell(mg.invoiceCount, ours.invoiceCount, false)} |`,

@@ -44,6 +44,8 @@ const EXPLANATIONS: Record<string, string> = {
   "PAID invoices covered by their work request's deposit (credited to the invoice)": 'Movegistics leaves deposits "Unapplied" yet marks the invoice PAID; the deposit is shown on the invoice as deposit received.',
   'open invoices whose own payments cover them in full (imported as paid)': 'Movegistics left them "Sent" / "Partially paid" with the full Balance Due after payments recorded against them (by invoice number) had covered them. Its own list therefore shows a higher open balance than the money says.',
   'open invoices whose Balance Due ignored payments recorded against them (balance lowered to what is left)': 'Same, partly paid: the balance is what those payments leave.',
+  "open invoices paid off by their work request's unapplied deposit (imported as paid)": 'Movegistics left the deposit "Unapplied" on the work request and its Balance Due ignored it; the deposit is shown on the invoice as deposit received.',
+  "open invoices lowered by their work request's unapplied deposit": 'Same, the deposit covers part of the invoice: the balance is what is left.',
   'open invoices more than a year past due (listed by id: check in Movegistics whether they were paid)': 'Still counted as open: nothing in the export says they were paid. Listed by id below for a manager to confirm (paid outside Movegistics, or write off).',
   'PAID invoices still not covered by any payment in the export (listed by id below)': 'Movegistics says PAID but its payments export holds no money for them: look each up in Movegistics.',
   'older open estimates voided (Movegistics allowed several per work request)': 'HHMC allows one estimate in force per work request; the later one is kept, earlier ones are void with a note saying so.',
@@ -184,7 +186,7 @@ async function main() {
     for (const [type, st] of Object.entries(stats))
       console.log(`  ${type}: ${st.created} created, ${st.updated} updated, ${st.unchanged} unchanged, ${st.kept} kept (changed in SAI), ${st.linked} linked to an existing record`);
     console.log(`Loaded in ${((Date.now() - t0) / 1000).toFixed(1)} s.`);
-    const r = reconciliationReport(movegisticsSide(files, refunds), await scoped((s) => ourSide(s, ctx.business.timeZone)), n.issues, EXPLANATIONS, n.followups);
+    const r = reconciliationReport(movegisticsSide(files, refunds, n.openDepositCredits), await scoped((s) => ourSide(s, ctx.business.timeZone)), n.issues, EXPLANATIONS, n.followups);
     report = r.markdown;
     differences = r.differences;
     console.log(`\n${r.summary}\n`);

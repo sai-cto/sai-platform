@@ -433,6 +433,7 @@ async function invoicedRows(s: Scope, b: Bounds, today: string): Promise<Dashboa
 }
 
 /** Non-void invoices not fully paid, as of today (drafts included); their balance in base money. */
+/** Open balance: what customers were billed and still owe. A draft was never sent, so it is not owed yet (PAR-11). */
 async function openRows(s: Scope, today: string): Promise<DashboardRow[]> {
   authorize(s.ctx, P.invoicesRead);
   const rows = await s.db
@@ -440,7 +441,7 @@ async function openRows(s: Scope, today: string): Promise<DashboardRow[]> {
     .from(hhmcInvoices)
     .innerJoin(hhmcJobs, eq(hhmcJobs.id, hhmcInvoices.jobId))
     .innerJoin(customers, eq(customers.id, hhmcInvoices.customerId))
-    .where(and(s.where(hhmcInvoices), s.where(hhmcJobs, 'include'), s.where(customers, 'include'), inArray(hhmcInvoices.status, ['draft', 'sent', 'partially_paid'])))
+    .where(and(s.where(hhmcInvoices), s.where(hhmcJobs, 'include'), s.where(customers, 'include'), inArray(hhmcInvoices.status, ['sent', 'partially_paid'])))
     .orderBy(hhmcInvoices.dueDate, hhmcInvoices.createdAt);
   return rows.map((r) => invoiceRow(r, r.invoice.dueDate, today)).filter((r) => (r.paid?.balanceCents ?? 0) > 0);
 }
