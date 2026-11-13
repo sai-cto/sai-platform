@@ -161,6 +161,30 @@ describe('normalizing: more fields, nothing dropped', () => {
     expect(without.followups.paidInvoicesNotCovered).toEqual(['IN900001']);
   });
 
+  it('an open invoice its own payments already cover is paid; partly covered, it owes only what is left; reconciliation agrees', () => {
+    // Movegistics shows IN900002 "Sent" with its whole $250 due, though $150 was paid against it.
+    const stale = fixture.invoices.replace('"02/01/2026","250.0000000000001","100","PARTIAL_PAID"', '"02/01/2026","250.0000000000001","250","SENT"');
+    const partly = normalize({ ...fixture, invoices: stale });
+    expect(partly.invoices.find((i) => i.sid === 'IN900002')).toMatchObject({ status: 'partially_paid', balanceCents: 10000 });
+    expect(movegisticsSide({ ...fixture, invoices: stale }).openBalance).toBe(10000);
+    expect(movegisticsSide({ ...fixture, invoices: stale }).openBalanceAsShown).toBe(25000);
+    // The rest was paid too, but Movegistics never changed the status.
+    const paid = fixture.payments.replace('"02/02/2026","PM900003","150"', '"02/02/2026","PM900003","250"');
+    const covered = normalize({ ...fixture, invoices: stale, payments: paid });
+    expect(covered.invoices.find((i) => i.sid === 'IN900002')).toMatchObject({ status: 'paid', balanceCents: 0 });
+    expect(covered.issues['open invoices whose own payments cover them in full (imported as paid)']).toBe(1);
+    expect(movegisticsSide({ ...fixture, invoices: stale, payments: paid }).openBalance).toBe(0);
+    // Its placeholder work request is closed with it.
+    expect(covered.jobs.find((j) => j.sid === 'invoice-job:IN900002')!.stage).toBe('closed');
+  });
+
+  it('invoices open more than a year past due are listed for a manager, still counted as open', () => {
+    const n = normalize(fixture, { today: '2027-03-01' });
+    expect(n.followups.staleOpenInvoices).toEqual(['IN900002']);
+    expect(normalize(fixture, { today: '2026-06-01' }).followups.staleOpenInvoices).toEqual([]);
+    expect(n.invoices.find((i) => i.sid === 'IN900002')!.balanceCents).toBe(10000);
+  });
+
   it('partial refunds: listed by id without an amount; the hand-entered amount is used and reconciles', () => {
     const partial = fixture.payments.replace('"Check","No","Blake Sample","","IN900002","CLOSED","RECORDED"', '"Check","No","Blake Sample","","IN900002","CLOSED","PARTIAL_REFUNDED"');
     const before = normalize({ ...fixture, payments: partial });

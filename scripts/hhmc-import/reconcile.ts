@@ -32,12 +32,12 @@ function monthOf(v: string): string {
 }
 
 type Month = string; // YYYY-MM
-type Side = { jobs: Map<Month, number>; invoiced: Map<Month, number>; collected: Map<Month, number>; leads: Map<string, number>; leadsPerMonth: Map<Month, number>; openBalance: number; openBalanceAsExported?: number; invoiceCount: number; paymentCount: number; unverifiedMonths?: Set<Month>; paidNotCovered?: { count: number; cents: number }; paidWithBalance?: number };
+type Side = { jobs: Map<Month, number>; invoiced: Map<Month, number>; collected: Map<Month, number>; leads: Map<string, number>; leadsPerMonth: Map<Month, number>; openBalance: number; openBalanceAsExported?: number; openBalanceAsShown?: number; invoiceCount: number; paymentCount: number; unverifiedMonths?: Set<Month>; paidNotCovered?: { count: number; cents: number }; paidWithBalance?: number };
 const add = (m: Map<string, number>, k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v);
 
 /** `refunds`: hand-entered partial refund amounts (refund-amounts.csv), the same input the import uses. */
 export function movegisticsSide(files: Files, refunds: Map<string, number> = new Map()): Side {
-  const side: Side = { jobs: new Map(), invoiced: new Map(), collected: new Map(), leads: new Map(), leadsPerMonth: new Map(), openBalance: 0, openBalanceAsExported: 0, invoiceCount: 0, paymentCount: 0, unverifiedMonths: new Set(), paidNotCovered: { count: 0, cents: 0 }, paidWithBalance: 0 };
+  const side: Side = { jobs: new Map(), invoiced: new Map(), collected: new Map(), leads: new Map(), leadsPerMonth: new Map(), openBalance: 0, openBalanceAsExported: 0, openBalanceAsShown: 0, invoiceCount: 0, paymentCount: 0, unverifiedMonths: new Set(), paidNotCovered: { count: 0, cents: 0 }, paidWithBalance: 0 };
   for (const r of rowsOf(files.workRequests)) add(side.jobs, monthOf(val(r, 'Work Request Created Date')), 1);
   const received = new Map<string, number>(); // invoice id → money received against it
   for (const r of rowsOf(files.payments)) {
@@ -48,7 +48,7 @@ export function movegisticsSide(files: Files, refunds: Map<string, number> = new
     const refunded = tx === 'PARTIAL_REFUNDED' && refunds.has(val(r, 'Payment ID')) && refunds.get(val(r, 'Payment ID'))! <= amount ? refunds.get(val(r, 'Payment ID'))! : 0;
     add(side.collected, m, tx === 'REFUNDED' ? 0 : amount - refunded);
     if (tx === 'PARTIAL_REFUNDED' && !refunded) side.unverifiedMonths!.add(m);
-    if (val(r, 'Invoice No.') && tx !== 'REFUNDED') received.set(val(r, 'Invoice No.'), (received.get(val(r, 'Invoice No.')) ?? 0) + amount);
+    if (val(r, 'Invoice No.') && tx !== 'REFUNDED') received.set(val(r, 'Invoice No.'), (received.get(val(r, 'Invoice No.')) ?? 0) + amount - refunded);
     side.paymentCount++;
   }
   for (const r of rowsOf(files.invoices)) {
@@ -58,7 +58,12 @@ export function movegisticsSide(files: Files, refunds: Map<string, number> = new
     const exported = Math.max(0, Math.min(money(val(r, 'Balance Due')), amount));
     side.openBalanceAsExported! += exported;
     // An invoice Movegistics marks PAID (or void) owes nothing, whatever its stale "Balance Due" says.
-    side.openBalance += status === 'PAID' || status.startsWith('VOID') || status.startsWith('CANCEL') ? 0 : exported;
+    const closed = status === 'PAID' || status.startsWith('VOID') || status.startsWith('CANCEL');
+    side.openBalanceAsShown! += closed ? 0 : exported;
+    // An open one owes at most what the payments recorded against it leave (Movegistics often
+    // leaves Balance Due untouched after the money came in).
+    const left = Math.max(0, amount - (received.get(val(r, 'Invoice ID')) ?? 0));
+    side.openBalance += closed || left <= 1 ? 0 : Math.min(exported, left);
     if (status === 'PAID' && exported > 0) side.paidWithBalance!++;
     if (status === 'PAID' && (received.get(val(r, 'Invoice ID')) ?? 0) < amount - 1) {
       side.paidNotCovered!.count++;
@@ -171,7 +176,8 @@ export function reconciliationReport(
     '',
     `| | Movegistics | Ours | |`,
     `|---|---|---|---|`,
-    `| Open balance (all invoices; PAID = $0) | ${usd(mg.openBalance)} | ${usd(ours.openBalance)} | ${open} |`,
+    `| Open balance (PAID = $0; an open invoice owes at most what its own payments leave) | ${usd(mg.openBalance)} | ${usd(ours.openBalance)} | ${open} |`,
+    `| Open balance as Movegistics' own list shows it (unpaid statuses, Balance Due as exported) | ${usd(mg.openBalanceAsShown ?? mg.openBalance)} | | higher: it ignores payments recorded against those invoices |`,
     `| "Balance Due" column as Movegistics exports it | ${usd(mg.openBalanceAsExported ?? mg.openBalance)} | | explained below |`,
     `| Invoices | ${mg.invoiceCount} | ${ours.invoiceCount} | ${cell(mg.invoiceCount, ours.invoiceCount, false)} |`,
     `| Payments received | ${mg.paymentCount} | ${ours.paymentCount} | ${cell(mg.paymentCount, ours.paymentCount, false)} |`,
@@ -197,6 +203,7 @@ export function reconciliationReport(
     `- Partial refunds with no amount (add each to \`data/movegistics/refund-amounts.csv\` as "Payment ID","Refunded Amount", then re-run): ${followups.partialRefundsWithoutAmount.join(', ') || 'none'}`,
     `- PAID invoices not covered by any payment or deposit in the export: ${followups.paidInvoicesNotCovered.join(', ') || 'none'}`,
     `- Estimates kept on a placeholder work request (no work request for their contact): ${followups.estimatesOnPlaceholder.join(', ') || 'none'}`,
+    `- Invoices still open more than a year past due (paid outside Movegistics, or to write off?): ${followups.staleOpenInvoices?.join(', ') || 'none'}`,
     '',
   ].join('\n');
   // The headline is written last, after every cell above has counted its difference.

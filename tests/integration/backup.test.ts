@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { backupDatabase, holdsImportedData, restoreDatabase } from '../../scripts/lib/backup';
+import { backupDatabase, backupPilotDatabase, holdsImportedData, restoreDatabase } from '../../scripts/lib/backup';
 import { migrateDatabase } from '../../scripts/lib/db';
 
 const ownerUrl = process.env.TEST_DATABASE_OWNER_URL!;
@@ -94,5 +94,7 @@ describe('backup safety', () => {
   it('refuses a database that is not on this machine', async () => {
     await expect(backupDatabase('postgres://u:p@db.example.com:5432/sai')).rejects.toThrow(/this machine only/);
     await expect(restoreDatabase('postgres://u:p@db.example.com:5432/sai', __filename)).rejects.toThrow(/this machine only/);
+    // ...and the pilot backup is never pointed at the local database by mistake.
+    await expect(backupPilotDatabase(ownerUrl)).rejects.toThrow(/local database/);
   });
 });

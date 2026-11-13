@@ -42,6 +42,9 @@ const EXPLANATIONS: Record<string, string> = {
   'leads with a status the importer does not know (kept as New; the original is on the lead)': 'The original status is shown on the lead under "From Movegistics".',
   'partially refunded payments with the amount from refund-amounts.csv': 'Hand-entered from Movegistics\' payment pages; both sides of the reconciliation use the same amount.',
   "PAID invoices covered by their work request's deposit (credited to the invoice)": 'Movegistics leaves deposits "Unapplied" yet marks the invoice PAID; the deposit is shown on the invoice as deposit received.',
+  'open invoices whose own payments cover them in full (imported as paid)': 'Movegistics left them "Sent" / "Partially paid" with the full Balance Due after payments recorded against them (by invoice number) had covered them. Its own list therefore shows a higher open balance than the money says.',
+  'open invoices whose Balance Due ignored payments recorded against them (balance lowered to what is left)': 'Same, partly paid: the balance is what those payments leave.',
+  'open invoices more than a year past due (listed by id: check in Movegistics whether they were paid)': 'Still counted as open: nothing in the export says they were paid. Listed by id below for a manager to confirm (paid outside Movegistics, or write off).',
   'PAID invoices still not covered by any payment in the export (listed by id below)': 'Movegistics says PAID but its payments export holds no money for them: look each up in Movegistics.',
   'older open estimates voided (Movegistics allowed several per work request)': 'HHMC allows one estimate in force per work request; the later one is kept, earlier ones are void with a note saying so.',
   'invoices with no matching work request (a placeholder work request was made)': 'Kept so invoiced and collected totals reconcile; each is marked in its scope of work. Not counted as work requests.',
@@ -82,10 +85,25 @@ function findExport(dir: string, key: string, fixed: string): string {
 }
 let FILE_NAMES_LIST: Record<string, string> = {};
 
+/**
+ * --real reads data/movegistics/<YYYY-MM-DD>/ (the newest dated folder, or the one --from names),
+ * or the CSVs straight in data/movegistics/ when there are no dated folders. The local database and
+ * the pilot are refreshed from the same folder, so their numbers match.
+ */
+function exportsFolder(from: string | undefined): string {
+  const root = path.join(REPO, 'data', 'movegistics');
+  if (!fs.existsSync(root)) throw new Error('Refusing: data/movegistics/ does not exist. Put the Movegistics exports in data/movegistics/<today>/.');
+  const dated = fs.readdirSync(root).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && fs.statSync(path.join(root, d)).isDirectory()).sort();
+  if (from) {
+    if (!dated.includes(from)) throw new Error(`Refusing: no folder data/movegistics/${from}/ (found: ${dated.join(', ') || 'none'}).`);
+    return path.join(root, from);
+  }
+  return dated.length ? path.join(root, dated.at(-1)!) : root;
+}
+
 async function main() {
   loadEnv();
   const real = process.argv.includes('--real');
-  if (real && arg('--target')) throw new Error('Refusing: --real loads the local database only.');
   if (real && arg('--dir')) throw new Error('Refusing: --real always reads data/movegistics/ (use --dir without --real for another folder).');
   const pilot = arg('--target') === 'pilot';
   if (arg('--target') && !pilot) throw new Error('Refusing: the only --target is "pilot".');
@@ -95,6 +113,17 @@ async function main() {
     pilotHost = (await connectPilotDatabase(arg('--confirm-host'))).label;
     process.env.HHMC_IMPORT_BATCH ??= '50';
     console.log(`Target: the PILOT site's database (${pilotHost}).`);
+    // A copy of the whole pilot database first (nothing is written before it exists), unless the
+    // person made a Neon restore branch themselves and said so.
+    if (!process.argv.includes('--dry-run')) {
+      if (process.argv.includes('--no-backup')) console.log('No backup taken (--no-backup): make sure a Neon restore branch exists.');
+      else {
+        const { backupPilotDatabase } = await import('../lib/backup');
+        const dotenv = await import('dotenv');
+        const owner = dotenv.parse(fs.readFileSync(path.join(REPO, '.env.pilot'))).DATABASE_OWNER_URL;
+        console.log(`Pilot backed up to ${await backupPilotDatabase(owner)} (restore: docs/HHMC-PILOT-REFRESH.md).`);
+      }
+    }
   } else {
     const url = new URL(requireEnv('DATABASE_URL'));
     if (!LOCAL_HOSTS.includes(url.hostname)) throw new Error('Refusing: the HHMC import only runs against a database on this machine (or --target pilot).');
@@ -102,7 +131,8 @@ async function main() {
     const dbName = url.pathname.replace(/^\//, '');
     if (dbName === 'sai_test' || dbName.endsWith('_copy')) throw new Error('Refusing: not the test database or a throw-away copy.');
   }
-  const dir = real ? path.join(REPO, 'data', 'movegistics') : (arg('--dir') ?? path.join(os.homedir(), 'Documents/SAI/hhmc-data/raw')).replace(/^~/, os.homedir());
+  const dir = real ? exportsFolder(arg('--from')) : (arg('--dir') ?? path.join(os.homedir(), 'Documents/SAI/hhmc-data/raw')).replace(/^~/, os.homedir());
+  if (real) console.log(`Exports: ${path.relative(REPO, dir)}`);
   const dryRun = process.argv.includes('--dry-run');
   let clear = process.argv.includes('--clear-live-demo');
 
@@ -113,7 +143,7 @@ async function main() {
   const refundFile = path.join(dir, 'refund-amounts.csv');
   const refunds = fs.existsSync(refundFile) ? parseRefundOverrides(fs.readFileSync(refundFile, 'utf8')) : new Map<string, number>();
   if (refunds.size) console.log(`Read ${refunds.size} hand-entered refund amount(s) from refund-amounts.csv.`);
-  const n = normalize(files, { refunds });
+  const n = normalize(files, { refunds, today: new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) });
   console.log(`Read: ${n.contacts.length} contacts, ${n.leads.length} leads, ${n.jobs.length} work requests, ${n.estimates.length} estimates, ${n.invoices.length} invoices, ${n.payments.length} payments.`);
 
   const { systemContext } = await import('../../src/core/tenancy/system');
@@ -141,7 +171,7 @@ async function main() {
       const before = await scoped(async (s) => ({ customers: await s.db.$count(customers, s.where(customers)), imported: await s.db.$count(hhmcImportRefs, s.where(hhmcImportRefs)) }));
       console.log(`Pilot HHMC live before: ${before.customers} customers, ${before.imported} imported records.`);
     }
-    if (real && !clear) {
+    if (real && !pilot && !clear) {
       // First real import into this database: the fake demo moves go, the settings data stays.
       const { hhmcImportRefs } = await import('../../src/modules/hhmc/schema');
       const { and, eq, notLike } = await import('drizzle-orm');
@@ -168,8 +198,8 @@ async function main() {
     const reports = path.join(REPO, 'data', 'movegistics-reports');
     fs.mkdirSync(reports, { recursive: true, mode: 0o700 });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    out = path.join(reports, `RECONCILIATION-${stamp}.md`);
-    fs.writeFileSync(path.join(reports, 'RECONCILIATION-latest.md'), report, { mode: 0o600 });
+    out = path.join(reports, `RECONCILIATION-${pilot ? 'PILOT-' : ''}${stamp}.md`);
+    fs.writeFileSync(path.join(reports, pilot ? 'RECONCILIATION-PILOT-latest.md' : 'RECONCILIATION-latest.md'), report, { mode: 0o600 });
   } else {
     out = path.join(fs.realpathSync(path.dirname(dir)), pilot ? 'RECONCILIATION-PILOT.md' : 'RECONCILIATION.md');
     if (out.startsWith(fs.realpathSync(REPO) + path.sep)) throw new Error('Refusing to write the reconciliation inside the repository.');

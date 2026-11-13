@@ -33,6 +33,7 @@
     "check": "npm run typecheck && npm run lint && npm run test && npm run secret-scan",
     "hhmc:import": "tsx scripts/hhmc-import/index.ts",
     "hhmc:import:real": "tsx scripts/hhmc-import/index.ts --real",
+    "hhmc:import:pilot": "tsx scripts/hhmc-import/index.ts --real --target pilot",
     "hhmc:perf": "tsx scripts/hhmc-perf.ts",
     "hhmc:sync-to-pilot": "tsx scripts/hhmc-sync/index.ts"
   },

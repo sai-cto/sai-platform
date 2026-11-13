@@ -75,11 +75,11 @@ export type NPayment = {
 
 export type Issues = Record<string, number>;
 /** Movegistics ids (never names) the report lists so a manager can look each one up. */
-export type Followups = { partialRefundsWithoutAmount: string[]; paidInvoicesNotCovered: string[]; estimatesOnPlaceholder: string[] };
+export type Followups = { partialRefundsWithoutAmount: string[]; paidInvoicesNotCovered: string[]; estimatesOnPlaceholder: string[]; staleOpenInvoices?: string[] };
 export type Normalized = { contacts: NContact[]; leads: NLead[]; jobs: NJob[]; estimates: NEstimate[]; invoices: NInvoice[]; payments: NPayment[]; issues: Issues; followups: Followups };
 
 /** Hand-entered corrections (data/movegistics/refund-amounts.csv): Payment ID → refunded cents. */
-export type Overrides = { refunds?: Map<string, number> };
+export type Overrides = { refunds?: Map<string, number>; /** Today (YYYY-MM-DD), for the list of long-overdue invoices. */ today?: string };
 
 /** Reads refund-amounts.csv ("Payment ID","Refunded Amount"). Every row must be valid. */
 export function parseRefundOverrides(text: string): Map<string, number> {
@@ -622,6 +622,36 @@ export function normalize(files: Files, overrides: Overrides = {}): Normalized {
   for (const p of payments) if (!p.invoiceSid && p.jobSid) depositsLeft.set(p.jobSid, (depositsLeft.get(p.jobSid) ?? 0) + netOf(p));
   const paidAgainst = new Map<string, number>();
   for (const p of payments) if (p.invoiceSid) paidAgainst.set(p.invoiceSid, (paidAgainst.get(p.invoiceSid) ?? 0) + netOf(p));
+  // Movegistics often leaves an invoice "Sent" / "Partially paid", its Balance Due untouched, after
+  // the payments recorded AGAINST THAT INVOICE (by invoice number) already cover it. The money is
+  // the truth: covered in full = paid; partly covered = the balance those payments leave.
+  for (const inv of invoices) {
+    if (inv.status === 'paid' || inv.status === 'void') continue;
+    const paidOn = paidAgainst.get(inv.sid) ?? 0;
+    const left = Math.max(0, inv.amountCents - paidOn);
+    if (left <= 1) {
+      inv.status = 'paid';
+      inv.balanceCents = 0;
+      issue('open invoices whose own payments cover them in full (imported as paid)');
+    } else if (inv.balanceCents > left) {
+      inv.balanceCents = left;
+      if (inv.status !== 'draft') inv.status = 'partially_paid';
+      issue('open invoices whose Balance Due ignored payments recorded against them (balance lowered to what is left)');
+    }
+  }
+  // Still open more than a year after it was due: almost certainly settled outside Movegistics (or
+  // written off). Never guessed: listed by id for a manager to check, and counted as open.
+  if (overrides.today) {
+    const yearAgo = `${Number(overrides.today.slice(0, 4)) - 1}${overrides.today.slice(4)}`;
+    followups.staleOpenInvoices = invoices.filter((i) => i.status !== 'paid' && i.status !== 'void' && i.balanceCents > 0 && i.dueDate < yearAgo).map((i) => i.sid);
+    if (followups.staleOpenInvoices.length) issues['open invoices more than a year past due (listed by id: check in Movegistics whether they were paid)'] = followups.staleOpenInvoices.length;
+  }
+  // ...and a work request whose invoices are now all paid is closed.
+  for (const job of jobs) {
+    const list = invoicesOf.get(job.sid);
+    if (!list?.length || job.stage === 'lost' || job.stage === 'cancelled') continue;
+    job.stage = list.every((i) => i.status === 'paid') ? 'closed' : 'completed';
+  }
   for (const inv of [...invoices].sort((a, b) => a.invoiceDate.localeCompare(b.invoiceDate) || a.sid.localeCompare(b.sid))) {
     if (inv.status === 'void') continue;
     const received = inv.amountCents - inv.balanceCents; // what Movegistics counts as paid
