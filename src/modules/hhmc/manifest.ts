@@ -20,6 +20,7 @@ import { CORE, P, permissions } from './permissions';
 import { seedDemoData } from './seed';
 import { processDueAutomationsInScope } from './services/automations';
 import { estimateFunnel, invoiceTotals, leadsThisMonth, upcomingMoves } from './services/dashboard';
+import { searchHhmc } from './services/search';
 import { settingsDefaults, settingsFields, settingsSchema } from './settings';
 
 export const hhmcModule = defineModule({
@@ -128,6 +129,8 @@ export const hhmcModule = defineModule({
       },
     },
   ],
+
+  search: searchHhmc,
 
   // The dashboard's "Booked moves" definition, from today on (one per move, not per truck).
   upcoming: { label: 'Booked moves · from today', permission: P.jobsRead, load: (s) => upcomingMoves(s) },

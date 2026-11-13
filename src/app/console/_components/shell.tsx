@@ -20,6 +20,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Dialog } from 'radix-ui';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { SearchHit } from '@/core/modules/contract';
+import { searchAction } from '@/server/search-actions';
 import { cn } from '@/ui/cn';
 import { Monogram } from '@/ui/monogram';
 import type { NavIcon, NavLink } from '../_lib/nav';
@@ -106,7 +108,7 @@ function SidebarContent({
           className="flex h-8 w-full items-center gap-2 rounded-md border border-zinc-200 bg-white px-2 text-left text-[13px] text-zinc-500 hover:border-zinc-300 focus-visible:outline-2 focus-visible:outline-zinc-900"
         >
           <Search className="size-3.5" aria-hidden="true" />
-          <span className="flex-1">Go to…</span>
+          <span className="flex-1">Search…</span>
           <kbd className="rounded border border-zinc-200 bg-zinc-50 px-1 font-sans text-[10px] text-zinc-500">
             ⌘K
           </kbd>
@@ -221,6 +223,10 @@ export function Shell({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const pendingG = useRef(false);
+  // Search: what is typed in the box, and the current business's records that match it.
+  const [query, setQuery] = useState('');
+  const [hits, setHits] = useState<SearchHit[]>([]);
+  const [searching, setSearching] = useState(false);
 
   const current = useMemo(() => {
     const [, , slug, maybeMode] = pathname.split('/');
@@ -249,6 +255,29 @@ export function Shell({
   useEffect(() => {
     openPaletteRef.current = openPalette;
   });
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!paletteOpen || !current || q.length < 2) {
+      setHits([]);
+      setSearching(false);
+      return;
+    }
+    let stale = false;
+    setSearching(true);
+    // A short pause after typing, so a fast typist sends one search, not one per letter.
+    const timer = setTimeout(async () => {
+      const found = await searchAction(current.business.slug, current.mode, q).catch(() => []);
+      if (!stale) {
+        setHits(found);
+        setSearching(false);
+      }
+    }, 180);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
+  }, [query, paletteOpen, current]);
 
   const paletteItems = useMemo<PaletteItem[]>(
     () => [
@@ -307,8 +336,13 @@ export function Shell({
       }
       pendingG.current = event.key === 'g';
     };
+    const onOpenSearch = () => openPaletteRef.current();
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('sai:open-search', onOpenSearch);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('sai:open-search', onOpenSearch);
+    };
   }, [businesses, current, router]);
 
   const sidebar = (onNavigate?: () => void) => (
@@ -382,7 +416,7 @@ export function Shell({
           </span>
           <button
             type="button"
-            aria-label="Go to…"
+            aria-label="Search"
             onClick={openPalette}
             className="ml-auto flex size-8 items-center justify-center rounded-md text-zinc-700 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-zinc-900"
           >
@@ -402,17 +436,50 @@ export function Shell({
             aria-describedby={undefined}
             className="fixed top-[15vh] left-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-2xl focus:outline-none"
           >
-            <Dialog.Title className="sr-only">Go to a page</Dialog.Title>
-            <Command label="Go to a page">
+            <Dialog.Title className="sr-only">Search</Dialog.Title>
+            <Command label="Search">
               <Command.Input
                 autoFocus
-                placeholder="Type a page or business…"
-                className="h-11 w-full border-b border-zinc-200 px-4 text-sm outline-none placeholder:text-zinc-400"
+                value={query}
+                onValueChange={setQuery}
+                placeholder={current ? 'Search names, phones, emails, numbers… or go to a page' : 'Type a page or business…'}
+                className="h-12 w-full border-b border-zinc-200 px-4 text-base outline-none placeholder:text-zinc-400 sm:text-sm"
               />
-              <Command.List className="max-h-80 overflow-y-auto p-1.5">
+              <Command.List className="max-h-[60vh] overflow-y-auto p-1.5">
+                {searching ? (
+                  <Command.Loading>
+                    <div className="px-3 py-2 text-xs text-zinc-500">Searching…</div>
+                  </Command.Loading>
+                ) : null}
                 <Command.Empty className="px-3 py-6 text-center text-sm text-zinc-500">
-                  Nothing matches.
+                  {searching ? 'Searching…' : query.trim().length >= 2 && current ? 'No records or pages match. Try part of a name, a phone number or a number like J-000123.' : 'Nothing matches.'}
                 </Command.Empty>
+                {[...new Set(hits.map((h) => h.group))].map((group) => (
+                  <Command.Group
+                    key={`hits:${group}`}
+                    heading={group}
+                    className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-zinc-400 [&_[cmdk-group-heading]]:uppercase"
+                  >
+                    {hits
+                      .filter((h) => h.group === group)
+                      .map((hit) => (
+                        <Command.Item
+                          key={hit.href + hit.label}
+                          // The server already matched it: the typed text is part of its value, so it always shows.
+                          value={`${hit.label} ${hit.detail ?? ''} ${hit.href} ${query}`}
+                          onSelect={() => {
+                            setPaletteOpen(false);
+                            setQuery('');
+                            router.push(hit.href);
+                          }}
+                          className="flex min-h-11 cursor-pointer flex-col justify-center rounded-md px-2 py-1 text-sm text-zinc-700 data-[selected=true]:bg-zinc-100 data-[selected=true]:text-zinc-900"
+                        >
+                          <span className="truncate">{hit.label}</span>
+                          {hit.detail ? <span className="truncate text-xs text-zinc-500">{hit.detail}</span> : null}
+                        </Command.Item>
+                      ))}
+                  </Command.Group>
+                ))}
                 {[...new Set(paletteItems.map((i) => i.group))].map((group) => (
                   <Command.Group
                     key={group}
@@ -427,9 +494,10 @@ export function Shell({
                           value={`${item.label} ${item.keywords ?? ''}`}
                           onSelect={() => {
                             setPaletteOpen(false);
+                            setQuery('');
                             router.push(item.href);
                           }}
-                          className="flex h-9 cursor-pointer items-center rounded-md px-2 text-sm text-zinc-700 data-[selected=true]:bg-zinc-100 data-[selected=true]:text-zinc-900"
+                          className="flex min-h-11 cursor-pointer items-center rounded-md px-2 text-sm text-zinc-700 data-[selected=true]:bg-zinc-100 data-[selected=true]:text-zinc-900"
                         >
                           {item.label}
                         </Command.Item>

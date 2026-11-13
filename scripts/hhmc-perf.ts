@@ -29,6 +29,7 @@ async function main() {
   const { listInvoices } = await import('../src/modules/hhmc/services/invoices');
   const { jobPage, leadPage, invoicePage } = await import('../src/modules/hhmc/services/views');
   const { scheduleBetween } = await import('../src/modules/hhmc/services/booking');
+  const { searchHhmc } = await import('../src/modules/hhmc/services/search');
 
   const [gm] = await getDb().select({ id: users.id }).from(users).where(eq(users.email, 'hhmc.admin@sai.example')).limit(1);
   if (!gm) throw new Error('The seed user hhmc.admin@sai.example is missing (npm run db:seed).');
@@ -63,6 +64,10 @@ async function main() {
     ['Contacts', () => listContacts(ctx, {})],
     ['Contacts · search', () => listContacts(ctx, { q: 'ann' })],
     ['Invoices (all)', () => listInvoices(ctx, {}, now)],
+    ['Search · a name', () => searchHhmc(ctx, 'sage', '/x')],
+    ['Search · a phone', () => searchHhmc(ctx, '607 555 01', '/x')],
+    ['Search · a number', () => searchHhmc(ctx, 'IN70100', '/x')],
+    ['Search · no match', () => searchHhmc(ctx, 'zzzz', '/x')],
     [`Calendar · busiest month (${busiest})`, () => calendarBetween(ctx, monthFrom, monthTo, { now })],
     [`Schedule capacity · busiest month (${busiest})`, () => scheduleBetween(ctx, monthFrom, monthTo)],
     ...(job ? ([['Work request page', () => jobPage(ctx, job.id)], ['Contact page', () => contactPage(ctx, job.customerId)]] as [string, () => Promise<unknown>][]) : []),

@@ -168,6 +168,11 @@ export type ModuleManifest = {
   linkPurposes?: LinkPurposeDef[];
   widgets: WidgetDef[];
   /**
+   * The console's search box (Ctrl/Cmd-K) on this business's pages: records matching what was
+   * typed. The module checks what the person may read; at most a few hits per kind.
+   */
+  search?: (ctx: BusinessContext, query: string, basePath: string) => Promise<SearchHit[]>;
+  /**
    * Replaces the Overview's "Upcoming confirmed appointments" (a count of appointments, one per
    * resource) with the module's own count of what is coming up, so the Overview never disagrees
    * with the module's dashboard. Only the label and the count change.
@@ -202,3 +207,6 @@ export function defineModule(manifest: ModuleManifest): ModuleManifest {
 }
 
 export type { ReactNode };
+
+/** One search result: shown under its group, opens `href`. */
+export type SearchHit = { group: string; label: string; detail?: string; href: string };

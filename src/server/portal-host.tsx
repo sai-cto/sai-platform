@@ -9,6 +9,7 @@ import type { PortalDef, PortalPageProps } from '@/core/modules/contract';
 import { matchRoute } from '@/core/modules/portal';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { cn } from '@/ui/cn';
+import { SearchButton } from '@/ui/search-button';
 import { guarded } from './session';
 
 export async function PortalHost({
@@ -103,6 +104,9 @@ export async function PortalHost({
               </Link>
             );
           })}
+          {/* The one search box: same as Ctrl/Cmd-K, on every page of the app. */}
+          <span className="ml-auto" />
+          <SearchButton />
         </nav>
       ) : null}
       {content}
