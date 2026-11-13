@@ -9,3 +9,14 @@
 body {
   @apply bg-neutral-50 text-neutral-900 antialiased;
 }
+
+/* Printing (estimates, invoices): white page, no screen-only chrome, sensible margins. */
+@media print {
+  @page {
+    margin: 14mm 12mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+}

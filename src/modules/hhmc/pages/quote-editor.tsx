@@ -20,14 +20,14 @@ import {
   type PriceLine,
   type SectionKey,
 } from '../services/pricing';
+import { formatMoney } from '@/ui/format';
 
 type Action = (previous: ActionResult | null, formData: FormData) => Promise<ActionResult>;
 
 export type EditorLine = PriceLine & { id: string; name: string; unit: string; description: string | null };
 export type EditorItem = { id: string; name: string; section: SectionKey; unit: string; rateCents: number; category: string };
 
-const usd = (cents: number) =>
-  `${cents < 0 ? '−' : ''}$${(Math.abs(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const usd = formatMoney;
 const pct = (bp: number) => `${bp / 100}%`;
 
 export function QuoteEditor({

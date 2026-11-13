@@ -64,7 +64,7 @@ export async function PortalHost({
   return (
     <div>
       {crumbs.length > 1 ? (
-        <nav aria-label="Breadcrumb" data-testid="breadcrumbs" className="mb-2 text-xs text-zinc-500">
+        <nav aria-label="Breadcrumb" data-testid="breadcrumbs" className="mb-2 text-xs text-zinc-500 print:hidden">
           <ol className="flex flex-wrap items-center gap-1">
             {crumbs.map((c, i) => (
               <li key={`${c.label}-${i}`} className="flex items-center gap-1">
@@ -86,7 +86,7 @@ export async function PortalHost({
       {nav.length > 1 ? (
         <nav
           aria-label="App sections"
-          className="mb-4 flex gap-1 overflow-x-auto rounded-lg border border-zinc-200 bg-zinc-50 p-1"
+          className="mb-4 flex gap-1 overflow-x-auto rounded-lg border border-zinc-200 bg-zinc-50 p-1 print:hidden"
         >
           {nav.map((item) => {
             const active = item.path === activePath;

@@ -365,13 +365,13 @@ export function Shell({
       </a>
 
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 border-r border-zinc-200 bg-zinc-50 lg:block">
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 border-r border-zinc-200 bg-zinc-50 lg:block print:hidden">
         {sidebar()}
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Phone / tablet top bar */}
-        <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-2 border-b border-zinc-200 bg-white px-3 lg:hidden">
+        <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-2 border-b border-zinc-200 bg-white px-3 lg:hidden print:hidden">
           <Dialog.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
             <Dialog.Trigger asChild>
               <button

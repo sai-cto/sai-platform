@@ -56,6 +56,7 @@ import { directionsLink, embedMapUrl, formatRoute, mapsConfigured, routeStops } 
 import { listTrucks } from '../services/booking';
 import { lookupMileageAction } from '../actions';
 import { SourceRecords } from './source-records';
+import { formatPhone } from '@/ui/format';
 
 export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
   const data = await jobPage(ctx, params.id);
@@ -209,7 +210,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                   <>
                     <Link className="hover:underline" href={`${basePath}/contacts/${customer.id}`}>{customerName(customer)}</Link>
                     <span className="block text-xs break-all text-zinc-500">{customer.email ?? 'No email'}</span>
-                    <span className="block text-xs text-zinc-500">{customer.phone ?? 'No phone'}</span>
+                    <span className="block text-xs text-zinc-500">{customer.phone ? formatPhone(customer.phone) : 'No phone'}</span>
                   </>
                 ) : (
                   'Hidden'
@@ -362,6 +363,9 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                         )
                       ) : null}
                       {e.status === 'void' && e.voidReason ? <p className="text-xs text-zinc-500">{e.voidReason}</p> : null}
+                      <Link href={`${basePath}/estimates/${e.id}/print`} className="inline-flex min-h-11 items-center text-xs text-zinc-600 underline hover:text-zinc-900 sm:min-h-0">
+                        Print / PDF
+                      </Link>
                       {canEstimate && (waiting || e.status === 'signed') ? (
                         <div className="flex flex-wrap gap-2">
                           <CopyLinkButton action={estimateLinkAction.bind(null, slug, mode, e.id)} />

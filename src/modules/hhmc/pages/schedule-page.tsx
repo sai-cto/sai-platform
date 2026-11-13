@@ -33,6 +33,7 @@ import {
   type CalendarKind,
 } from '../services/calendar';
 import { formatTime, formatWeekday, hrefWith } from './parts';
+import { formatMonth } from '@/ui/format';
 
 type View = 'day' | 'week' | 'month';
 
@@ -65,7 +66,7 @@ function step(view: View, anchor: string, direction: 1 | -1): string {
 
 const titleFor = (view: View, anchor: string, from: string) =>
   view === 'month'
-    ? new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'long', year: 'numeric' }).format(new Date(`${anchor.slice(0, 7)}-01T00:00:00Z`))
+    ? formatMonth(anchor)
     : view === 'week'
       ? `Week of ${formatWeekday(from)}`
       : formatWeekday(anchor);

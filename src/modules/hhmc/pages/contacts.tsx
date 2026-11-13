@@ -16,6 +16,7 @@ import { CONTACTS_PAGE_SIZE, contactPage, listContacts } from '../services/direc
 import { baseTotalCents } from '../services/pricing';
 import { EstimateStatusBadge, Fact, InvoiceStatusBadge, LeadStatusBadge, StageBadge, formatDay, hrefWith } from './parts';
 import { SourceRecords } from './source-records';
+import { formatPhone } from '@/ui/format';
 
 export async function ContactsPage({ ctx, searchParams, basePath }: PortalPageProps) {
   const page = Math.max(1, Number.parseInt(searchParams.page ?? '1', 10) || 1);
@@ -49,7 +50,7 @@ export async function ContactsPage({ ctx, searchParams, basePath }: PortalPagePr
               {rows.map(({ customer, jobs, lastMove }) => (
                 <tr key={customer.id} className="hover:bg-zinc-50">
                   <Td><Link className="font-medium hover:underline" href={`${base}/${customer.id}`}>{customerName(customer)}</Link></Td>
-                  <Td><span className="block break-all">{customer.email ?? '—'}</span><span className="block text-xs text-zinc-500">{customer.phone ?? ''}</span></Td>
+                  <Td><span className="block break-all">{customer.email ?? '—'}</span><span className="block text-xs text-zinc-500">{customer.phone ? formatPhone(customer.phone) : ''}</span></Td>
                   <Td className="tabular-nums">{jobs ?? '—'}</Td>
                   <Td className="whitespace-nowrap">{lastMove ? formatDay(lastMove) : '—'}</Td>
                   <Td className="text-right">
@@ -80,7 +81,7 @@ export async function ContactPage({ ctx, params, basePath }: PortalPageProps) {
         <Card title="Contact" flush>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-3 p-4 md:grid-cols-4">
             <Fact label="Email">{customer.email ?? '—'}</Fact>
-            <Fact label="Phone">{customer.phone ?? '—'}</Fact>
+            <Fact label="Phone">{formatPhone(customer.phone)}</Fact>
             {jobs ? <Fact label="Work requests">{String(jobs.length)}</Fact> : null}
             {invoices ? <Fact label="Still to pay">{formatMoney(open)}</Fact> : null}
             {customer.notes ? <Fact label="Notes">{customer.notes}</Fact> : null}

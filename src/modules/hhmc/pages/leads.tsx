@@ -29,6 +29,7 @@ import { Disclosure } from './disclosure';
 import { areaClass } from './jobs';
 import { Check, Fact, LeadStatusBadge, Note, Select, formatDay, hrefWith } from './parts';
 import { SourceRecords } from './source-records';
+import { formatPhone } from '@/ui/format';
 
 type Lead = typeof hhmcLeads.$inferSelect;
 
@@ -90,7 +91,7 @@ export async function LeadsPage({ ctx, searchParams, basePath }: PortalPageProps
                   <Td><Link className="font-medium hover:underline" href={`${base}/${lead.id}`}>{lead.leadNumber}</Link></Td>
                   <Td>
                     {`${lead.firstName} ${lead.lastName}`.trim()}
-                    <span className="block text-xs text-zinc-500">{lead.email ?? lead.phone}</span>
+                    <span className="block text-xs text-zinc-500">{lead.email ?? formatPhone(lead.phone)}</span>
                   </Td>
                   <Td>{lead.source}{lead.sourceDetail ? <span className="block text-xs text-zinc-500">{lead.sourceDetail}</span> : null}</Td>
                   <Td className="whitespace-nowrap">{formatDay(lead.moveDate)}</Td>
@@ -223,7 +224,7 @@ export async function LeadPage({ ctx, params, basePath }: PortalPageProps) {
           <Card title="Lead" flush>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-3 p-4 md:grid-cols-3">
               <Fact label="Email">{lead.email ?? '—'}</Fact>
-              <Fact label="Phone">{lead.phone ?? '—'}</Fact>
+              <Fact label="Phone">{formatPhone(lead.phone)}</Fact>
               <Fact label="Source">{lead.source}{lead.sourceDetail ? ` · ${lead.sourceDetail}` : ''}</Fact>
               <Fact label="Move date">{formatDay(lead.moveDate)}</Fact>
               <Fact label="Bedrooms">{lead.bedrooms ?? '—'}</Fact>
@@ -256,7 +257,7 @@ export async function LeadPage({ ctx, params, basePath }: PortalPageProps) {
                 <Note title="Probable duplicate customer">
                   <p>
                     {preview.duplicates.length === 1 ? 'A customer' : `${preview.duplicates.length} customers`} named {lead.firstName} {lead.lastName} already
-                    exist{preview.duplicates.length === 1 ? 's' : ''} with different contact details ({preview.duplicates.map((d) => d.email ?? d.phone ?? 'no contact').join(', ')}).
+                    exist{preview.duplicates.length === 1 ? 's' : ''} with different contact details ({preview.duplicates.map((d) => d.email ?? (d.phone ? formatPhone(d.phone) : 'no contact')).join(', ')}).
                     Tick the box below only if this is a different person.
                   </p>
                 </Note>

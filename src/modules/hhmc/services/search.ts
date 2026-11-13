@@ -8,6 +8,7 @@ import { customers } from '@/core/db/schema/tenant';
 import { withScope } from '@/core/db/scope';
 import type { SearchHit } from '@/core/modules/contract';
 import { can } from '@/core/rbac/permissions';
+import { formatDay, formatPhone } from '@/ui/format';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { CORE, P } from '../permissions';
 import { hhmcEstimates, hhmcInvoices, hhmcJobs, hhmcLeads } from '../schema';
@@ -41,7 +42,7 @@ export async function searchHhmc(ctx: BusinessContext, raw: string, basePath: st
           .limit(50)
       : [];
     for (const c of matchedCustomers.slice(0, PER_KIND))
-      hits.push({ group: 'Contacts', label: personName(c), detail: [c.email, c.phone].filter(Boolean).join(' · '), href: `${basePath}/contacts/${c.id}` });
+      hits.push({ group: 'Contacts', label: personName(c), detail: [c.email, c.phone ? formatPhone(c.phone) : null].filter(Boolean).join(' · '), href: `${basePath}/contacts/${c.id}` });
     const customerIds = matchedCustomers.map((c) => c.id);
 
     if (can(ctx, P.leadsRead)) {
@@ -63,7 +64,7 @@ export async function searchHhmc(ctx: BusinessContext, raw: string, basePath: st
       .orderBy(desc(sql`coalesce(${hhmcJobs.moveDate}, '0001-01-01')`))
       .limit(PER_KIND);
     for (const j of jobs)
-      hits.push({ group: 'Work requests', label: `${j.jobNumber} · ${seesCustomers ? personName(j.customer) : ''}`.replace(/ · $/, ''), detail: [j.moveDate, j.stage.replace('_', ' ')].filter(Boolean).join(' · '), href: `${basePath}/jobs/${j.id}` });
+      hits.push({ group: 'Work requests', label: `${j.jobNumber} · ${seesCustomers ? personName(j.customer) : ''}`.replace(/ · $/, ''), detail: [j.moveDate ? formatDay(j.moveDate) : null, j.stage.replace('_', ' ')].filter(Boolean).join(' · '), href: `${basePath}/jobs/${j.id}` });
 
     const estimates = await s.db
       .select({ id: hhmcEstimates.id, number: hhmcEstimates.estimateNumber, version: hhmcEstimates.version, status: hhmcEstimates.status, jobId: hhmcEstimates.jobId })
@@ -81,7 +82,7 @@ export async function searchHhmc(ctx: BusinessContext, raw: string, basePath: st
         .where(and(s.where(hhmcInvoices), or(ilike(hhmcInvoices.invoiceNumber, pattern), customerIds.length ? inArray(hhmcInvoices.customerId, customerIds) : undefined)))
         .orderBy(desc(hhmcInvoices.invoiceDate))
         .limit(PER_KIND);
-      for (const i of invoices) hits.push({ group: 'Invoices', label: i.number, detail: `${i.date} · ${i.status.replace('_', ' ')}`, href: `${basePath}/invoices/${i.id}` });
+      for (const i of invoices) hits.push({ group: 'Invoices', label: i.number, detail: `${formatDay(i.date)} · ${i.status.replace('_', ' ')}`, href: `${basePath}/invoices/${i.id}` });
     }
     return hits;
   });

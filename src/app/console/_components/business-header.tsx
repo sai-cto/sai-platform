@@ -39,7 +39,7 @@ export function BusinessHeader({
   };
 
   return (
-    <div className="border-b border-zinc-200 bg-white">
+    <div className="border-b border-zinc-200 bg-white print:hidden">
       <div className="h-0.5" style={{ backgroundColor: business.accentColor }} aria-hidden="true" />
       <div className={cn('mx-auto max-w-6xl px-4 pt-4 lg:px-6', tabs.length <= 1 && 'pb-4')}>
         <div className="flex flex-wrap items-center gap-3">

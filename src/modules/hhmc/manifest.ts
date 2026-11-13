@@ -16,6 +16,7 @@ import { JobsPage, NewJobPage } from './pages/jobs';
 import { LeadPage, LeadsPage, NewLeadPage } from './pages/leads';
 import { SchedulePage } from './pages/schedule-page';
 import { SettingsPage } from './pages/settings-page';
+import { EstimatePrintPage, InvoicePrintPage } from './pages/print-pages';
 import { CORE, P, permissions } from './permissions';
 import { seedDemoData } from './seed';
 import { processDueAutomationsInScope } from './services/automations';
@@ -71,6 +72,8 @@ export const hhmcModule = defineModule({
         { path: 'schedule', title: 'Calendar', permission: CORE.schedulingRead, component: SchedulePage },
         { path: 'invoices', title: 'Invoices', permission: P.invoicesRead, component: InvoicesPage },
         { path: 'invoices/:id', title: 'Invoice', permission: P.invoicesRead, component: InvoicePage },
+        { path: 'invoices/:id/print', title: 'Print invoice', permission: P.invoicesRead, component: InvoicePrintPage },
+        { path: 'estimates/:id/print', title: 'Print estimate', permission: P.jobsRead, component: EstimatePrintPage },
         { path: 'settings', title: 'Settings', permission: P.catalogRead, component: SettingsPage },
       ],
     },

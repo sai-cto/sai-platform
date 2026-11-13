@@ -43,7 +43,7 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
         action={stopActingAsAction}
         role="note"
         data-testid="acting-as-banner"
-        className="relative flex flex-wrap items-center justify-center gap-3 bg-amber-500 px-3 py-1.5 text-center text-sm font-semibold text-zinc-950"
+        className="relative flex flex-wrap items-center justify-center gap-3 bg-amber-500 px-3 py-1.5 text-center text-sm font-semibold text-zinc-950 print:hidden"
       >
         <span>
           {acting.name}, you are acting as {ctx.actor.name} ({roleLabel}). What you

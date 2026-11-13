@@ -32,9 +32,9 @@ import {
   type PaidState,
 } from '../services/dashboard';
 import { EstimateStatusBadge, InvoiceStatusBadge, LeadStatusBadge, StageBadge, formatDay, hrefWith } from './parts';
+import { formatMonth } from '@/ui/format';
 
-const monthLabel = (month: string) =>
-  new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', year: 'numeric' }).format(new Date(`${month}-01T00:00:00Z`));
+const monthLabel = (month: string) => formatMonth(month, 'short');
 
 function hoursText(hours: number | null): string {
   if (hours === null) return '—';

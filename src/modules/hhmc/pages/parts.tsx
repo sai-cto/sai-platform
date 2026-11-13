@@ -49,19 +49,8 @@ export function InvoiceStatusBadge({ status, pastDue }: { status: InvoiceStatus;
 }
 
 /** "2026-05-14" → "May 14, 2026". Empty shows a dash. */
-export function formatDay(date: string | null | undefined): string {
-  if (!date) return '—';
-  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(`${date}T00:00:00Z`));
-}
-
-export function formatWeekday(date: string): string {
-  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(`${date}T00:00:00Z`));
-}
-
-/** "8:00 AM" in the business's time zone. */
-export function formatTime(at: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', minute: '2-digit' }).format(at);
-}
+// One formatter each, shared by every screen (src/ui/format.ts); re-exported for the pages here.
+export { formatDay, formatWeekday, formatTime } from '@/ui/format';
 
 export function Select({ className, children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement> & { children: ReactNode }) {
   return (

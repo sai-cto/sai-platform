@@ -103,6 +103,9 @@ export async function InvoicePage({ ctx, params, basePath }: PortalPageProps) {
         actions={
           <>
             <InvoiceStatusBadge status={invoice.status} pastDue={isPastDue(invoice.status, invoice.dueDate, today)} />
+            <Link href={`${basePath}/invoices/${invoice.id}/print`} className={buttonClass({ variant: 'secondary' })}>
+              Print / PDF
+            </Link>
             {canWrite && can(ctx, CORE.notificationsWrite) && (draft || invoice.status === 'sent' || invoice.status === 'partially_paid') ? (
               <ConfirmButton action={sendInvoiceAction.bind(null, slug, mode, invoice.id)} variant={draft ? 'primary' : 'secondary'} confirmTitle={draft ? 'Send this invoice?' : 'Send it again?'} confirmBody={`The customer gets the invoice with a link to pay ${formatMoney(Math.max(balance, 0))}.${draft ? ' A past-due reminder is queued for 8 days later.' : ''}`} confirmLabel="Send">
                 {draft ? 'Send invoice' : 'Resend'}
