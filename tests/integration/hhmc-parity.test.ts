@@ -12,7 +12,7 @@ import { withScope, type Scope } from '@/core/db/scope';
 import { hhmcInvoices, hhmcJobDays, hhmcJobs, hhmcNotes } from '@/modules/hhmc/schema';
 import { P } from '@/modules/hhmc/permissions';
 import { addJobDay, bookJob, markSoldOut, rescheduleJob } from '@/modules/hhmc/services/booking';
-import { loadJob } from '@/modules/hhmc/services/common';
+import { loadJob, trucksOf } from '@/modules/hhmc/services/common';
 import { dashboardSummary } from '@/modules/hhmc/services/dashboard';
 import { recordDeposit } from '@/modules/hhmc/services/estimates';
 import { cancelJob, updateJob } from '@/modules/hhmc/services/jobs';
@@ -39,8 +39,11 @@ describe('booking when no truck is free (OPS-4)', () => {
   it('a day that needs a truck and finds none is refused; "book without a truck" books it with no truck yet', async () => {
     const ctx = await gm();
     const date = dayFromNow(1200 + Math.floor(Math.random() * 300));
-    // The test fleet has three trucks: three moves at the same time take them all.
-    for (let i = 0; i < 3; i++) await bookedJob(ctx, date);
+    // One move per active truck takes the whole fleet (other test files add trucks to this
+    // business, so its size is read, never assumed).
+    const fleet = await withScope(ctx, P.jobsRead, (s) => trucksOf(s));
+    expect(fleet.length).toBeGreaterThan(0);
+    for (let i = 0; i < fleet.length; i++) await bookedJob(ctx, date);
     const { job: fourth } = await signedJob(ctx, date);
     await expect(bookJob(ctx, fourth.id)).rejects.toThrow(/No truck is free on .* book it without a truck for now/);
     expect((await job(ctx, fourth.id)).stage).toBe('estimate_sent'); // nothing changed
