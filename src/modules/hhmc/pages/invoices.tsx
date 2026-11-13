@@ -44,13 +44,13 @@ export async function InvoicesPage({ ctx, searchParams, basePath }: PortalPagePr
       <Card flush>
         <nav aria-label="Invoice status" className="flex flex-wrap gap-1 border-b border-zinc-200 p-2">
           {(['open', 'past_due', 'paid', 'all'] as const).map((c) => (
-            <Link key={c} href={hrefWith(base, {}, { status: c === 'open' ? undefined : c })} aria-current={c === status ? 'page' : undefined} className={buttonClass({ variant: c === status ? 'primary' : 'ghost', size: 'sm' })}>
+            <Link key={c} href={hrefWith(base, {}, { status: c === 'open' ? undefined : c })} aria-current={c === status ? 'page' : undefined} className={buttonClass({ variant: c === status ? 'primary' : 'ghost', size: 'sm', className: 'min-w-11 sm:min-w-0' })}>
               {c === 'open' ? 'Open' : c === 'past_due' ? 'Past due' : c === 'all' ? 'All' : INVOICE_STATUS_LABELS[c]}
             </Link>
           ))}
         </nav>
         {rows.length === 0 ? (
-          <EmptyState title="No invoices here." />
+          <EmptyState title="No invoices here." action={<Link href={base} className={buttonClass({ variant: 'secondary' })}>Clear search and filters</Link>}>Invoices are created on a work request after the move. Try another status.</EmptyState>
         ) : (
           <Table>
             <thead>

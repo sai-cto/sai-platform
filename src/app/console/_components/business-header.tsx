@@ -63,7 +63,7 @@ export function BusinessHeader({
                 href={switchTarget('live')}
                 aria-current={mode === 'live' ? 'true' : undefined}
                 className={cn(
-                  'rounded px-2.5 py-1 text-zinc-600 hover:text-zinc-900',
+                  'flex min-h-11 items-center rounded px-2.5 py-1 text-zinc-600 hover:text-zinc-900 sm:min-h-0',
                   mode === 'live' && 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200',
                 )}
               >
@@ -73,7 +73,7 @@ export function BusinessHeader({
                 href={switchTarget('sandbox')}
                 aria-current={mode === 'sandbox' ? 'true' : undefined}
                 className={cn(
-                  'flex items-center gap-1 rounded px-2.5 py-1 text-zinc-600 hover:text-zinc-900',
+                  'flex min-h-11 items-center gap-1 rounded px-2.5 py-1 text-zinc-600 hover:text-zinc-900 sm:min-h-0',
                   mode === 'sandbox' &&
                     'bg-amber-300 text-amber-950 shadow-sm ring-1 ring-amber-400',
                 )}

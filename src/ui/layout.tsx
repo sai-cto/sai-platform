@@ -77,13 +77,15 @@ export function Stat({
   );
 }
 
-export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
+/** An empty list or page: what it means, and (when there is one) the next thing to do. */
+export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="px-4 py-10 text-center">
+    <div data-testid="empty-state" className="px-4 py-10 text-center">
       <p className="text-sm font-medium text-zinc-900">{title}</p>
       {children ? (
         <div className="mx-auto mt-1 max-w-md text-sm text-zinc-500">{children}</div>
       ) : null}
+      {action ? <div className="mt-3 flex flex-wrap justify-center gap-2">{action}</div> : null}
     </div>
   );
 }
@@ -147,4 +149,4 @@ export function Field({
 }
 
 export const inputClass =
-  'h-8 w-full min-w-0 rounded-md border border-zinc-300 bg-white px-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus-visible:border-zinc-900 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-500';
+  'h-11 w-full min-w-0 rounded-md border border-zinc-300 bg-white px-2.5 text-base sm:h-8 sm:text-sm text-zinc-900 placeholder:text-zinc-400 focus-visible:border-zinc-900 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-500';

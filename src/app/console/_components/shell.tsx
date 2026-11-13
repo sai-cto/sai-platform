@@ -20,11 +20,12 @@ import {
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Dialog } from 'radix-ui';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { SearchHit } from '@/core/modules/contract';
 import { searchAction } from '@/server/search-actions';
 import { cn } from '@/ui/cn';
 import { Monogram } from '@/ui/monogram';
+import { NavProgress } from '@/ui/nav-progress';
 import type { NavIcon, NavLink } from '../_lib/nav';
 
 export type ShellBusiness = { slug: string; code: string; name: string; accentColor: string };
@@ -185,7 +186,7 @@ function SidebarContent({
               type="submit"
               aria-label="Sign out"
               title="Sign out"
-              className="flex size-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-200/60 hover:text-zinc-900 focus-visible:outline-2 focus-visible:outline-zinc-900"
+              className="flex size-11 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-200/60 hover:text-zinc-900 lg:size-8 focus-visible:outline-2 focus-visible:outline-zinc-900"
             >
               <LogOut className="size-4" aria-hidden="true" />
             </button>
@@ -359,6 +360,9 @@ export function Shell({
 
   return (
     <div className="flex min-h-screen bg-white">
+      <Suspense fallback={null}>
+        <NavProgress />
+      </Suspense>
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-zinc-900 focus:px-3 focus:py-2 focus:text-sm focus:text-white"
@@ -379,7 +383,7 @@ export function Shell({
               <button
                 type="button"
                 aria-label="Open menu"
-                className="flex size-8 items-center justify-center rounded-md text-zinc-700 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-zinc-900"
+                className="flex size-11 items-center justify-center rounded-md text-zinc-700 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-zinc-900"
               >
                 <Menu className="size-5" aria-hidden="true" />
               </button>
@@ -395,7 +399,7 @@ export function Shell({
                   <button
                     type="button"
                     aria-label="Close menu"
-                    className="absolute top-2 right-2 flex size-8 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-200/60"
+                    className="absolute top-1 right-1 flex size-11 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-200/60"
                   >
                     <X className="size-4" aria-hidden="true" />
                   </button>
@@ -414,7 +418,7 @@ export function Shell({
             type="button"
             aria-label="Search"
             onClick={openPalette}
-            className="ml-auto flex size-8 items-center justify-center rounded-md text-zinc-700 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-zinc-900"
+            className="ml-auto flex size-11 items-center justify-center rounded-md text-zinc-700 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-zinc-900"
           >
             <Search className="size-4" aria-hidden="true" />
           </button>

@@ -13,7 +13,8 @@ export const buttonClass = cva(
         danger: 'border border-red-200 bg-white text-red-700 hover:bg-red-50',
         dangerSolid: 'bg-red-600 text-white hover:bg-red-700',
       },
-      size: { sm: 'h-7 px-2.5 text-xs', md: 'h-8 px-3 text-sm' },
+      // On a phone every button is a 44px tap target; from the sm breakpoint up, the compact sizes.
+      size: { sm: 'h-11 px-3 text-sm sm:h-7 sm:px-2.5 sm:text-xs', md: 'h-11 px-3 text-sm sm:h-8' },
     },
     defaultVariants: { variant: 'secondary', size: 'md' },
   },

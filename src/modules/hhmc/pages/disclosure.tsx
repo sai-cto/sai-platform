@@ -23,7 +23,7 @@ export function Disclosure({
       onToggle={(event) => setOpen(event.currentTarget.open)}
       className="group border-t border-zinc-200"
     >
-      <summary className="cursor-pointer list-none px-4 py-2.5 text-sm font-medium text-zinc-700 select-none hover:text-zinc-900 [&::-webkit-details-marker]:hidden">
+      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-zinc-700 select-none hover:text-zinc-900 [&::-webkit-details-marker]:hidden">
         <span className="mr-1.5 inline-block text-zinc-400 transition-transform group-open:rotate-90">
           ›
         </span>

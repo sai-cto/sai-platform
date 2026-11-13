@@ -72,7 +72,7 @@ export async function LeadsPage({ ctx, searchParams, basePath }: PortalPageProps
           <button type="submit" className={buttonClass({ variant: 'secondary' })}>Show</button>
         </form>
         {rows.length === 0 ? (
-          <EmptyState title="No leads match." />
+          <EmptyState title="No leads match." action={<>{<Link href={base} className={buttonClass({ variant: 'secondary' })}>Clear search and filters</Link>}{can(ctx, P.leadsWrite) ? <Link href={`${basePath}/leads/new`} className={buttonClass({ variant: 'primary' })}>Add lead</Link> : null}</>}>Try another status or a shorter search, or add one.</EmptyState>
         ) : (
           <Table>
             <thead>

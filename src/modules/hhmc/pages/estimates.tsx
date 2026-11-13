@@ -47,7 +47,7 @@ export async function EstimatesPage({ ctx, searchParams, basePath }: PortalPageP
           <button type="submit" className={buttonClass({ variant: 'secondary' })}>Show</button>
         </form>
         {rows.length === 0 ? (
-          <EmptyState title="No estimates match." />
+          <EmptyState title="No estimates match." action={<Link href={base} className={buttonClass({ variant: 'secondary' })}>Clear search and filters</Link>}>Estimates are built on a work request. Try another status or a shorter search.</EmptyState>
         ) : (
           <Table>
             <thead>

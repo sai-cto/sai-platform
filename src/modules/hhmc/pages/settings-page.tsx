@@ -73,7 +73,7 @@ export async function SettingsPage({ ctx, searchParams, basePath }: PortalPagePr
             key={a.key}
             href={`${basePath}/settings?area=${a.key}`}
             aria-current={a.key === area ? 'page' : undefined}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm ${a.key === area ? 'border-zinc-900 font-medium text-zinc-900' : 'border-transparent text-zinc-600 hover:text-zinc-900'}`}
+            className={`-mb-px flex min-h-11 items-center border-b-2 px-3 py-2 text-sm sm:min-h-0 ${a.key === area ? 'border-zinc-900 font-medium text-zinc-900' : 'border-transparent text-zinc-600 hover:text-zinc-900'}`}
           >
             {a.label}
           </Link>

@@ -70,10 +70,11 @@ export async function PortalHost({
         <nav aria-label="Breadcrumb" data-testid="breadcrumbs" className="mb-2 text-xs text-zinc-500 print:hidden">
           <ol className="flex flex-wrap items-center gap-1">
             {crumbs.map((c, i) => (
-              <li key={`${c.label}-${i}`} className="flex items-center gap-1">
-                {i > 0 ? <span aria-hidden="true">›</span> : null}
+              // On a phone the business name is already in the top bar: the trail starts at the section.
+              <li key={`${c.label}-${i}`} className={`items-center gap-1 ${i === 0 ? 'hidden sm:flex' : 'flex'}`}>
+                {i > 0 ? <span aria-hidden="true" className={i === 1 ? 'hidden sm:inline' : undefined}>›</span> : null}
                 {c.href && i < crumbs.length - 1 ? (
-                  <Link href={c.href} className="hover:text-zinc-900 hover:underline">
+                  <Link href={c.href} className="inline-flex min-h-11 items-center hover:text-zinc-900 hover:underline sm:min-h-0">
                     {c.label}
                   </Link>
                 ) : (
@@ -99,7 +100,7 @@ export async function PortalHost({
                 href={item.path ? `${basePath}/${item.path}` : basePath}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'shrink-0 rounded-md px-3 py-1.5 text-[13px] whitespace-nowrap text-zinc-600 hover:text-zinc-900',
+                  'flex min-h-11 shrink-0 items-center rounded-md px-3 py-1.5 text-[13px] whitespace-nowrap text-zinc-600 hover:text-zinc-900 sm:min-h-0',
                   active && 'bg-white font-medium text-zinc-900 shadow-sm ring-1 ring-zinc-200',
                 )}
               >

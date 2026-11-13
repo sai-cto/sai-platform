@@ -34,7 +34,7 @@ export async function ContactsPage({ ctx, searchParams, basePath }: PortalPagePr
           <button type="submit" className={buttonClass({ variant: 'secondary' })}>Show</button>
         </form>
         {rows.length === 0 ? (
-          <EmptyState title="No contacts match." />
+          <EmptyState title="No contacts match." action={<Link href={base} className={buttonClass({ variant: 'secondary' })}>Clear search and filters</Link>}>Contacts are added when a lead or work request is created. Try a shorter search: part of a name, phone or email.</EmptyState>
         ) : (
           <Table>
             <thead>

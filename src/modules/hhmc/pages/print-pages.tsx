@@ -25,7 +25,7 @@ function Sheet({ brand, title, number, back, children }: { brand: ReturnType<typ
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
-        <Link href={back} className="text-sm text-zinc-600 hover:text-zinc-900 hover:underline">
+        <Link href={back} className="inline-flex min-h-11 items-center text-sm text-zinc-600 hover:text-zinc-900 hover:underline">
           ← Back
         </Link>
         <span className="flex items-center gap-2 text-xs text-zinc-500">

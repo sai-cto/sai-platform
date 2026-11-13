@@ -181,7 +181,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
               </div>
               <div className="flex flex-wrap gap-2">
                 {mapLink ? (
-                  <a href={mapLink} target="_blank" rel="noopener noreferrer" className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50">
+                  <a href={mapLink} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 sm:min-h-0">
                     Open in Google Maps ↗
                   </a>
                 ) : null}
@@ -208,7 +208,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
               <Fact label="Customer">
                 {customer ? (
                   <>
-                    <Link className="hover:underline" href={`${basePath}/contacts/${customer.id}`}>{customerName(customer)}</Link>
+                    <Link className="inline-flex min-h-11 items-center hover:underline sm:min-h-0" href={`${basePath}/contacts/${customer.id}`}>{customerName(customer)}</Link>
                     <span className="block text-xs break-all text-zinc-500">{customer.email ?? 'No email'}</span>
                     <span className="block text-xs text-zinc-500">{customer.phone ? formatPhone(customer.phone) : 'No phone'}</span>
                   </>
@@ -230,7 +230,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
               <Fact label="To">{job.destinationAddress ?? '—'}{access(job.destinationAccess, job.destinationNotes) ? <span className="block text-xs text-zinc-500">{access(job.destinationAccess, job.destinationNotes)}</span> : null}</Fact>
               <Fact label="Distance">{job.distanceTenths !== null ? `${(job.distanceTenths / 10).toFixed(1)} mi${job.driveMinutes !== null ? ` · ${job.driveMinutes} min` : ''}` : '—'}{job.ownTruck ? <span className="block text-xs text-zinc-500">Customer&apos;s own truck</span> : null}{job.cornellian ? <span className="block text-xs text-zinc-500">Cornellian</span> : null}</Fact>
               {job.extraStops.length ? <Fact label="Extra stops">{job.extraStops.join('; ')}</Fact> : null}
-              <Fact label="Source">{`${job.source}${job.sourceDetail ? ` · ${job.sourceDetail}` : ''}`}{data.lead ? <Link className="block text-xs hover:underline" href={`${basePath}/leads/${data.lead.id}`}>{`From lead ${data.lead.leadNumber}`}</Link> : null}</Fact>
+              <Fact label="Source">{`${job.source}${job.sourceDetail ? ` · ${job.sourceDetail}` : ''}`}{data.lead ? <Link className="flex min-h-11 items-center text-xs hover:underline sm:block sm:min-h-0" href={`${basePath}/leads/${data.lead.id}`}>{`From lead ${data.lead.leadNumber}`}</Link> : null}</Fact>
               <Fact label="Owner">{job.ownerName ?? '—'}{job.coordinators.length ? <span className="block text-xs text-zinc-500">{`Coordinators: ${job.coordinators.join(', ')}`}</span> : null}</Fact>
               {job.companyName || job.poNumber ? <Fact label="Company / PO">{[job.companyName, job.poNumber].filter(Boolean).join(' · ')}</Fact> : null}
               {job.lostReason ? <Fact label="Lost because">{job.lostReason}</Fact> : null}
@@ -456,7 +456,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                 <ul className="divide-y divide-zinc-100">
                   {invoices.map((i) => (
                     <li key={i.id} className="flex flex-wrap items-center gap-2 px-4 py-3 text-sm">
-                      <Link className="font-medium hover:underline" href={`${basePath}/invoices/${i.id}`}>{i.invoiceNumber}</Link>
+                      <Link className="inline-flex min-h-11 items-center font-medium hover:underline sm:min-h-0" href={`${basePath}/invoices/${i.id}`}>{i.invoiceNumber}</Link>
                       <InvoiceStatusBadge status={i.status} />
                       <span className="tabular-nums">{formatMoney(baseTotalCents(i))}</span>
                       <span className="text-xs text-zinc-500">{`Balance ${formatMoney(Math.max(balanceOf(i), 0))} · due ${formatDay(i.dueDate)}`}</span>

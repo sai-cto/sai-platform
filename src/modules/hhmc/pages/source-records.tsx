@@ -19,7 +19,7 @@ export function SourceRecords({ records }: { records: SourceRecord[] }) {
       <p className="px-4 pb-2 text-xs text-zinc-500">Everything the Movegistics export held for this record, as exported (blank columns left out).</p>
       {records.map((r) => (
         <details key={`${r.type}:${r.sourceId}`} className="group border-t border-zinc-200">
-          <summary className="cursor-pointer list-none px-4 py-2.5 text-sm font-medium text-zinc-700 select-none hover:text-zinc-900 [&::-webkit-details-marker]:hidden">
+          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-zinc-700 select-none hover:text-zinc-900 [&::-webkit-details-marker]:hidden">
             <span className="mr-1.5 inline-block text-zinc-400 transition-transform group-open:rotate-90">›</span>
             {`${TYPE_LABELS[r.type] ?? r.type} ${r.sourceId}`}
           </summary>

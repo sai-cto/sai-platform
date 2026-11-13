@@ -49,7 +49,7 @@ export async function JobsPage({ ctx, searchParams, basePath }: PortalPageProps)
           <button type="submit" className={buttonClass({ variant: 'secondary' })}>Show</button>
         </form>
         {rows.length === 0 ? (
-          <EmptyState title="No work requests match." />
+          <EmptyState title="No work requests match." action={<>{<Link href={base} className={buttonClass({ variant: 'secondary' })}>Clear search and filters</Link>}{can(ctx, P.jobsWrite) ? <Link href={`${basePath}/jobs/new`} className={buttonClass({ variant: 'primary' })}>New work request</Link> : null}</>}>Try another stage or a shorter search, or start a new one.</EmptyState>
         ) : (
           <Table>
             <thead>

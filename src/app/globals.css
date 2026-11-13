@@ -20,3 +20,18 @@ body {
     background: #fff !important;
   }
 }
+
+@keyframes nav-progress {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+
+/* Phone: a checkbox or radio is pressed through its label, so the label is the 44px tap target. */
+@media (max-width: 639px) {
+  label:has(> input[type='checkbox']),
+  label:has(> input[type='radio']) {
+    min-height: 2.75rem;
+    display: flex;
+    align-items: center;
+  }
+}

@@ -8,7 +8,7 @@ export function SearchButton() {
     <button
       type="button"
       onClick={() => window.dispatchEvent(new Event('sai:open-search'))}
-      className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] whitespace-nowrap text-zinc-600 hover:bg-white hover:text-zinc-900 focus-visible:outline-2 focus-visible:outline-zinc-900"
+      className="flex min-h-11 sm:min-h-9 shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] whitespace-nowrap text-zinc-600 hover:bg-white hover:text-zinc-900 focus-visible:outline-2 focus-visible:outline-zinc-900"
     >
       <Search className="size-3.5" aria-hidden="true" />
       Search

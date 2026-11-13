@@ -151,7 +151,7 @@ export async function SchedulePage({ ctx, searchParams, basePath }: PortalPagePr
     const text = eventText(e, tz);
     const label = `${CALENDAR_KIND_LABELS[e.kind]}: ${text.main} · ${text.detail}`;
     return (
-      <Link key={e.key} href={href(e)} title={label} aria-label={label} className={cn('block min-w-0 rounded-r border border-l-4 px-1.5 py-0.5 text-[11px] leading-tight', look.chip)}>
+      <Link key={e.key} href={href(e)} title={label} aria-label={label} className={cn('block min-w-0 rounded-r border border-l-4 px-1.5 py-0.5 text-[11px] leading-tight max-md:min-h-11 max-md:py-1.5 max-md:text-xs', look.chip)}>
         <span className="flex min-w-0 items-baseline gap-1">
           <span aria-hidden="true" className="shrink-0">{look.symbol}</span>
           <span className="shrink-0 font-semibold">{look.short}</span>
@@ -172,14 +172,14 @@ export async function SchedulePage({ ctx, searchParams, basePath }: PortalPagePr
           <div className="flex flex-wrap items-center gap-2">
             <nav aria-label="Calendar view" className="flex rounded-md border border-zinc-300 bg-white p-0.5">
               {(['month', 'week', 'day'] as const).map((v) => (
-                <Link key={v} href={link(v, anchor)} aria-current={v === view ? 'page' : undefined} className={cn('rounded px-2.5 py-1 text-xs capitalize', v === view ? 'bg-zinc-900 text-white' : 'text-zinc-700 hover:bg-zinc-100')}>
+                <Link key={v} href={link(v, anchor)} aria-current={v === view ? 'page' : undefined} className={cn('flex min-h-11 items-center rounded px-3 py-1 text-sm capitalize sm:min-h-0 sm:px-2.5 sm:text-xs', v === view ? 'bg-zinc-900 text-white' : 'text-zinc-700 hover:bg-zinc-100')}>
                   {v}
                 </Link>
               ))}
             </nav>
-            <Link className={buttonClass({ variant: 'secondary', size: 'sm' })} href={link(view, step(view, anchor, -1))} aria-label="Previous">←</Link>
+            <Link className={buttonClass({ variant: 'secondary', size: 'sm', className: 'min-w-11 sm:min-w-0' })} href={link(view, step(view, anchor, -1))} aria-label="Previous">←</Link>
             <Link className={buttonClass({ variant: 'secondary', size: 'sm' })} href={link(view, today)}>Today</Link>
-            <Link className={buttonClass({ variant: 'secondary', size: 'sm' })} href={link(view, step(view, anchor, 1))} aria-label="Next">→</Link>
+            <Link className={buttonClass({ variant: 'secondary', size: 'sm', className: 'min-w-11 sm:min-w-0' })} href={link(view, step(view, anchor, 1))} aria-label="Next">→</Link>
           </div>
         }
       />
@@ -196,7 +196,7 @@ export async function SchedulePage({ ctx, searchParams, basePath }: PortalPagePr
                   href={toggle(k)}
                   aria-label={`${CALENDAR_KIND_LABELS[k]}: ${shown ? 'shown' : 'hidden'}. ${shown ? 'Hide' : 'Show'} them.`}
                   className={cn(
-                    'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs',
+                    'inline-flex min-h-11 items-center gap-1.5 rounded-md border px-2 py-1 text-xs sm:min-h-0',
                     shown ? 'border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50' : 'border-dashed border-zinc-300 bg-zinc-50 text-zinc-600 hover:bg-white',
                   )}
                 >
@@ -239,7 +239,7 @@ export async function SchedulePage({ ctx, searchParams, basePath }: PortalPagePr
             {days.filter((d) => d.date.slice(0, 7) === thisMonth && (d.events.length || d.schedule?.soldOut)).map((d) => (
               <Card key={d.date}>
                 <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
-                  <Link href={link('day', d.date)} className="text-sm font-medium hover:underline">{formatWeekday(d.date)}</Link>
+                  <Link href={link('day', d.date)} className="inline-flex min-h-11 items-center text-sm font-medium hover:underline md:min-h-0">{formatWeekday(d.date)}</Link>
                   {d.schedule?.soldOut ? <Badge tone="red">Sold out</Badge> : d.schedule?.entries.length ? capacity(d.schedule) : null}
                 </div>
                 <div className="space-y-1">{d.events.map(event)}</div>
@@ -253,7 +253,7 @@ export async function SchedulePage({ ctx, searchParams, basePath }: PortalPagePr
           {days.map((d) => (
             <Card key={d.date} className={cn('min-w-0', d.schedule?.soldOut && 'border-red-200')}>
               <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
-                <Link href={link('day', d.date)} className="text-sm font-medium hover:underline">{formatWeekday(d.date)}</Link>
+                <Link href={link('day', d.date)} className="inline-flex min-h-11 items-center text-sm font-medium hover:underline md:min-h-0">{formatWeekday(d.date)}</Link>
                 {d.schedule?.soldOut ? <Badge tone="red">Sold out</Badge> : null}
               </div>
               {capacity(d.schedule)}
