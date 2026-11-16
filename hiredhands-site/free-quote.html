@@ -64,14 +64,14 @@
       <ul id="error-summary-list"></ul>
     </div>
 
-    <!-- TODO: Show this only after the request has really been delivered, once a destination is chosen (see the form action below). -->
+    <!-- Shown only after SAI Console has saved the request (js/quote-form.js). -->
     <div class="form-success" id="form-success" tabindex="-1" aria-labelledby="form-success-title" hidden>
       <h2 id="form-success-title">Thank you. We&rsquo;ve received your quote request.</h2>
       <p>We&rsquo;ll get back to you with an estimate within 12 hours. If you need us sooner, call <a href="tel:+16075243150">(607) 524-3150</a>.</p>
     </div>
 
-    <!-- TODO: Set the form action to the real quote destination. Leads currently go to Movegistics; nothing is sent while action="#". Do not connect a third-party service without sign-off. -->
-    <form id="quote-form" action="#" method="post" novalidate>
+    <!-- Submitting creates a lead in SAI Console (POST /api/public/website-lead on the platform). The address is data-endpoint, read by js/quote-form.js. -->
+    <form id="quote-form" action="#" method="post" novalidate data-endpoint="https://sai-platform-nu.vercel.app/api/public/website-lead">
       <p class="required-note"><span class="req" aria-hidden="true">*</span> All fields are required.</p>
 
       <fieldset>
@@ -170,6 +170,14 @@
             <span class="field-error" id="customer-note-error"></span>
           </div>
       </fieldset>
+
+      <!-- Spam trap: people never see or fill this in. A bot that does is ignored. -->
+      <div class="visually-hidden" aria-hidden="true">
+        <label for="website">Leave this field empty</label>
+        <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+      </div>
+
+      <p class="field-error" id="send-error" role="alert" hidden></p>
 
       <div class="form-actions">
         <button class="btn btn-primary" type="submit">Get a Free Quote</button>

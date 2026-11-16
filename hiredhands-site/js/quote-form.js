@@ -1,7 +1,8 @@
 /* Hired Hands Moving Company: free quote form validation.
    Every field is required. Validates on blur and on submit, writes inline errors
    (aria-invalid + aria-describedby) and an error summary that takes focus on a failed submit.
-   Nothing is sent anywhere: see the TODO on the form's action attribute in free-quote.html. */
+   A valid form is sent as JSON to the address in the form's data-endpoint (SAI Console), which
+   creates a lead. "Thank you" is shown only once it has been saved. */
 (function () {
   "use strict";
 
@@ -158,12 +159,56 @@
       return;
     }
 
-    // TODO: Send the request to the real destination here once one is chosen. Nothing is sent while action="#".
     summary.hidden = true;
-    form.reset();
-    if (moveDate) moveDate.min = todayISO();
-    form.hidden = true;
-    success.hidden = false;
-    success.focus();
+    send();
   });
+
+  /* ----- Send: the lead is created in SAI Console ----- */
+  var sendError = document.getElementById("send-error");
+  var submitButton = form.querySelector('button[type="submit"]');
+  var sending = false;
+  var FALLBACK = "We couldn't send your request. Please try again, or call us at (607) 524-3150.";
+
+  function fail(message) {
+    sendError.textContent = message || FALLBACK;
+    sendError.hidden = false;
+    sending = false;
+    submitButton.disabled = false;
+    sendError.scrollIntoView({ block: "center" });
+  }
+
+  function send() {
+    if (sending) return;
+    sending = true;
+    submitButton.disabled = true;
+    sendError.hidden = true;
+
+    var data = {};
+    new FormData(form).forEach(function (value, key) {
+      data[key] = typeof value === "string" ? value.trim() : "";
+    });
+
+    fetch(form.getAttribute("data-endpoint"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    })
+      .then(function (response) {
+        return response.json().then(
+          function (json) { return { ok: response.ok && json && json.ok === true, error: json && json.error }; },
+          function () { return { ok: false }; }
+        );
+      })
+      .then(function (result) {
+        if (!result.ok) return fail(result.error);
+        form.reset();
+        if (moveDate) moveDate.min = todayISO();
+        form.hidden = true;
+        success.hidden = false;
+        success.focus();
+        sending = false;
+        submitButton.disabled = false;
+      })
+      .catch(function () { fail(); });
+  }
 })();
