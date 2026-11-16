@@ -381,3 +381,16 @@ The CTO's direction: a like-for-like Movegistics replacement on all of HHMC's re
 | PAR-8 | Lookup indexes `(business_id, parent id)` on HHMC child tables (migration 0013). | Under row-level security the environment enum is not leakproof, so it can't be an index condition: `(business, environment, x)` indexes scanned a whole business per lookup. |
 
 No new dependencies.
+
+
+## The Hired Hands website's quote form becomes a lead (16 Nov 2026) — NEEDS JAI REVIEW
+
+The CTO asked that a quote request filled in on the new Hired Hands website (`hiredhands-site`) appear in SAI Console. Until now that form sent nothing.
+
+| # | Decision | Why / how to change it |
+|---|---|---|
+| WEB-1 | **A module may declare a public intake** (`ModuleManifest.publicIntakes`): one narrow way for a website the business owns to add ONE kind of record with no sign-in. The visitor is "Website (intake)": no user id, role `customer_link` (the existing "someone without an account" role), and exactly the module permissions the intake lists, never a core one (`validateRegistry()` checks). HHMC declares one, `hhmc.website-lead`, holding only `hhmc.leads.write`. It is NOT the system actor, which stays for seeds and tests. | A public form has no user and no link. Reusing the system actor would give the open internet every permission. `src/core/intake/intake.ts`, `src/modules/hhmc/services/website-intake.ts`. |
+| WEB-2 | **`POST /api/public/website-lead`** (skips the demo access gate; it has its own checks): the site must be in `WEBSITE_INTAKE_ORIGINS` (unset = 404); the business (`hhmc`) and the intake are fixed in the route; the environment is `WEBSITE_INTAKE_ENVIRONMENT`, **default `sandbox`**, so a first test never lands among real leads; a body over 20 kB, a filled hidden `website` field (a bot; answered "ok", nothing created) and more than 5 requests per address in 10 minutes are refused or ignored. The lead keeps its own rules (a name, an email or phone, a real date) and is saved as source "Website" with the note "Created from the quote form on the Hired Hands website". | The Origin check stops other websites' pages, not a script that sets its own header; the per-address count is per server instance. The real defence against floods is a Vercel firewall rate-limit rule on this path. Switch `WEBSITE_INTAKE_ENVIRONMENT` to `live` only when the site goes live. |
+| WEB-3 | **The site's form posts the same fields as JSON and shows "thank you" only after the lead is saved**; otherwise it shows an error with the phone number and keeps what was typed. | Before, a valid submit cleared the form and showed "thank you" with nothing sent. |
+
+No new dependencies.
