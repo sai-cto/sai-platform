@@ -23,6 +23,7 @@ import { seedDemoData } from './seed';
 import { processDueAutomationsInScope } from './services/automations';
 import { estimateFunnel, invoiceTotals, leadsThisMonth, upcomingMoves } from './services/dashboard';
 import { searchHhmc } from './services/search';
+import { submitWebsiteLead } from './services/website-intake';
 import { settingsDefaults, settingsFields, settingsSchema } from './settings';
 
 export const hhmcModule = defineModule({
@@ -86,6 +87,10 @@ export const hhmcModule = defineModule({
       routes: [{ path: '', title: 'Your move', permission: CORE.customersRead, component: CustomerPage }],
     },
   },
+
+  // A website without an account may do exactly this (src/core/intake): the quote form on the
+  // Hired Hands site creating a lead. Nothing else, and it can read nothing.
+  publicIntakes: [{ key: 'hhmc.website-lead', permissions: [P.leadsWrite], run: submitWebsiteLead }],
 
   // Customer links (src/core/links): exactly what each kind of link may do. The services also
   // check that the link is for the one record being touched.

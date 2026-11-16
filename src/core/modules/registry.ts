@@ -90,6 +90,15 @@ export function validateRegistry(): string[] {
           );
       }
     }
+    // Public intakes: a website without an account may hold only this module's permissions.
+    for (const intake of mod.publicIntakes ?? []) {
+      if (!intake.key.startsWith(`${mod.key}.`))
+        problems.push(`Public intake "${intake.key}" must start with "${mod.key}.".`);
+      for (const permission of intake.permissions) {
+        if (!permissionKeys.has(permission))
+          problems.push(`Public intake "${intake.key}" may not hold "${permission}" (only ${mod.key} permissions).`);
+      }
+    }
     for (const task of mod.scheduledTasks ?? []) {
       if (!task.key.startsWith(`${mod.key}.`))
         problems.push(`Scheduled task "${task.key}" must start with "${mod.key}.".`);

@@ -112,12 +112,13 @@ export function slowDown(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, process.env.NODE_ENV === 'test' ? 0 : 800));
 }
 
-/** Paths that skip the access gate: health check, the gate itself, the scheduler (own secret), static files. */
+/** Paths that skip the access gate: health check, the gate itself, the scheduler (own secret), the website intake (own checks), static files. */
 export function bypassesAccessGate(pathname: string): boolean {
   return (
     pathname === '/access' ||
     pathname === '/api/health' ||
     pathname.startsWith('/api/cron/') ||
+    pathname.startsWith('/api/public/') ||
     pathname.startsWith('/_next/') ||
     pathname === '/icon.svg' ||
     pathname === '/favicon.ico'

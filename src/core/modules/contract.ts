@@ -139,6 +139,21 @@ export type LinkPurposeDef = {
   permissions: string[];
 };
 
+/**
+ * A public intake: a way for a website the business owns to put ONE kind of record into the
+ * business (a quote request becoming a lead). The visitor has no account and no link, so the
+ * door is narrow: it holds exactly `permissions` (module permissions only, checked by
+ * validateRegistry()) and `run` must check everything the website sent.
+ */
+export type PublicIntakeDef = {
+  /** Must start with "<module key>.". */
+  key: string;
+  /** Exactly what the intake may do. Module permissions only, never a core one. */
+  permissions: string[];
+  /** Turns what the website sent into a record. Throws ValidationError for bad input. */
+  run: (ctx: BusinessContext, body: unknown) => Promise<void>;
+};
+
 export type ModuleManifest = {
   /** Must equal the slug of the business this module serves (the name used in its URLs). */
   key: string;
@@ -166,6 +181,7 @@ export type ModuleManifest = {
   scheduledTasks?: { key: string; settingKey?: string; run: (s: Scope, now: Date) => Promise<string> }[];
   /** Customer links this module hands out. Served at /l/<token>/… from portals.customer. */
   linkPurposes?: LinkPurposeDef[];
+  publicIntakes?: PublicIntakeDef[];
   widgets: WidgetDef[];
   /**
    * The console's search box (Ctrl/Cmd-K) on this business's pages: records matching what was
