@@ -11,9 +11,10 @@ import type { PortalPageProps } from '@/core/modules/contract';
 import { can } from '@/core/rbac/permissions';
 import { ActionForm } from '@/ui/action-form';
 import { ConfirmButton } from '@/ui/confirm-button';
-import { formatMoney } from '@/ui/format';
+import { formatDateTime, formatMoney } from '@/ui/format';
 import { Card, Field, PageHeader, Table, Td, Th, inputClass } from '@/ui/layout';
-import { addTruckAction, catalogItemAction, newCatalogItemAction, ruleAction, runDueEmailsAction, templateAction } from '../actions';
+import { addTruckAction, catalogItemAction, newCatalogItemAction, ruleAction, runDueEmailsAction, templateAction, termsPdfAction } from '../actions';
+import { termsPdfInfo } from '../services/terms-pdf';
 import { truckSizeOf } from '../rules';
 import { CORE, P } from '../permissions';
 import type { AutomationTrigger } from '../schema';
@@ -63,6 +64,7 @@ export async function SettingsPage({ ctx, searchParams, basePath }: PortalPagePr
   const consoleSettings = can(ctx, 'business.settings.read') ? <Link className="underline" href={`/console/${slug}/settings`}>Settings tab</Link> : 'Settings tab (tech team)';
   const templateFor = (key: string) => data.templates.find((t) => t.key === key);
   const brand = brandOf(settings, ctx.business.name);
+  const termsPdf = area === 'documents' && can(ctx, CORE.filesRead) ? await termsPdfInfo(ctx) : null;
 
   return (
     <>
@@ -208,6 +210,32 @@ export async function SettingsPage({ ctx, searchParams, basePath }: PortalPagePr
                 <p className="text-xs">{brand.footer}</p>
               </div>
             </div>
+          </Card>
+          <Card
+            title="Terms & Conditions (PDF)"
+            description="The full terms. Customers can open it from their estimate link before signing, and each signed estimate records which version they were shown."
+          >
+            {termsPdf ? (
+              <p className="text-sm">
+                {can(ctx, CORE.filesRead) ? (
+                  <a className="underline" href={`/console/${slug}/${mode}/files/${termsPdf.fileId}`} target="_blank" rel="noopener noreferrer">{termsPdf.filename}</a>
+                ) : (
+                  termsPdf.filename
+                )}
+                <span className="block text-xs text-zinc-500">{`Version ${termsPdf.version} · uploaded ${formatDateTime(termsPdf.uploadedAt)}`}</span>
+              </p>
+            ) : (
+              <p className="text-sm text-amber-800">No PDF yet: customers see only the terms text below until one is uploaded.</p>
+            )}
+            {canWrite && can(ctx, CORE.filesWrite) ? (
+              <div className="mt-3">
+                <ActionForm action={termsPdfAction.bind(null, slug, mode)} submitLabel={termsPdf ? 'Upload a new version' : 'Upload'} submitVariant="secondary">
+                  <Field label="PDF file" htmlFor="terms-pdf" help="Up to 10 MB. Earlier versions are kept.">
+                    <input id="terms-pdf" name="file" type="file" accept="application/pdf,.pdf" required className="block text-sm" />
+                  </Field>
+                </ActionForm>
+              </div>
+            ) : null}
           </Card>
           <Card title="Terms, valuation and other email wording" flush>
             <ul className="divide-y divide-zinc-100">

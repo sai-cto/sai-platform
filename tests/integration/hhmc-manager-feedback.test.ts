@@ -1,14 +1,22 @@
 /**
  * HHMC managers' feedback round 1 (Nov 2026): a converted lead's notes on its work request, and
- * the Leads list showing every lead. The service-type rule and the confirmed-only calendar have
+ * the Leads list showing every lead, and the Terms & Conditions PDF on the estimate link. The service-type rule and the confirmed-only calendar have
  * their own tests (hhmc-service-type.test.ts, hhmc-calendar.test.ts).
  */
+import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
+import { withScope } from '@/core/db/scope';
+import { NotFoundError } from '@/core/errors';
+import { buildLinkContext, openLinkFile } from '@/core/links/links';
+import type { BusinessContext } from '@/core/tenancy/context';
+import { hhmcEstimates } from '@/modules/hhmc/schema';
+import { customerLinkFor, sendEstimate, signEstimateByLink } from '@/modules/hhmc/services/estimates';
+import { NO_TERMS_PDF, TERMS_PDF_LINK_NAME, termsPdfInfo, uploadTermsPdf } from '@/modules/hhmc/services/terms-pdf';
 import { addNote } from '@/modules/hhmc/services/jobs';
 import { convertLead, createLead, disqualifyLead, listLeads } from '@/modules/hhmc/services/leads';
 import { jobPage } from '@/modules/hhmc/services/views';
 import { USERS, ctxFor } from './helpers';
-import { dayFromNow, gm, tag } from './hhmc-helpers';
+import { dayFromNow, gm, newJob, signedJob, tag } from './hhmc-helpers';
 
 async function lead(extra: Record<string, unknown> = {}) {
   const t = tag();
@@ -70,5 +78,46 @@ describe('managers see all leads', () => {
       const { rows } = await listLeads(await ctxFor(who, 'hhmc'), { q: `AllLeads${t}` });
       expect(rows.map((r) => r.id).sort()).toEqual([open.id, gone.id].sort());
     }
+  });
+});
+
+describe('the full Terms & Conditions PDF on the estimate link', () => {
+  const pdfBytes = (label: string) => new TextEncoder().encode(`%PDF-1.4\n% fake terms for tests: ${label}\n%%EOF\n`);
+  const signedTermsOf = (ctx: BusinessContext, id: string) =>
+    withScope(ctx, 'hhmc.jobs.read', async (s) => (await s.db.select().from(hhmcEstimates).where(eq(hhmcEstimates.id, id)))[0]);
+  const tokenOf = async (ctx: BusinessContext, estimateId: string) => (await customerLinkFor(ctx, estimateId)).split('/l/')[1];
+
+  it('without a PDF the signing record says so (test mode has none)', async () => {
+    const ctx = await gm('sandbox');
+    expect(await termsPdfInfo(ctx)).toBeNull();
+    const { estimate } = await signedJob(ctx);
+    const row = await signedTermsOf(ctx, estimate.id);
+    expect(row.signedTermsVersion).toBe(NO_TERMS_PDF);
+    await expect(openLinkFile(await tokenOf(ctx, estimate.id), TERMS_PDF_LINK_NAME)).rejects.toThrow(NotFoundError);
+  });
+
+  it('only a real PDF is accepted, and only by someone who may change the settings', async () => {
+    await expect(uploadTermsPdf(await gm(), { filename: 'terms.txt', bytes: new TextEncoder().encode('plain text') })).rejects.toThrow(/not a PDF/);
+    const staff = await ctxFor(USERS.hhmcStaff, 'hhmc');
+    if (!staff.permissions.has('hhmc.catalog.write')) await expect(uploadTermsPdf(staff, { filename: 't.pdf', bytes: pdfBytes('staff') })).rejects.toThrow();
+  });
+
+  it('the link opens the PDF before signing, and the signature records the version shown', async () => {
+    const ctx = await gm();
+    const pdf = await uploadTermsPdf(ctx, { filename: 'Hired Hands terms.pdf', bytes: pdfBytes(tag()) });
+    expect((await termsPdfInfo(ctx))?.version).toBe(pdf.version);
+    const job = await newJob(ctx);
+    const estimate = await sendEstimate(ctx, job.id);
+    expect(estimate.snapshot.termsPdf?.version).toBe(pdf.version);
+    const token = await tokenOf(ctx, estimate.id);
+    const file = await openLinkFile(token, TERMS_PDF_LINK_NAME);
+    expect(file.contentType).toBe('application/pdf');
+    expect(new TextDecoder().decode(file.bytes.slice(0, 5))).toBe('%PDF-');
+    await expect(openLinkFile(token, 'other.pdf')).rejects.toThrow(NotFoundError);
+    // A newer upload does not change what this estimate shows or records.
+    await uploadTermsPdf(ctx, { filename: 'terms v2.pdf', bytes: pdfBytes(tag()) });
+    await signEstimateByLink(await buildLinkContext(token), { valuationInitials: 'NC', signatureName: 'Notes Carry', agree: true, ip: null, userAgent: null });
+    const row = await signedTermsOf(ctx, estimate.id);
+    expect(row.signedTermsVersion).toBe(pdf.version);
   });
 });

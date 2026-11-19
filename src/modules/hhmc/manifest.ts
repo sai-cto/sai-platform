@@ -4,6 +4,7 @@
  * docs/hhmc-analysis/movegistics-reference.md.
  */
 import { defineModule } from '@/core/modules/contract';
+import { termsPdfByLink } from './services/terms-pdf';
 import { formatMoney, formatNumber } from '@/ui/format';
 import { entities, jobEntity } from './entities';
 import { ContactPage, ContactsPage } from './pages/contacts';
@@ -98,6 +99,8 @@ export const hhmcModule = defineModule({
     {
       key: 'hhmc.estimate',
       permissions: [P.customerEstimate, P.jobsRead, P.jobsWrite, P.estimatesWrite, P.catalogRead, CORE.customersRead, CORE.paymentsRead, CORE.paymentsWrite, CORE.notificationsWrite, CORE.filesRead, CORE.filesWrite],
+      // The full Terms & Conditions PDF, readable before signing.
+      files: termsPdfByLink,
     },
     {
       key: 'hhmc.invoice',

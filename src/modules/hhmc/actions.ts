@@ -8,6 +8,7 @@
  * browser sends is trusted: every check is in the services.
  */
 import { isPaymentMethod } from './services/manual-payment';
+import { uploadTermsPdf } from './services/terms-pdf';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { ValidationError } from '@/core/errors';
@@ -537,6 +538,15 @@ export async function templateAction(slug: string, mode: string, id: string, _p:
   return run(slug, mode, async (ctx) => {
     await updateTemplate(ctx, id, { subject: text(form, 'subject'), body: text(form, 'body') });
     return 'Saved.';
+  });
+}
+
+export async function termsPdfAction(slug: string, mode: string, _p: Form, form: FormData) {
+  return run(slug, mode, async (ctx) => {
+    const file = form.get('file');
+    if (!(file instanceof File) || file.size === 0) throw new ValidationError('Choose the Terms & Conditions PDF.');
+    const pdf = await uploadTermsPdf(ctx, { filename: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
+    return `Uploaded. Estimates sent from now on link to version ${pdf.version}.`;
   });
 }
 

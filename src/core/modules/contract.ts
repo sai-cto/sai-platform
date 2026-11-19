@@ -137,7 +137,15 @@ export type LinkPurposeDef = {
    * LINK_ALLOWED_CORE_PERMISSIONS (src/core/links/links.ts). Checked by validateRegistry().
    */
   permissions: string[];
+  /**
+   * Files the link may open, by name, at /l/<token>/file/<name> (e.g. the terms PDF shown
+   * before signing). Returns null for a name it does not serve; runs with the link's context.
+   */
+  files?: (ctx: BusinessContext, name: string) => Promise<LinkFile | null>;
 };
+
+/** A file served to a customer link (inline, never cached). */
+export type LinkFile = { filename: string; contentType: string; bytes: Uint8Array };
 
 /**
  * A public intake: a way for a website the business owns to put ONE kind of record into the
