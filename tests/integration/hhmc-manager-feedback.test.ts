@@ -9,7 +9,9 @@ import { withScope } from '@/core/db/scope';
 import { NotFoundError } from '@/core/errors';
 import { buildLinkContext, openLinkFile } from '@/core/links/links';
 import type { BusinessContext } from '@/core/tenancy/context';
+import { CATEGORY_GROUPS, CHARGE_GROUPS, chargeGroupOf } from '@/modules/hhmc/charge-groups';
 import { hhmcEstimates } from '@/modules/hhmc/schema';
+import { CATALOG } from '@/modules/hhmc/seed-data';
 import { customerLinkFor, sendEstimate, signEstimateByLink } from '@/modules/hhmc/services/estimates';
 import { NO_TERMS_PDF, TERMS_PDF_LINK_NAME, termsPdfInfo, uploadTermsPdf } from '@/modules/hhmc/services/terms-pdf';
 import { addNote } from '@/modules/hhmc/services/jobs';
@@ -119,5 +121,14 @@ describe('the full Terms & Conditions PDF on the estimate link', () => {
     await signEstimateByLink(await buildLinkContext(token), { valuationInitials: 'NC', signatureName: 'Notes Carry', agree: true, ip: null, userAgent: null });
     const row = await signedTermsOf(ctx, estimate.id);
     expect(row.signedTermsVersion).toBe(pdf.version);
+  });
+});
+
+describe('charge groups on the quote', () => {
+  it('every catalog item belongs to exactly one of the five groups', () => {
+    const groups = CATALOG.map((c) => chargeGroupOf(c));
+    for (const g of groups) expect(CHARGE_GROUPS).toContain(g);
+    // Every category in the catalog is mapped on purpose, not by the fallback.
+    for (const c of CATALOG) expect(Object.keys(CATEGORY_GROUPS), c.category).toContain(c.category);
   });
 });
