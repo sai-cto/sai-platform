@@ -261,7 +261,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                         ? 'Add both addresses to get the mileage.'
                         : mapsReady
                           ? 'Not looked up yet.'
-                          : 'Automatic mileage is not set up yet. Type the miles in the estimate builder for now.'}
+                          : 'Automatic mileage is not set up yet. Add a mileage line to the quote for now.'}
                   {routeText ? (longDistance ? ` Long distance (over ${settings.longDistanceMiles} mi).` : ` Local (up to ${settings.longDistanceMiles} mi).`) : ''}
                 </p>
                 <ol className="mt-2 space-y-0.5 text-sm">

@@ -86,9 +86,9 @@ export function MoveDetails({
         <Fact label="Service type">
           {SERVICE_TYPE_LABELS[job.serviceType]}
           <span className="block text-xs text-zinc-500">
-            {overridden
-              ? `Chosen by staff${job.suggestedServiceType && job.suggestedServiceType !== job.serviceType ? ` (the addresses say ${SERVICE_TYPE_LABELS[job.suggestedServiceType]})` : ''}`
-              : decision.reason}
+            {decision.serviceType === job.serviceType
+              ? `${overridden ? 'Chosen by staff. ' : ''}${decision.reason}`
+              : `${overridden ? 'Chosen by staff' : 'Not re-checked'}${decision.serviceType ? `: the addresses say ${SERVICE_TYPE_LABELS[decision.serviceType]} (${decision.reason})` : ''}`}
           </span>
           {decision.states.length ? <span className="block text-xs text-zinc-500">{`States: ${decision.states.join(', ')}`}</span> : null}
           {!job.routeChecked && routeStops(job).length >= 2 ? <span className="block text-xs text-amber-700">Route not checked</span> : null}
