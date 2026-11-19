@@ -38,7 +38,7 @@ import {
   voidEstimateAction,
 } from '../actions';
 import { CORE, P } from '../permissions';
-import { CALL_OUTCOME_LABELS, localDate, quoteEditable, SERVICE_TYPE_LABELS, TERMS_LABELS } from '../rules';
+import { CALL_OUTCOME_LABELS, localDate, quoteEditable, TERMS_LABELS } from '../rules';
 import { INVOICE_TERMS } from '../schema';
 import { depositDueByCard } from '../services/estimates';
 import { balanceOf } from '../services/invoices';
@@ -51,13 +51,13 @@ import { JobFields, areaClass } from './jobs';
 import { ManualPaymentFields } from './payment-fields';
 import { Check, EstimateStatusBadge, Fact, InvoiceStatusBadge, Note, Select, StageBadge, formatDay, formatTime } from './parts';
 import { QuoteEditor } from './quote-editor';
-import { ACCESS_LABELS, EstimateBuilder } from './estimate-builder';
+import { MoveDetails } from './move-details';
+import { EstimateBuilder } from './estimate-builder';
 import { loadSettings } from '../settings';
 import { directionsLink, embedMapUrl, formatRoute, mapsConfigured, routeStops } from '../services/maps';
-import { listTrucks } from '../services/booking';
+import { depositCovered, listTrucks } from '../services/booking';
 import { lookupMileageAction } from '../actions';
 import { SourceRecords } from './source-records';
-import { formatPhone } from '@/ui/format';
 
 export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
   const data = await jobPage(ctx, params.id);
@@ -75,6 +75,8 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
   const editable = canWrite && quoteEditable(job.stage) && !signedEstimate;
   const openInvoice = (invoices ?? []).find((i) => i.status !== 'void');
   const signed = liveEstimate?.status === 'signed' ? liveEstimate : null;
+  // Confirmed = the 20% deposit is paid (managers' feedback round 1): bookJob refuses otherwise.
+  const depositOk = signed !== null && depositCovered(depositPaid, signed.depositCents);
   const settings = await loadSettings(ctx);
   const fleet = await listTrucks(ctx);
   const pickedTrucks = job.truckIds.map((id) => fleet.find((t) => t.id === id)?.name).filter((n): n is string => Boolean(n));
@@ -84,8 +86,6 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
   const routeText = formatRoute(job.distanceTenths, job.driveMinutes);
   const mapsReady = mapsConfigured();
   const longDistance = job.distanceTenths !== null && job.distanceTenths > Math.round(settings.longDistanceMiles * 10);
-  const access = (flags: string[], notes: string | null) =>
-    [flags.map((f) => ACCESS_LABELS[f as keyof typeof ACCESS_LABELS] ?? f).join(', '), notes].filter(Boolean).join(' — ');
 
   return (
     <>
@@ -100,7 +100,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
         actions={
           <>
             <StageBadge stage={job.stage} />
-            {data.readyToBook ? <Badge tone="green">Ready to book</Badge> : null}
+            {data.readyToBook && depositOk ? <Badge tone="green">Ready to confirm</Badge> : null}
             {canEstimate && (job.stage === 'qualified' || job.stage === 'estimate_sent') && !signed ? (
               <ConfirmButton
                 action={sendEstimateAction.bind(null, slug, mode, job.id)}
@@ -117,33 +117,36 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                 {liveEstimate ? 'Send new version' : 'Send estimate'}
               </ConfirmButton>
             ) : null}
-            {canBook && job.stage === 'estimate_sent' && signed && days.length === 0 ? (
-              <span className="text-xs text-amber-800">Add a job day (the move date) below before booking.</span>
+            {canBook && job.stage === 'estimate_sent' && signed && !depositOk ? (
+              <span className="text-xs text-amber-800">{`Confirmed once the deposit (${formatMoney(signed.depositCents)}) is paid: only then does the move go on the calendar.`}</span>
             ) : null}
-            {canBook && job.stage === 'estimate_sent' && signed && days.length > 0 ? (
+            {canBook && job.stage === 'estimate_sent' && signed && depositOk && days.length === 0 ? (
+              <span className="text-xs text-amber-800">Add a job day (the move date) below before confirming.</span>
+            ) : null}
+            {canBook && job.stage === 'estimate_sent' && signed && depositOk && days.length > 0 ? (
               <ConfirmButton
                 action={bookJobAction.bind(null, slug, mode, job.id)}
                 variant="primary"
-                confirmTitle="Book this move?"
-                confirmBody={`Books ${days.length} job day${days.length === 1 ? '' : 's'} on the schedule and emails "You're booked".${signed.depositPaidCents > 0 ? '' : ' The deposit has NOT been paid yet.'}`}
-                confirmLabel="Book"
+                confirmTitle="Confirm this move?"
+                confirmBody={`The deposit is paid. Puts ${days.length} job day${days.length === 1 ? '' : 's'} on the calendar as the official work order and emails "You're booked". The balance stays due.`}
+                confirmLabel="Confirm"
               >
-                Book this move
+                Confirm move
               </ConfirmButton>
             ) : null}
-            {canBook && job.stage === 'estimate_sent' && signed && days.length > 0 ? (
+            {canBook && job.stage === 'estimate_sent' && signed && depositOk && days.length > 0 ? (
               <ConfirmButton
                 action={bookJobAction.bind(null, slug, mode, job.id, true)}
-                confirmTitle="Book without a truck for now?"
-                confirmBody="Books the move even if no truck is free on a day; the calendar shows it as having no truck yet until you sort the trucks out."
-                confirmLabel="Book without a truck"
+                confirmTitle="Confirm without a truck for now?"
+                confirmBody="Confirms the move even if no truck is free on a day; the calendar shows it as having no truck yet until you sort the trucks out."
+                confirmLabel="Confirm without a truck"
               >
-                Book without a truck
+                Confirm without a truck
               </ConfirmButton>
             ) : null}
             {canBook && job.stage === 'booked' ? (
-              <ConfirmButton action={releaseBookingAction.bind(null, slug, mode, job.id)} confirmTitle="Release the booking?" confirmBody="Its appointments are cancelled and the job goes back to Estimate Sent." confirmLabel="Release booking">
-                Release booking
+              <ConfirmButton action={releaseBookingAction.bind(null, slug, mode, job.id)} confirmTitle="Take it off the calendar?" confirmBody="Its appointments are cancelled and the job goes back to Estimate sent." confirmLabel="Release">
+                Release (unconfirm)
               </ConfirmButton>
             ) : null}
             {canWrite && job.stage === 'lost' ? <ConfirmButton action={reopenJobAction.bind(null, slug, mode, job.id)}>Reopen</ConfirmButton> : null}
@@ -153,6 +156,96 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
 
       <div className="grid gap-5 xl:grid-cols-3">
         <div className="min-w-0 space-y-5 xl:col-span-2">
+          <Card title="Quote" description={editable ? 'The one price for this move. Sending makes a frozen, versioned estimate.' : 'Locked: the signed estimate is the price.'} flush>
+            <MoveDetails
+              job={job}
+              customer={customer}
+              dayDates={days.map((d) => d.dayDate)}
+              pickedTrucks={pickedTrucks}
+              source={source}
+              lead={data.lead}
+              basePath={basePath}
+              localMaxMiles={settings.localServiceMaxMiles}
+              extra={
+                <>
+                  <Fact label="Follow-up emails">
+                    {job.automationOptIn ? 'On' : 'Off'}
+                    {canWrite ? (
+                      <span className="ml-2">
+                        <ConfirmButton action={optInAction.bind(null, slug, mode, job.id, !job.automationOptIn)} variant="ghost">{job.automationOptIn ? 'Turn off' : 'Turn on'}</ConfirmButton>
+                      </span>
+                    ) : null}
+                  </Fact>
+                </>
+              }
+            />
+            {canWrite && job.stage !== 'closed' && job.stage !== 'cancelled' ? (
+              <Disclosure summary="Edit move details">
+                <ActionForm action={updateJobAction.bind(null, slug, mode, job.id)} submitLabel="Save" resetOnSuccess={false}>
+                  <JobFields show="details" job={job} trucks={fleet} dateLocked={job.stage === 'booked' ? 'Confirmed: change the date with Reschedule.' : job.stage === 'completed' ? 'The move is done.' : undefined} />
+                </ActionForm>
+              </Disclosure>
+            ) : null}
+            {editable ? (
+              <Disclosure summary="Build the estimate from the move details" startOpen={quote.lines.length === 0}>
+                <EstimateBuilder
+                  slug={slug}
+                  mode={mode}
+                  job={job}
+                  catalog={data.catalog.map((c) => ({ id: c.id, name: c.name, section: c.section, unit: c.unit, rateCents: c.rateCents, category: c.category }))}
+                  hasLines={quote.lines.length > 0}
+                  pickedTrucks={pickedTrucks}
+                  cornellianPerHour={settings.cornellianDiscountPerHour}
+                />
+              </Disclosure>
+            ) : null}
+            <QuoteEditor
+              lines={quote.lines.map((l) => ({ id: l.id, section: l.section, name: l.name, unit: l.unit, qtyHundredths: l.qtyHundredths, rateCents: l.rateCents, discountType: l.discountType, discountValue: l.discountValue, description: l.description }))}
+              catalog={data.catalog.map((c) => ({ id: c.id, name: c.name, section: c.section, unit: c.unit, rateCents: c.rateCents, category: c.category }))}
+              options={quote.options}
+              editable={editable}
+              addLine={addQuoteLineAction.bind(null, slug, mode, job.id)}
+              removeLine={editable ? Object.fromEntries(quote.lines.map((l) => [l.id, removeQuoteLineAction.bind(null, slug, mode, job.id, l.id)])) : null}
+              saveOptions={quoteOptionsAction.bind(null, slug, mode, job.id)}
+            />
+            {editable && data.discounts.length ? (
+              <Disclosure summary="Apply a discount to every line">
+                <ActionForm action={quoteDiscountAction.bind(null, slug, mode, job.id)} submitLabel="Apply" submitVariant="secondary">
+                  <Field label="Discount" htmlFor="q-discount">
+                    <Select id="q-discount" name="discountId">
+                      {data.discounts.map((d) => <option key={d.id} value={d.id}>{`${d.name} (${d.percentBp / 100}%)`}</option>)}
+                    </Select>
+                  </Field>
+                </ActionForm>
+              </Disclosure>
+            ) : null}
+          </Card>
+
+          <Card title="Locations" flush>
+            {canWrite && job.stage !== 'closed' && job.stage !== 'cancelled' ? (
+              <Disclosure summary="Change details">
+                <ActionForm action={updateJobAction.bind(null, slug, mode, job.id)} submitLabel="Save" resetOnSuccess={false}>
+                  <JobFields show="locations" job={job} />
+                </ActionForm>
+              </Disclosure>
+            ) : (
+              <p className="p-4 text-sm text-zinc-500">{routeStops(job).join(' → ') || 'No addresses.'}</p>
+            )}
+            {canBook && job.stage === 'booked' ? (
+              <Disclosure summary="Reschedule">
+                <ActionForm action={rescheduleJobAction.bind(null, slug, mode, job.id)} submitLabel="Reschedule">
+                  <p className="text-sm text-zinc-600">{`Every day moves by the same number of days (now ${days.map((d) => formatDay(d.dayDate)).join(', ')}). Trucks are checked again for the new days.`}</p>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Field label="New move date" htmlFor="rs-date"><input id="rs-date" name="date" type="date" required min={localDate(new Date(), ctx.business.timeZone)} defaultValue={days[0]?.dayDate ?? ''} className={inputClass} /></Field>
+                    <Field label="New start time (optional)" htmlFor="rs-time"><input id="rs-time" name="startTime" type="time" className={inputClass} /></Field>
+                    <Field label="Reason (optional)" htmlFor="rs-reason"><input id="rs-reason" name="reason" maxLength={300} className={inputClass} placeholder="e.g. Customer asked" /></Field>
+                  </div>
+                  <Check name="allowNoTruck" label="Book without a truck if none is free" />
+                </ActionForm>
+              </Disclosure>
+            ) : null}
+          </Card>
+
           <Card title="Route and mileage" flush>
             <div className="flex flex-wrap items-start justify-between gap-3 p-4">
               <div className="min-w-0 space-y-1 text-sm">
@@ -201,133 +294,6 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                 loading="lazy"
                 referrerPolicy="strict-origin-when-cross-origin"
               />
-            ) : null}
-          </Card>
-
-          <Card title="Move" flush>
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 p-4 md:grid-cols-4">
-              <Fact label="Customer">
-                {customer ? (
-                  <>
-                    <Link className="inline-flex min-h-11 items-center hover:underline sm:min-h-0" href={`${basePath}/contacts/${customer.id}`}>{customerName(customer)}</Link>
-                    <span className="block text-xs break-all text-zinc-500">{customer.email ?? 'No email'}</span>
-                    <span className="block text-xs text-zinc-500">{customer.phone ? formatPhone(customer.phone) : 'No phone'}</span>
-                  </>
-                ) : (
-                  'Hidden'
-                )}
-              </Fact>
-              <Fact label="Move date">
-                {formatDay(job.moveDate)}
-                {job.tentative ? <span className="block text-xs text-amber-700">Tentative</span> : null}
-                <span className="block text-xs text-zinc-500">{job.arrivalWindow ?? ''}</span>
-              </Fact>
-              <Fact label="Service">{`${SERVICE_TYPE_LABELS[job.serviceType]} · ${job.jobType}`}</Fact>
-              <Fact label="Crew">
-                {`M:${job.crewSize} / T:${job.trucks}${job.bedrooms ? ` · ${job.bedrooms}` : ''}`}
-                <span className="block text-xs text-zinc-500">{pickedTrucks.length ? `Trucks: ${pickedTrucks.join(', ')}` : 'Any free truck'}</span>
-              </Fact>
-              <Fact label="From">{job.originAddress ?? '—'}{access(job.originAccess, job.originNotes) ? <span className="block text-xs text-zinc-500">{access(job.originAccess, job.originNotes)}</span> : null}</Fact>
-              <Fact label="To">{job.destinationAddress ?? '—'}{access(job.destinationAccess, job.destinationNotes) ? <span className="block text-xs text-zinc-500">{access(job.destinationAccess, job.destinationNotes)}</span> : null}</Fact>
-              <Fact label="Distance">{job.distanceTenths !== null ? `${(job.distanceTenths / 10).toFixed(1)} mi${job.driveMinutes !== null ? ` · ${job.driveMinutes} min` : ''}` : '—'}{job.ownTruck ? <span className="block text-xs text-zinc-500">Customer&apos;s own truck</span> : null}{job.cornellian ? <span className="block text-xs text-zinc-500">Cornellian</span> : null}</Fact>
-              {job.extraStops.length ? <Fact label="Extra stops">{job.extraStops.join('; ')}</Fact> : null}
-              <Fact label="Source">{`${job.source}${job.sourceDetail ? ` · ${job.sourceDetail}` : ''}`}{data.lead ? <Link className="flex min-h-11 items-center text-xs hover:underline sm:block sm:min-h-0" href={`${basePath}/leads/${data.lead.id}`}>{`From lead ${data.lead.leadNumber}`}</Link> : null}</Fact>
-              <Fact label="Owner">{job.ownerName ?? '—'}{job.coordinators.length ? <span className="block text-xs text-zinc-500">{`Coordinators: ${job.coordinators.join(', ')}`}</span> : null}</Fact>
-              {job.companyName || job.poNumber ? <Fact label="Company / PO">{[job.companyName, job.poNumber].filter(Boolean).join(' · ')}</Fact> : null}
-              {job.lostReason ? <Fact label="Lost because">{job.lostReason}</Fact> : null}
-              {job.cancelledReason ? <Fact label="Cancelled because">{job.cancelledReason}</Fact> : null}
-              {job.customerComments ? <Fact label="Customer comments">{job.customerComments}</Fact> : null}
-              {job.scopeOfWork ? <Fact label="Scope of work">{job.scopeOfWork}</Fact> : null}
-              {job.internalNotes ? <Fact label="Internal notes">{job.internalNotes}</Fact> : null}
-              <Fact label="Follow-up emails">
-                {job.automationOptIn ? 'On' : 'Off'}
-                {canWrite ? (
-                  <span className="ml-2">
-                    <ConfirmButton action={optInAction.bind(null, slug, mode, job.id, !job.automationOptIn)} variant="ghost">{job.automationOptIn ? 'Turn off' : 'Turn on'}</ConfirmButton>
-                  </span>
-                ) : null}
-              </Fact>
-            </dl>
-            {canWrite && job.stage !== 'closed' && job.stage !== 'cancelled' ? (
-              <Disclosure summary="Change details">
-                <ActionForm action={updateJobAction.bind(null, slug, mode, job.id)} submitLabel="Save" resetOnSuccess={false}>
-                  <JobFields job={job} trucks={fleet} dateLocked={job.stage === 'booked' ? 'Booked: change the date with Reschedule.' : job.stage === 'completed' ? 'The move is done.' : undefined} />
-                </ActionForm>
-              </Disclosure>
-            ) : null}
-            {canBook && job.stage === 'booked' ? (
-              <Disclosure summary="Reschedule">
-                <ActionForm action={rescheduleJobAction.bind(null, slug, mode, job.id)} submitLabel="Reschedule">
-                  <p className="text-sm text-zinc-600">{`Every day moves by the same number of days (now ${days.map((d) => formatDay(d.dayDate)).join(', ')}). Trucks are checked again for the new days.`}</p>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <Field label="New move date" htmlFor="rs-date"><input id="rs-date" name="date" type="date" required min={localDate(new Date(), ctx.business.timeZone)} defaultValue={days[0]?.dayDate ?? ''} className={inputClass} /></Field>
-                    <Field label="New start time (optional)" htmlFor="rs-time"><input id="rs-time" name="startTime" type="time" className={inputClass} /></Field>
-                    <Field label="Reason (optional)" htmlFor="rs-reason"><input id="rs-reason" name="reason" maxLength={300} className={inputClass} placeholder="e.g. Customer asked" /></Field>
-                  </div>
-                  <Check name="allowNoTruck" label="Book without a truck if none is free" />
-                </ActionForm>
-              </Disclosure>
-            ) : null}
-            {canWrite && ['qualified', 'estimate_sent'].includes(job.stage) ? (
-              <Disclosure summary="Mark lost">
-                <ActionForm action={markLostAction.bind(null, slug, mode, job.id)} submitLabel="Mark lost" submitVariant="danger">
-                  <Field label="Reason" htmlFor="lost-reason"><input id="lost-reason" name="reason" required className={inputClass} placeholder="e.g. Price, went with another mover" /></Field>
-                </ActionForm>
-              </Disclosure>
-            ) : null}
-            {canWrite && ['qualified', 'estimate_sent', 'booked'].includes(job.stage) && (job.stage !== 'booked' || can(ctx, CORE.schedulingWrite)) ? (
-              <Disclosure summary="Cancel job">
-                <ActionForm action={cancelJobAction.bind(null, slug, mode, job.id)} submitLabel="Cancel job" submitVariant="danger">
-                  <Field label="Reason" htmlFor="cancel-reason"><input id="cancel-reason" name="reason" required className={inputClass} /></Field>
-                  {depositPaid > 0 ? (
-                    <Field label={`The deposit (${formatMoney(depositPaid)})`} htmlFor="cancel-deposit" help="Nothing is refunded by the software: refund it where it was taken (Shopify, check) and record it here.">
-                      <Select id="cancel-deposit" name="deposit" required defaultValue="">
-                        <option value="" disabled>Choose…</option>
-                        <option value="kept">Kept (not refunded)</option>
-                        <option value="refund">To be refunded outside the software</option>
-                      </Select>
-                    </Field>
-                  ) : null}
-                </ActionForm>
-              </Disclosure>
-            ) : null}
-          </Card>
-
-          <Card title="Quote" description={editable ? 'The one price for this move. Sending makes a frozen, versioned estimate.' : 'Locked: the signed estimate is the price.'} flush>
-            {editable ? (
-              <Disclosure summary="Build the estimate from the move details" startOpen={quote.lines.length === 0}>
-                <EstimateBuilder
-                  slug={slug}
-                  mode={mode}
-                  job={job}
-                  catalog={data.catalog.map((c) => ({ id: c.id, name: c.name, section: c.section, unit: c.unit, rateCents: c.rateCents, category: c.category }))}
-                  hasLines={quote.lines.length > 0}
-                  mapsReady={mapsReady}
-                  pickedTrucks={pickedTrucks}
-                  longDistanceMiles={settings.longDistanceMiles}
-                  cornellianPerHour={settings.cornellianDiscountPerHour}
-                />
-              </Disclosure>
-            ) : null}
-            <QuoteEditor
-              lines={quote.lines.map((l) => ({ id: l.id, section: l.section, name: l.name, unit: l.unit, qtyHundredths: l.qtyHundredths, rateCents: l.rateCents, discountType: l.discountType, discountValue: l.discountValue, description: l.description }))}
-              catalog={data.catalog.map((c) => ({ id: c.id, name: c.name, section: c.section, unit: c.unit, rateCents: c.rateCents, category: c.category }))}
-              options={quote.options}
-              editable={editable}
-              addLine={addQuoteLineAction.bind(null, slug, mode, job.id)}
-              removeLine={editable ? Object.fromEntries(quote.lines.map((l) => [l.id, removeQuoteLineAction.bind(null, slug, mode, job.id, l.id)])) : null}
-              saveOptions={quoteOptionsAction.bind(null, slug, mode, job.id)}
-            />
-            {editable && data.discounts.length ? (
-              <Disclosure summary="Apply a discount to every line">
-                <ActionForm action={quoteDiscountAction.bind(null, slug, mode, job.id)} submitLabel="Apply" submitVariant="secondary">
-                  <Field label="Discount" htmlFor="q-discount">
-                    <Select id="q-discount" name="discountId">
-                      {data.discounts.map((d) => <option key={d.id} value={d.id}>{`${d.name} (${d.percentBp / 100}%)`}</option>)}
-                    </Select>
-                  </Field>
-                </ActionForm>
-              </Disclosure>
             ) : null}
           </Card>
 
@@ -476,6 +442,33 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                   </ActionForm>
                 </div>
               ) : null}
+            </Card>
+          ) : null}
+          {canWrite && ['qualified', 'estimate_sent', 'booked'].includes(job.stage) ? (
+            <Card title="Close this work request" flush>
+            {canWrite && ['qualified', 'estimate_sent'].includes(job.stage) ? (
+              <Disclosure summary="Mark lost">
+                <ActionForm action={markLostAction.bind(null, slug, mode, job.id)} submitLabel="Mark lost" submitVariant="danger">
+                  <Field label="Reason" htmlFor="lost-reason"><input id="lost-reason" name="reason" required className={inputClass} placeholder="e.g. Price, went with another mover" /></Field>
+                </ActionForm>
+              </Disclosure>
+            ) : null}
+            {canWrite && ['qualified', 'estimate_sent', 'booked'].includes(job.stage) && (job.stage !== 'booked' || can(ctx, CORE.schedulingWrite)) ? (
+              <Disclosure summary="Cancel job">
+                <ActionForm action={cancelJobAction.bind(null, slug, mode, job.id)} submitLabel="Cancel job" submitVariant="danger">
+                  <Field label="Reason" htmlFor="cancel-reason"><input id="cancel-reason" name="reason" required className={inputClass} /></Field>
+                  {depositPaid > 0 ? (
+                    <Field label={`The deposit (${formatMoney(depositPaid)})`} htmlFor="cancel-deposit" help="Nothing is refunded by the software: refund it where it was taken (Shopify, check) and record it here.">
+                      <Select id="cancel-deposit" name="deposit" required defaultValue="">
+                        <option value="" disabled>Choose…</option>
+                        <option value="kept">Kept (not refunded)</option>
+                        <option value="refund">To be refunded outside the software</option>
+                      </Select>
+                    </Field>
+                  ) : null}
+                </ActionForm>
+              </Disclosure>
+            ) : null}
             </Card>
           ) : null}
         </div>
