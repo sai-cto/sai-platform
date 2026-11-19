@@ -34,8 +34,8 @@ import { formatPhone } from '@/ui/format';
 type Lead = typeof hhmcLeads.$inferSelect;
 
 export async function LeadsPage({ ctx, searchParams, basePath }: PortalPageProps) {
-  const statuses = ['new', 'disqualified', 'converted', 'all'] as const;
-  const status = statuses.find((s) => s === searchParams.status) ?? 'new';
+  const statuses = ['all', 'new', 'disqualified', 'converted'] as const;
+  const status = statuses.find((s) => s === searchParams.status) ?? 'all';
   const page = Math.max(1, Number.parseInt(searchParams.page ?? '1', 10) || 1);
   const { rows, total } = await listLeads(ctx, {
     status: status as LeadStatus | 'all',

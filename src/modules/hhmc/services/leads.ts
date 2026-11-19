@@ -73,7 +73,7 @@ export async function listLeads(ctx: BusinessContext, filters: LeadFilters = {})
   return withScope(ctx, P.leadsRead, async (s) => {
     const term = filters.q?.trim();
     const pattern = term ? `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
-    const status = filters.status ?? 'new';
+    const status = filters.status ?? 'all';
     const where = and(
       s.where(hhmcLeads),
       status === 'all' ? undefined : eq(hhmcLeads.status, status),

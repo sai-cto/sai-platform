@@ -500,13 +500,14 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                 <Field label="Note" htmlFor="jn-body"><textarea id="jn-body" name="body" rows={2} className={areaClass} /></Field>
               </ActionForm>
             ) : null}
+            <LeadNotes lead={data.lead} job={job} />
             {notes.length ? (
               <ul className="mt-4 space-y-2 text-sm">
                 {notes.map((n) => (
                   <li key={n.id} className="border-b border-zinc-100 pb-2">
                     <span className="font-medium">{n.kind === 'call' ? CALL_OUTCOME_LABELS[n.callOutcome ?? 'spoke'] : 'Note'}</span>
                     {n.body ? ` — ${n.body}` : ''}
-                    <span className="block text-xs text-zinc-500">{`${n.authorName} · ${formatDateTime(n.createdAt)}`}</span>
+                    <span className="block text-xs text-zinc-500">{`${n.authorName} · ${formatDateTime(n.createdAt)}${n.jobId !== job.id && data.lead ? ` · from lead ${data.lead.leadNumber}` : ''}`}</span>
                   </li>
                 ))}
               </ul>
@@ -562,5 +563,26 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
         </div>
       </div>
     </>
+  );
+}
+
+/** The notes typed on the lead, when the work request does not already carry them word for word. */
+function LeadNotes({ lead, job }: { lead: { leadNumber: string; customerNote: string | null; internalNote: string | null } | null; job: { customerComments: string | null; internalNotes: string | null } }) {
+  if (!lead) return null;
+  const rows = [
+    { label: 'Customer note', text: lead.customerNote, kept: job.customerComments },
+    { label: 'Internal note', text: lead.internalNote, kept: job.internalNotes },
+  ].filter((r) => r.text?.trim() && r.text.trim() !== r.kept?.trim());
+  if (!rows.length) return null;
+  return (
+    <ul className="mt-4 space-y-2 text-sm">
+      {rows.map((r) => (
+        <li key={r.label} className="border-b border-zinc-100 pb-2">
+          <span className="font-medium">{r.label}</span>
+          {` — ${r.text}`}
+          <span className="block text-xs text-zinc-500">{`From lead ${lead.leadNumber}`}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

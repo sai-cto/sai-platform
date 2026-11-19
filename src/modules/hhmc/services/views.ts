@@ -3,7 +3,7 @@
  * Parts the person may not see are left out (null) rather than refused, so a staff member with
  * fewer permissions still gets the rest of the page.
  */
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, or } from 'drizzle-orm';
 import { appointments, customers, payments, resources } from '@/core/db/schema/tenant';
 import { withScope } from '@/core/db/scope';
 import { listBusinessActivity } from '@/core/audit/read';
@@ -41,10 +41,13 @@ export async function jobPage(ctx: BusinessContext, jobId: string) {
     const live = estimates.find((e) => e.status === 'sent' || e.status === 'viewed' || e.status === 'signed') ?? null;
     const days = await jobDaysOf(s, jobId);
     const invoices = can(ctx, P.invoicesRead) ? await invoicesOfJob(s, jobId) : null;
+    // The lead's notes and calls stay with the move once it is converted (managers' feedback
+    // round 1), including leads converted before their notes were linked to the job.
+    const fromLead = job.leadId && can(ctx, P.leadsRead) ? eq(hhmcNotes.leadId, job.leadId) : undefined;
     const notes = await s.db
       .select()
       .from(hhmcNotes)
-      .where(and(s.where(hhmcNotes), eq(hhmcNotes.jobId, jobId)))
+      .where(and(s.where(hhmcNotes), or(eq(hhmcNotes.jobId, jobId), fromLead)))
       .orderBy(desc(hhmcNotes.createdAt));
     const queue = await queueFor(s, { jobId });
     const lead = job.leadId ? await loadLead(s, job.leadId).catch(() => null) : null;
@@ -78,6 +81,7 @@ export async function jobPage(ctx: BusinessContext, jobId: string) {
       : [];
     const source = await sourceRecordsFor(s, [
       jobId,
+      ...(fromLead && job.leadId ? [job.leadId] : []),
       ...estimates.map((e) => e.id),
       ...(invoices ?? []).map((i) => i.id),
       ...(jobPayments ?? []).map((p) => p.id),
