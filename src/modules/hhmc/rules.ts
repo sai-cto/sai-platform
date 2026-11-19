@@ -14,12 +14,17 @@ import type {
 
 // ---------------------------------------------------------------- labels
 
+/**
+ * The managers' status flow (feedback round 1, Nov 2026): Request → Estimate sent → Confirmed
+ * (deposit paid, on the calendar, the official work order) → Completed, plus Lost / Cancelled.
+ * The stored keys are unchanged; "closed" is a completed move whose invoice is paid.
+ */
 export const STAGE_LABELS: Record<Stage, string> = {
-  qualified: 'Qualified',
-  estimate_sent: 'Estimate Sent',
-  booked: 'Booked',
+  qualified: 'Request',
+  estimate_sent: 'Estimate sent',
+  booked: 'Confirmed',
   completed: 'Completed',
-  closed: 'Closed',
+  closed: 'Completed · paid',
   lost: 'Lost',
   cancelled: 'Cancelled',
 };

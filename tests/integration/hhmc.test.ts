@@ -99,7 +99,7 @@ describe('rules', () => {
     expect(canMoveStage('qualified', 'booked')).toBe(false);
     expect(canMoveStage('closed', 'qualified')).toBe(false);
     expect(canMoveStage('cancelled', 'qualified')).toBe(false);
-    expect(stageMoveProblem('qualified', 'closed')).toMatch(/cannot become Closed/);
+    expect(stageMoveProblem('qualified', 'closed')).toMatch(/cannot become Completed · paid/);
   });
 
   it('a lead reuses a customer by email, then by phone; same name only is a probable duplicate', () => {
@@ -298,10 +298,11 @@ describe('automations', () => {
     // A drip queued after signing (e.g. by an older version of the rules) is cancelled by booking.
     await withScope(ctx, P.jobsWrite, (s) => enqueue(s, 'estimate_sent', { jobId: job.id, estimateId: est.id, recipient: 'late@example.com', optIn: true }));
     expect((await queueOf(ctx, job.id)).some((r) => r.trigger === 'estimate_sent' && r.q.status === 'queued')).toBe(true);
+    await payDepositByLink(customer, { attemptKey: `t${tag()}d` });
     await bookJob(ctx, job.id);
     const drips = (await queueOf(ctx, job.id)).filter((r) => r.trigger === 'estimate_sent');
     expect(drips.every((r) => r.q.status === 'cancelled')).toBe(true);
-    expect(drips.some((r) => r.q.cancelledReason === 'The job moved to Booked.')).toBe(true);
+    expect(drips.some((r) => r.q.cancelledReason === 'The job moved to Confirmed.')).toBe(true);
   });
 
   it('turning opt-in off cancels the drip; the processor sends what is due and re-checks first', async () => {
@@ -393,7 +394,7 @@ describe('jobs, booking and the schedule', () => {
   it('stage changes outside the allowed list are refused; lost needs a reason and can be reopened', async () => {
     const ctx = await admin();
     const { job } = await exampleAJob(ctx);
-    await expect(withScope(ctx, P.jobsWrite, (s) => moveStage(s, job.id, 'closed'))).rejects.toThrow(/cannot become Closed/);
+    await expect(withScope(ctx, P.jobsWrite, (s) => moveStage(s, job.id, 'closed'))).rejects.toThrow(/cannot become Completed · paid/);
     await expect(markLost(ctx, job.id, '')).rejects.toThrow(/reason/);
     await markLost(ctx, job.id, 'Too expensive');
     expect((await loadJobAs(ctx, job.id)).lostReason).toBe('Too expensive');
@@ -408,6 +409,9 @@ describe('jobs, booking and the schedule', () => {
     await expect(bookJob(ctx, job.id)).rejects.toThrow(/must sign/);
     const customer = await buildLinkContext(tokenOf(await customerLinkFor(ctx, est.id)));
     await signEstimateByLink(customer, { valuationInitials: 'AL', signatureName: 'Avery Signer', agree: true, ip: null, userAgent: null });
+    // Confirmed only once the deposit is paid (managers' feedback round 1).
+    await expect(bookJob(ctx, job.id)).rejects.toThrow(/deposit .* must be paid/);
+    await payDepositByLink(customer, { attemptKey: `t${tag()}` });
 
     const moveDay = (await loadJobAs(ctx, job.id)).moveDate!;
     const soldOut = await markSoldOut(ctx, moveDay, 'Sold out');
@@ -427,7 +431,7 @@ describe('jobs, booking and the schedule', () => {
     expect(after.days[0].entries.filter((e) => e.jobId === job.id)).toHaveLength(0);
 
     await bookJob(ctx, job.id);
-    await cancelJob(ctx, job.id, 'Customer moved the date to next year');
+    await cancelJob(ctx, job.id, 'Customer moved the date to next year', { deposit: 'kept' });
     expect((await loadJobAs(ctx, job.id)).stage).toBe('cancelled');
   });
 
@@ -439,11 +443,15 @@ describe('jobs, booking and the schedule', () => {
     expect(call.authorName).toBe(ctx.actor.name);
   });
 
-  it('a job type must belong to its service type', async () => {
+  it('a job type always belongs to its service type', async () => {
     const ctx = await admin();
     const lead = await newLead(ctx);
     const { customerId } = await convertLead(ctx, lead.id, {});
-    await expect(createJob(ctx, { customerId, serviceType: 'interstate', jobType: 'Junk Removal', crewSize: '2', trucks: '1' })).rejects.toThrow(/Interstate Move/);
+    // A job type of another service type is replaced by the service type's own (never "-").
+    const job = await createJob(ctx, { customerId, serviceType: 'interstate', jobType: 'Junk Removal', crewSize: '2', trucks: '1' });
+    expect(job.jobType).toBe('Interstate Move');
+    const blank = await createJob(ctx, { customerId, serviceType: 'intrastate', jobType: '-', crewSize: '2', trucks: '1' });
+    expect(blank.jobType).toBe('Intrastate Move');
   });
 });
 
@@ -620,7 +628,8 @@ describe('review gate round 1: regressions', () => {
     const ctx = await admin();
     const { job, est, customer } = await signedJob(ctx);
     await signEstimateByLink(customer, sig);
-    await bookJob(ctx, job.id); // booked without a deposit (P5-11)
+    // A move booked before deposits were required (P5-11; existing data): set the stage directly.
+    await withScope(ctx, P.jobsWrite, (s) => moveStage(s, job.id, 'booked'));
     await createInvoice(ctx, job.id);
     await expect(payDepositByLink(customer, { attemptKey: `t${tag()}x` })).rejects.toThrow(/invoiced|no longer be taken/);
     expect(est.id).toBeTruthy();
@@ -671,6 +680,7 @@ describe('review gate round 1: regressions', () => {
     const ctx = await admin();
     const { job, customer } = await signedJob(ctx);
     await signEstimateByLink(customer, sig);
+    await payDepositByLink(customer, { attemptKey: `t${tag()}d` });
     await bookJob(ctx, job.id);
     const noBook = { ...ctx, permissions: new Set([...ctx.permissions].filter((p) => p !== P.jobsBook)) };
     await expect(cancelJob(noBook, job.id, 'x')).rejects.toBeInstanceOf(ForbiddenError);
@@ -700,6 +710,7 @@ describe('review gate round 2: regressions', () => {
     const est = await sendEstimate(ctx, job.id);
     const customer = await buildLinkContext(tokenOf(await customerLinkFor(ctx, est.id)));
     await signEstimateByLink(customer, sig);
+    await payDepositByLink(customer, { attemptKey: `t${tag()}d` });
     await bookJob(ctx, job.id);
     const invoice = await createInvoice(ctx, job.id, { terms: 'net_30' });
     const sent = await sendInvoice(ctx, invoice.id);
@@ -753,6 +764,7 @@ describe('review gate round 3: regressions', () => {
     const est = await sendEstimate(ctx, job.id);
     const customer = await buildLinkContext(tokenOf(await customerLinkFor(ctx, est.id)));
     await signEstimateByLink(customer, { valuationInitials: 'AL', signatureName: 'Avery Signer', agree: true, ip: null, userAgent: null });
+    await payDepositByLink(customer, { attemptKey: `t${tag()}d` });
     await bookJob(ctx, job.id);
     const invoice = await createInvoice(ctx, job.id, { terms: 'net_60' });
     const sent = await sendInvoice(ctx, invoice.id);

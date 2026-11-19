@@ -68,7 +68,7 @@ async function main() {
     ['Search · a phone', () => searchHhmc(ctx, '607 555 01', '/x')],
     ['Search · a number', () => searchHhmc(ctx, 'IN70100', '/x')],
     ['Search · no match', () => searchHhmc(ctx, 'zzzz', '/x')],
-    [`Calendar · busiest month (${busiest})`, () => calendarBetween(ctx, monthFrom, monthTo, { now })],
+    [`Calendar · busiest month (${busiest})`, () => calendarBetween(ctx, monthFrom, monthTo)],
     [`Schedule capacity · busiest month (${busiest})`, () => scheduleBetween(ctx, monthFrom, monthTo)],
     ...(job ? ([['Work request page', () => jobPage(ctx, job.id)], ['Contact page', () => contactPage(ctx, job.customerId)]] as [string, () => Promise<unknown>][]) : []),
     ...(sample.lead ? ([['Lead page', () => leadPage(ctx, sample.lead.id)]] as [string, () => Promise<unknown>][]) : []),

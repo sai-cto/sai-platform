@@ -1,17 +1,20 @@
 /**
- * HHMC calendar: which records show as which kind of event (services/calendar.ts).
- * Booked move = job days of Booked/Completed/Closed jobs; Estimate = Estimate Sent jobs on their
- * move date; Work request = Qualified jobs with a move date; Invoice due = invoices not Paid or
- * Void, on their due date. Lost and cancelled jobs never appear.
+ * HHMC calendar (services/calendar.ts): ONLY confirmed moves (managers' feedback round 1).
+ * A job day shows once its job is Confirmed (signed, deposit paid, booked) and stays once the
+ * move is done. Requests, estimates, signed-but-unpaid estimates and invoices never show;
+ * converting a lead never puts a move on the calendar. Lost and cancelled jobs never appear.
  */
 import { describe, expect, it } from 'vitest';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { P } from '@/modules/hhmc/permissions';
-import { bookJob } from '@/modules/hhmc/services/booking';
+import { bookJob, unconfirmMovesWithoutDeposit } from '@/modules/hhmc/services/booking';
+import { withScope } from '@/core/db/scope';
+import { loadJob } from '@/modules/hhmc/services/common';
+import { updateRecord } from '@/core/records/records';
+import { estimateEntity } from '@/modules/hhmc/entities';
 import {
   allowedCalendarKinds,
   calendarBetween,
-  invoiceIsDue,
   jobEventKind,
   parseCalendarKinds,
   type CalendarEvent,
@@ -63,43 +66,68 @@ async function eventsOf(ctx: BusinessContext, jobId: string): Promise<CalendarEv
 }
 
 describe('calendar: rules', () => {
-  it('maps job stages and invoice statuses to kinds', () => {
-    expect(jobEventKind('qualified')).toBe('request');
-    expect(jobEventKind('estimate_sent')).toBe('estimate');
+  it('only confirmed (and done) moves are on the calendar', () => {
+    expect(jobEventKind('qualified')).toBeNull();
+    expect(jobEventKind('estimate_sent')).toBeNull();
     expect(jobEventKind('booked')).toBe('booked');
     expect(jobEventKind('completed')).toBe('booked');
     expect(jobEventKind('closed')).toBe('booked');
     expect(jobEventKind('lost')).toBeNull();
     expect(jobEventKind('cancelled')).toBeNull();
-    expect(invoiceIsDue('draft')).toBe(true);
-    expect(invoiceIsDue('sent')).toBe(true);
-    expect(invoiceIsDue('partially_paid')).toBe(true);
-    expect(invoiceIsDue('paid')).toBe(false);
-    expect(invoiceIsDue('void')).toBe(false);
-    expect([...parseCalendarKinds('estimate, invoice,nonsense')]).toEqual(['estimate', 'invoice']);
+    expect([...parseCalendarKinds('booked, estimate,invoice,nonsense')]).toEqual(['booked']);
   });
 });
 
-describe('calendar: records become events', () => {
-  it('a qualified job is a work request, then an estimate with its status; booked days are booked moves', async () => {
+describe('calendar: confirmed moves only', () => {
+  it('a converted lead, a sent estimate and a signed estimate are not on the calendar; a confirmed move is', async () => {
     const ctx = await admin();
     const job = await newJob(ctx);
-    // Qualified with a move date: a work request, and its job day is NOT a booked move.
-    expect((await eventsOf(ctx, job.id)).map((e) => [e.kind, e.date])).toEqual([['request', day(20)]]);
+    // Converting a lead (a request with a move date and a job day) does not put it on the calendar.
+    expect(await eventsOf(ctx, job.id)).toEqual([]);
 
     const est = await sendEstimate(ctx, job.id);
-    const asEstimate = await eventsOf(ctx, job.id);
-    expect(asEstimate).toHaveLength(1);
-    expect(asEstimate[0]).toMatchObject({ kind: 'estimate', date: day(20), estimateId: est.id, estimateStatus: 'sent' });
+    expect(await eventsOf(ctx, job.id)).toEqual([]);
 
     const customer = await buildLinkContext((await customerLinkFor(ctx, est.id)).split('/l/')[1]);
     await signEstimateByLink(customer, { valuationInitials: 'CC', signatureName: 'Casey Calendar', agree: true, ip: null, userAgent: null });
-    expect((await eventsOf(ctx, job.id))[0]).toMatchObject({ kind: 'estimate', estimateStatus: 'signed' });
+    expect(await eventsOf(ctx, job.id)).toEqual([]);
+    // Signed but the deposit is not paid: it cannot be confirmed yet.
+    await expect(bookJob(ctx, job.id)).rejects.toThrow(/deposit .* must be paid/);
+    expect((await withScope(ctx, P.jobsRead, (s) => loadJob(s, job.id))).stage).toBe('estimate_sent');
 
+    await payDepositByLink(customer, { attemptKey: `t${tag()}` });
     await bookJob(ctx, job.id);
     const booked = await eventsOf(ctx, job.id);
     expect(booked.map((e) => e.kind)).toEqual(['booked']);
-    expect(booked[0]).toMatchObject({ date: day(20), crewSize: 2, trucks: 1 });
+    expect(booked[0]).toMatchObject({ date: day(20), crewSize: 2, trucks: 1, stage: 'booked' });
+  });
+
+  it('existing booked moves without a paid deposit leave the calendar; nothing is deleted', async () => {
+    const ctx = await admin();
+    const job = await newJob(ctx);
+    const est = await signed(ctx, job.id);
+    await bookJob(ctx, job.id);
+    // An old booking made before the rule, with no deposit on record (as some imported moves are).
+    await withScope(ctx, P.jobsWrite, (s) => updateRecord(s, estimateEntity, est.id, { depositPaidCents: 0 }));
+    const [paid] = await withScope(ctx, P.jobsRead, async (s) => {
+      const { payments } = await import('@/core/db/schema/tenant');
+      const { and, eq } = await import('drizzle-orm');
+      return s.db.select().from(payments).where(and(s.where(payments), eq(payments.subjectId, est.id)));
+    });
+    await withScope(ctx, 'payments.write', async (s) => {
+      const { paymentEntity } = await import('@/core/records/core-entities');
+      await updateRecord(s, paymentEntity, paid.id, { refundedCents: paid.amountCents });
+    });
+    expect((await eventsOf(ctx, job.id)).map((e) => e.kind)).toEqual(['booked']);
+
+    const listed = await withScope(ctx, P.jobsBook, (s) => unconfirmMovesWithoutDeposit(s, { apply: false }));
+    expect(listed.map((j) => j.id)).toContain(job.id);
+    expect((await withScope(ctx, P.jobsRead, (s) => loadJob(s, job.id))).stage).toBe('booked'); // a dry run changes nothing
+
+    await withScope(ctx, P.jobsBook, (s) => unconfirmMovesWithoutDeposit(s, { apply: true }));
+    const after = await withScope(ctx, P.jobsRead, (s) => loadJob(s, job.id));
+    expect(after.stage).toBe('estimate_sent');
+    expect(await eventsOf(ctx, job.id)).toEqual([]);
   });
 
   it('cancelled and lost jobs are left out', async () => {
@@ -116,40 +144,29 @@ describe('calendar: records become events', () => {
     expect(await eventsOf(ctx, cancelled.id)).toEqual([]);
   });
 
-  it('an invoice is due on its due date with its balance until it is paid', async () => {
+  it('invoices are not on the calendar; a paid-up (closed) move stays on it', async () => {
     const ctx = await admin();
     const job = await newJob(ctx);
     await signed(ctx, job.id);
     await bookJob(ctx, job.id);
     const invoice = await createInvoice(ctx, job.id);
-    const draft = (await eventsOf(ctx, job.id)).filter((e) => e.kind === 'invoice');
-    expect(draft).toHaveLength(1);
-    expect(draft[0]).toMatchObject({ invoiceId: invoice.id, date: invoice.dueDate, invoiceStatus: 'draft' });
-
     await sendInvoice(ctx, invoice.id);
-    const sent = (await eventsOf(ctx, job.id)).find((e) => e.kind === 'invoice');
-    expect(sent).toMatchObject({ invoiceStatus: 'sent', pastDue: false });
-    const balance = sent && sent.kind === 'invoice' ? sent.balanceCents : 0;
-    expect(balance).toBeGreaterThan(0);
-
-    await recordInvoicePayment(ctx, invoice.id, { amount: (balance / 100).toFixed(2), method: 'cash', attemptKey: `t${tag()}` });
-    const after = await eventsOf(ctx, job.id);
-    // Paid: no invoice event; the (now closed) job's day is still a booked move.
-    expect(after.map((e) => e.kind)).toEqual(['booked']);
+    expect((await eventsOf(ctx, job.id)).map((e) => e.kind)).toEqual(['booked']);
+    const { balanceOf } = await import('@/modules/hhmc/services/invoices');
+    const { hhmcInvoices } = await import('@/modules/hhmc/schema');
+    const { eq } = await import('drizzle-orm');
+    const [row] = await withScope(ctx, P.invoicesRead, (s) => s.db.select().from(hhmcInvoices).where(eq(hhmcInvoices.id, invoice.id)));
+    await recordInvoicePayment(ctx, invoice.id, { amount: (balanceOf(row) / 100).toFixed(2), method: 'cash', attemptKey: `t${tag()}` });
+    expect((await withScope(ctx, P.jobsRead, (s) => loadJob(s, job.id))).stage).toBe('closed');
+    expect((await eventsOf(ctx, job.id)).map((e) => e.kind)).toEqual(['booked']);
   });
 
-  it('only kinds the person may see are loaded; hidden kinds are not loaded', async () => {
+  it('only people who may see jobs see the calendar', async () => {
     const ctx = await admin();
-    const job = await newJob(ctx);
-    const noInvoices: BusinessContext = { ...ctx, permissions: new Set([...ctx.permissions].filter((p) => p !== P.invoicesRead)) };
-    expect(allowedCalendarKinds(noInvoices)).toEqual(['booked', 'estimate', 'request']);
+    expect(allowedCalendarKinds(ctx)).toEqual(['booked']);
     const noJobs: BusinessContext = { ...ctx, permissions: new Set([...ctx.permissions].filter((p) => p !== P.jobsRead)) };
-    expect(allowedCalendarKinds(noJobs)).toEqual(['invoice']);
-    const jobEvents = (await calendarBetween(noJobs, FROM, TO)).days.flatMap((d) => d.events);
-    expect(jobEvents.every((e) => e.kind === 'invoice')).toBe(true);
-
-    const hidden = (await calendarBetween(ctx, FROM, TO, { kinds: ['booked', 'estimate'] })).days.flatMap((d) => d.events);
-    expect(hidden.some((e) => e.jobId === job.id)).toBe(false);
+    expect(allowedCalendarKinds(noJobs)).toEqual([]);
+    expect((await calendarBetween(noJobs, FROM, TO)).days.flatMap((d) => d.events)).toEqual([]);
     await expect(calendarBetween(ctx, day(0), day(100))).rejects.toThrow(/at most/);
   });
 });

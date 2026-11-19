@@ -21,7 +21,7 @@ import { loadIntoHhmc } from '../../scripts/hhmc-import/load';
 import { FILE_NAMES, normalize, type Files } from '../../scripts/hhmc-import/movegistics';
 import { ourSide } from '../../scripts/hhmc-import/reconcile';
 import { systemContext } from './helpers';
-import { bookedJob, dayFromNow, gm, newJob, signedJob, tag } from './hhmc-helpers';
+import { bookedJob, dayFromNow, gm, newJob, payDeposit, signedJob, tag } from './hhmc-helpers';
 
 const job = (ctx: Awaited<ReturnType<typeof gm>>, id: string) => withScope(ctx, P.jobsRead, (s) => loadJob(s, id));
 const daysOf = (ctx: Awaited<ReturnType<typeof gm>>, jobId: string) =>
@@ -42,7 +42,8 @@ describe('booking when no truck is free (OPS-4)', () => {
     const date = dayFromNow(1200 + Math.floor(Math.random() * 300));
     // The test fleet has three trucks: three moves at the same time take them all.
     for (let i = 0; i < 3; i++) await bookedJob(ctx, date);
-    const { job: fourth } = await signedJob(ctx, date);
+    const { job: fourth, estimate: fourthEstimate } = await signedJob(ctx, date);
+    await payDeposit(ctx, fourthEstimate.id);
     await expect(bookJob(ctx, fourth.id)).rejects.toThrow(/No truck is free on .* book it without a truck for now/);
     expect((await job(ctx, fourth.id)).stage).toBe('estimate_sent'); // nothing changed
     await bookJob(ctx, fourth.id, new Date(), { allowNoTruck: true });

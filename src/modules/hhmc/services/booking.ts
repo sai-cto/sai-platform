@@ -26,9 +26,9 @@ import { addDays, isDateText, isTimeText, localDate, localTime, STAGE_LABELS } f
 import { hhmcEstimates, hhmcJobDays, hhmcJobs } from '../schema';
 import { loadSettings } from '../settings';
 import { cancelQueued, enqueue } from './automations';
-import { loadCustomer, loadJob, personName, trucksOf } from './common';
+import { loadCustomer, loadJob, money, personName, trucksOf } from './common';
 import { optionalText, parse } from './input';
-import { moveStage } from './jobs';
+import { depositsReceived, moveStage } from './jobs';
 
 export const JOB_DAY_KIND = 'hhmc.job_day';
 
@@ -193,7 +193,16 @@ async function bookDays(s: Scope, job: typeof hhmcJobs.$inferSelect, days: (type
   }
 }
 
-/** Book This Move (ref §2.1 step 9): staff only, needs a signed estimate. */
+/** The deposit counts as paid when what was received covers it (card fees on top are extra). */
+export function depositCovered(receivedCents: number, depositCents: number): boolean {
+  return receivedCents > 0 && receivedCents >= depositCents;
+}
+
+/**
+ * Confirm the move (was "Book This Move", ref §2.1 step 9): staff only. Needs a signed estimate
+ * AND its deposit paid; only then is the job Confirmed, an official work order, and on the
+ * calendar (managers' feedback round 1).
+ */
 export async function bookJob(ctx: BusinessContext, jobId: string, now: Date = new Date(), options: BookingOptions = {}) {
   return withScope(ctx, P.jobsBook, async (s) => {
     authorize(ctx, P.jobsWrite);
@@ -205,12 +214,15 @@ export async function bookJob(ctx: BusinessContext, jobId: string, now: Date = n
     if (job.stage !== 'estimate_sent')
       throw new ValidationError(`A job that is ${STAGE_LABELS[job.stage]} cannot be booked.`);
     const [signed] = await s.db
-      .select({ id: hhmcEstimates.id })
+      .select({ id: hhmcEstimates.id, depositCents: hhmcEstimates.depositCents })
       .from(hhmcEstimates)
       // An archived (Data tab) signed estimate still counts.
       .where(and(s.where(hhmcEstimates, 'include'), eq(hhmcEstimates.jobId, jobId), eq(hhmcEstimates.status, 'signed')))
       .limit(1);
-    if (!signed) throw new ValidationError('The customer must sign the estimate before the job is booked.');
+    if (!signed) throw new ValidationError('The customer must sign the estimate before the move is confirmed.');
+    // Confirmed = the deposit (20%) is paid; the rest is due after the move (managers, Nov 2026).
+    if (!depositCovered(await depositsReceived(s, jobId), signed.depositCents))
+      throw new ValidationError(`The deposit (${money(signed.depositCents)}) must be paid before the move is confirmed and goes on the calendar.`);
     const days = await jobDaysOf(s, jobId);
     if (days.length === 0) throw new ValidationError('Add at least one job day before booking.');
     await bookDays(s, job, days, options);
@@ -301,6 +313,42 @@ export async function releaseBooking(ctx: BusinessContext, jobId: string, now: D
     await moveStage(s, jobId, 'estimate_sent', {}, now);
     await cancelQueued(s, { triggers: ['job_booked'], jobId }, 'The booking was released.');
   });
+}
+
+/**
+ * Brings existing moves in line with "Confirmed = deposit paid" (managers' feedback round 1):
+ * a Booked move whose deposit was never paid goes back to Estimate sent, its appointments are
+ * cancelled (kept, not deleted) and a note says why. Nothing is deleted. `apply: false` only
+ * lists them. Used by `npm run hhmc:confirmed-only`.
+ */
+export async function unconfirmMovesWithoutDeposit(s: Scope, options: { apply: boolean; now?: Date }) {
+  const booked = await s.db.select({ id: hhmcJobs.id, jobNumber: hhmcJobs.jobNumber }).from(hhmcJobs).where(and(s.where(hhmcJobs), eq(hhmcJobs.stage, 'booked')));
+  const unconfirmed: { id: string; jobNumber: string; depositCents: number | null; receivedCents: number }[] = [];
+  for (const job of booked) {
+    const [signed] = await s.db
+      .select({ depositCents: hhmcEstimates.depositCents })
+      .from(hhmcEstimates)
+      .where(and(s.where(hhmcEstimates, 'include'), eq(hhmcEstimates.jobId, job.id), eq(hhmcEstimates.status, 'signed')))
+      .limit(1);
+    const received = await depositsReceived(s, job.id);
+    if (signed && depositCovered(received, signed.depositCents)) continue;
+    unconfirmed.push({ ...job, depositCents: signed?.depositCents ?? null, receivedCents: received });
+  }
+  if (!options.apply) return unconfirmed;
+  for (const job of unconfirmed) {
+    await takeLock(s, `hhmc-estimates:${job.id}`);
+    await takeLock(s, `hhmc-booking:${job.id}`);
+    await releaseAppointments(s, job.id, 'Not confirmed: the deposit is not paid');
+    await moveStage(s, job.id, 'estimate_sent', {}, options.now ?? new Date());
+    await cancelQueued(s, { triggers: ['job_booked'], jobId: job.id }, 'Not confirmed: the deposit is not paid.');
+    await createRecord(s, noteEntity, {
+      jobId: job.id,
+      kind: 'note',
+      body: `Taken off the calendar: a move is Confirmed only once its deposit is paid${job.depositCents ? ` (${money(job.depositCents)}; received ${money(job.receivedCents)})` : ' (no signed estimate)'}. Confirm it again once the deposit is in.`,
+      authorName: s.ctx.actor.name,
+    });
+  }
+  return unconfirmed;
 }
 
 // ---------------------------------------------------------------- schedule
