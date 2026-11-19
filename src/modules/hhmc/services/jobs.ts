@@ -15,7 +15,7 @@ import { createRecord, updateRecord } from '@/core/records/records';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { estimateEntity, jobDayEntity, jobEntity, noteEntity, quoteEntity, quoteLineEntity } from '../entities';
 import { P } from '../permissions';
-import { isDateText, isJobTypeFor, JOB_TYPES, stageMoveProblem, STAGE_LABELS, truckSizeOf } from '../rules';
+import { isDateText, SERVICE_TYPE_LABELS, stageMoveProblem, STAGE_LABELS, truckSizeOf } from '../rules';
 import { isUuid } from '@/core/ids';
 import {
   hhmcCatalogItems,
@@ -24,6 +24,7 @@ import {
   hhmcJobs,
   LEAD_SOURCES,
   SERVICE_TYPES,
+  type ServiceType,
   type Stage,
 } from '../schema';
 import { loadSettings } from '../settings';
@@ -32,6 +33,7 @@ import { releaseAppointments } from './booking';
 import { isTruckLine, sameName } from './builder';
 import { loadCustomer, loadJob, loadLead, money, trucksOf } from './common';
 import { optionalText, parse, requiredId } from './input';
+import { decideServiceType, jobTypeFor, type ServiceTypeDecision } from './service-type';
 
 export const JOBS_PAGE_SIZE = 25;
 
@@ -133,7 +135,8 @@ export async function listJobs(ctx: BusinessContext, filters: JobFilters = {}) {
 
 // ---------------------------------------------------------------- create and change
 
-const serviceType = z.enum(SERVICE_TYPES, { message: 'Choose a service type' });
+/** 'auto' (the default): the service type follows the addresses. A type chosen by staff is an override. */
+const serviceType = z.enum(['auto', ...SERVICE_TYPES] as const, { message: 'Choose a service type' }).default('auto');
 const optionalDate = z
   .string()
   .nullish()
@@ -153,7 +156,8 @@ export const jobDetailsInput = z.object({
   tentative: z.boolean().default(false),
   arrivalWindow: optionalText(60),
   serviceType,
-  jobType: z.string().trim().min(1, 'Choose a job type').max(100),
+  /** Blank, "-" or one of another service type: the service type's own job type is used. */
+  jobType: z.string().trim().max(100).default(''),
   bedrooms: optionalText(40),
   crewSize: count('Movers', 1, 20),
   trucks: count('Trucks', 0, 10),
@@ -184,9 +188,67 @@ async function pickedTrucks(s: Scope, ids: string[]) {
   return picked;
 }
 
-function checkJobType(details: { serviceType: (typeof SERVICE_TYPES)[number]; jobType: string }) {
-  if (!isJobTypeFor(details.serviceType, details.jobType))
-    throw new ValidationError(`For ${details.serviceType} moves, choose one of: ${JOB_TYPES[details.serviceType].join(', ')}.`);
+// ---------------------------------------------------------------- service type from the addresses
+
+type Stops = { originAddress: string | null; extraStops: string[]; destinationAddress: string | null };
+
+/**
+ * The service-type columns of a job: decided from its addresses (and the checked route, when
+ * there is one) unless staff chose a type. `override` is set when staff's choice is a change
+ * that differs from what the addresses say: the caller logs it as a note.
+ */
+export async function serviceTypeColumns(
+  s: Scope,
+  input: Stops & { serviceType: ServiceType | 'auto'; jobType: string | null; distanceTenths: number | null; routeStates: string[] | null },
+) {
+  const settings = await loadSettings(s.ctx);
+  const decision = decideServiceType({
+    stops: [input.originAddress, ...input.extraStops, input.destinationAddress],
+    routeStates: input.routeStates,
+    distanceTenths: input.distanceTenths,
+    localMaxMiles: settings.localServiceMaxMiles,
+  });
+  const auto = input.serviceType === 'auto';
+  const type: ServiceType = auto ? (decision.serviceType ?? 'local') : (input.serviceType as ServiceType);
+  return {
+    decision,
+    values: {
+      serviceType: type,
+      jobType: jobTypeFor(type, input.jobType),
+      serviceTypeSource: auto ? ('auto' as const) : ('manual' as const),
+      suggestedServiceType: decision.serviceType,
+      routeStates: input.routeStates ?? [],
+      routeChecked: input.routeStates !== null,
+    },
+  };
+}
+
+/** The note that records a manager overriding the service type (managers: "log every override"). */
+export async function logServiceTypeOverride(s: Scope, jobId: string, from: ServiceType | null, to: ServiceType, decision: ServiceTypeDecision) {
+  const says = decision.serviceType ? `the addresses say ${SERVICE_TYPE_LABELS[decision.serviceType]} (${decision.reason})` : decision.reason;
+  await createRecord(s, noteEntity, {
+    jobId,
+    kind: 'note',
+    body: `Service type overridden${from ? ` from ${SERVICE_TYPE_LABELS[from]}` : ''} to ${SERVICE_TYPE_LABELS[to]}; ${says}${decision.routeChecked ? '' : ' Route not checked.'}`,
+    authorName: s.ctx.actor.name,
+  });
+}
+
+/**
+ * Decides the service type again after the mileage or the route changed, for a job whose type
+ * follows its addresses. A type chosen by staff is never changed. Returns whether it changed.
+ */
+export async function refreshServiceType(s: Scope, jobId: string): Promise<boolean> {
+  const job = await loadJob(s, jobId);
+  if (job.serviceTypeSource !== 'auto' || !quoteEditableStage(job.stage)) return false;
+  const { values } = await serviceTypeColumns(s, { ...job, serviceType: 'auto', routeStates: job.routeChecked ? job.routeStates : null });
+  if (values.serviceType === job.serviceType && values.jobType === job.jobType && values.suggestedServiceType === job.suggestedServiceType) return false;
+  await updateRecord(s, jobEntity, jobId, { serviceType: values.serviceType, jobType: values.jobType, suggestedServiceType: values.suggestedServiceType });
+  return true;
+}
+
+function quoteEditableStage(stage: Stage) {
+  return stage === 'qualified' || stage === 'estimate_sent';
 }
 
 /**
@@ -198,8 +260,8 @@ export async function createJobInScope(
   s: Scope,
   input: JobDetails & { customerId: string; leadId?: string | null },
 ) {
-  checkJobType(input);
   await loadCustomer(s, input.customerId);
+  const { decision, values: typeValues } = await serviceTypeColumns(s, { ...input, distanceTenths: null, routeStates: null });
   const picked = await pickedTrucks(s, input.truckIds ?? []);
   // Picking trucks sets how many the move needs.
   if (picked.length) input = { ...input, trucks: picked.length };
@@ -207,14 +269,17 @@ export async function createJobInScope(
   const [jobNumber] = await nextRecordNumber(s, jobEntity, hhmcJobs.jobNumber, 'J');
   const job = await createRecord(s, jobEntity, {
     ...input,
+    ...typeValues,
     jobNumber,
     leadId: input.leadId ?? null,
     arrivalWindow: input.arrivalWindow ?? settings.defaultArrivalWindow,
     ownerName: input.ownerName ?? s.ctx.actor.name,
     stage: 'qualified',
   });
+  if (typeValues.serviceTypeSource === 'manual' && decision.serviceType && decision.serviceType !== typeValues.serviceType)
+    await logServiceTypeOverride(s, job.id, null, typeValues.serviceType, decision);
   const quote = await createRecord(s, quoteEntity, { jobId: job.id, serviceTaxOn: settings.serviceTaxOnByDefault, convenienceFeeOn: settings.cardFeeOnByDefault });
-  if (input.serviceType === 'local') {
+  if (typeValues.serviceType === 'local') {
     const defaults = await s.db
       .select()
       .from(hhmcCatalogItems)
@@ -291,7 +356,6 @@ export async function createJob(ctx: BusinessContext, raw: unknown) {
 
 export async function updateJob(ctx: BusinessContext, jobId: string, raw: unknown) {
   const input = parse(jobDetailsInput, raw);
-  checkJobType(input);
   return withScope(ctx, P.jobsWrite, async (s) => {
     const job = await loadJob(s, jobId);
     if (job.stage === 'closed' || job.stage === 'cancelled')
@@ -322,11 +386,21 @@ export async function updateJob(ctx: BusinessContext, jobId: string, raw: unknow
         await createRecord(s, jobDayEntity, { jobId, dayDate: newDate, startTime: '08:00', durationMinutes: Math.round(settings.defaultJobHours * 60), crewSize: input.crewSize ?? job.crewSize, trucks: picked.length || (input.trucks ?? job.trucks) });
       }
     }
-    return updateRecord(s, jobEntity, jobId, {
+    // The route's states and the distance only stay while the addresses are the same.
+    const { decision, values: typeValues } = await serviceTypeColumns(s, {
       ...input,
+      distanceTenths: routeChanged ? null : job.distanceTenths,
+      routeStates: !routeChanged && job.routeChecked ? job.routeStates : null,
+    });
+    const updated = await updateRecord(s, jobEntity, jobId, {
+      ...input,
+      ...typeValues,
       ...(picked.length ? { trucks: picked.length } : {}),
       ...(routeChanged ? { distanceTenths: null, driveMinutes: null, distanceSource: null } : {}),
     });
+    const overridden = typeValues.serviceTypeSource === 'manual' && (job.serviceTypeSource !== 'manual' || job.serviceType !== typeValues.serviceType);
+    if (overridden) await logServiceTypeOverride(s, jobId, job.serviceType, typeValues.serviceType, decision);
+    return updated;
   });
 }
 

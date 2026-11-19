@@ -233,7 +233,6 @@ export async function convertLead(
         notes: null,
       });
     }
-    const serviceType = details.serviceType ?? 'local';
     const job = await createJobInScope(s, {
       companyName: details.companyName ?? null,
       poNumber: details.poNumber ?? null,
@@ -243,8 +242,9 @@ export async function convertLead(
       moveDate: details.moveDate ?? lead.moveDate,
       tentative: details.tentative ?? false,
       arrivalWindow: details.arrivalWindow ?? null,
-      serviceType,
-      jobType: details.jobType ?? (serviceType === 'local' ? 'Local Full Service Move' : serviceType === 'intrastate' ? 'Intrastate Move' : 'Interstate Move'),
+      // 'auto' unless staff chose one: the addresses decide (services/service-type.ts).
+      serviceType: details.serviceType ?? 'auto',
+      jobType: details.jobType ?? '',
       bedrooms: details.bedrooms ?? lead.bedrooms,
       crewSize: details.crewSize ?? 2,
       trucks: details.trucks ?? 1,

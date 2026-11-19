@@ -31,6 +31,7 @@ import { routeStops, routeThrough, type Route } from './maps';
 import { loadJob, trucksOf } from './common';
 import { parseQty, type SectionKey } from './pricing';
 import { editableQuote, quoteLines } from './quote';
+import { refreshServiceType } from './jobs';
 
 import { quoteEditable, TRUCK_SIZES, truckSizeOf, type TruckSize } from '../rules';
 export { TRUCK_SIZES, type TruckSize };
@@ -307,6 +308,8 @@ export async function applyBuilder(ctx: BusinessContext, jobId: string, raw: unk
       originNotes: f.originNotes,
       destinationNotes: f.destinationNotes,
     });
+    // Typed-in miles can make a one-state move Intrastate (over the local miles setting).
+    await refreshServiceType(s, jobId);
     return result;
   });
 }
@@ -347,7 +350,15 @@ export async function refreshMileage(ctx: BusinessContext, jobId: string, option
     if (routeStops(now).join('\n') !== stops.join('\n')) return fail('changed', 'The addresses changed while looking up the mileage. Try again.');
     if (await locked(s, now)) return fail('locked', 'The work request changed while looking up the mileage. Reload the page.');
     if (!force && now.distanceTenths !== null) return { status: 'already_set' } as MileageResult;
-    await updateRecord(s, jobEntity, jobId, { distanceTenths: route.distanceTenths, driveMinutes: route.driveMinutes, distanceSource: 'maps' });
+    await updateRecord(s, jobEntity, jobId, {
+      distanceTenths: route.distanceTenths,
+      driveMinutes: route.driveMinutes,
+      distanceSource: 'maps',
+      routeStates: route.states ?? [],
+      routeChecked: route.states !== null && route.states !== undefined,
+    });
+    // The route may cross another state (Interstate) or be longer than a local move.
+    await refreshServiceType(s, jobId);
     return { status: 'updated', route } as MileageResult;
   });
 }

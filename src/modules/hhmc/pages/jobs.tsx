@@ -111,25 +111,41 @@ export function TruckPicker({ trucks, picked = [], idPrefix }: { trucks: TruckCh
   );
 }
 
+/**
+ * Service type and job type. "Automatic" (the default for a new work request) lets the addresses
+ * decide (services/service-type.ts); picking a type is an override and is logged on the job.
+ * The job type always matches the service type: "Automatic" uses that type's usual job type.
+ */
+export function ServiceTypeFields({ job, idPrefix }: { job?: Pick<typeof hhmcJobs.$inferSelect, 'serviceType' | 'serviceTypeSource' | 'jobType'>; idPrefix: string }) {
+  const auto = !job || job.serviceTypeSource === 'auto';
+  return (
+    <>
+      <Field label="Service type" htmlFor={`${idPrefix}-service`} help="Automatic: from the addresses (another state on the way = Interstate). Choosing one is logged as an override.">
+        <Select id={`${idPrefix}-service`} name="serviceType" defaultValue={auto ? 'auto' : job.serviceType}>
+          <option value="auto">{job && auto ? `Automatic (now ${SERVICE_TYPE_LABELS[job.serviceType]})` : 'Automatic (from the addresses)'}</option>
+          {SERVICE_TYPES.map((t) => <option key={t} value={t}>{SERVICE_TYPE_LABELS[t]}</option>)}
+        </Select>
+      </Field>
+      <Field label="Job type" htmlFor={`${idPrefix}-type`} help="One that does not fit the service type is replaced by its usual one.">
+        <Select id={`${idPrefix}-type`} name="jobType" defaultValue={auto ? '' : (job?.jobType ?? '')}>
+          <option value="">{job && auto ? `Matches the service type (now ${job.jobType})` : 'Matches the service type'}</option>
+          {SERVICE_TYPES.map((t) => (
+            <optgroup key={t} label={SERVICE_TYPE_LABELS[t]}>
+              {JOB_TYPES[t].map((j) => <option key={j} value={j}>{j}</option>)}
+            </optgroup>
+          ))}
+        </Select>
+      </Field>
+    </>
+  );
+}
+
 /** The fields of a job, used by "New job" and "Change details" on the Job page. */
 export function JobFields({ job, trucks = [], dateLocked }: { job?: typeof hhmcJobs.$inferSelect; trucks?: TruckChoice[]; dateLocked?: string }) {
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label="Service type" htmlFor="jf-service">
-          <Select id="jf-service" name="serviceType" defaultValue={job?.serviceType ?? 'local'}>
-            {SERVICE_TYPES.map((t) => <option key={t} value={t}>{SERVICE_TYPE_LABELS[t]}</option>)}
-          </Select>
-        </Field>
-        <Field label="Job type" htmlFor="jf-type">
-          <Select id="jf-type" name="jobType" defaultValue={job?.jobType ?? 'Local Full Service Move'}>
-            {SERVICE_TYPES.map((t) => (
-              <optgroup key={t} label={SERVICE_TYPE_LABELS[t]}>
-                {JOB_TYPES[t].map((j) => <option key={j} value={j}>{j}</option>)}
-              </optgroup>
-            ))}
-          </Select>
-        </Field>
+        <ServiceTypeFields job={job} idPrefix="jf" />
         <Field label="Move date" htmlFor="jf-date" help={dateLocked}><input id="jf-date" name="moveDate" type="date" defaultValue={job?.moveDate ?? ''} readOnly={!!dateLocked} aria-readonly={!!dateLocked} className={`${inputClass}${dateLocked ? ' bg-zinc-50 text-zinc-500' : ''}`} /></Field>
         <Field label="Arrival window" htmlFor="jf-window"><input id="jf-window" name="arrivalWindow" defaultValue={job?.arrivalWindow ?? ''} placeholder="8:00–9:00 AM" className={inputClass} /></Field>
         <Field label="Movers" htmlFor="jf-crew"><input id="jf-crew" name="crewSize" type="number" min={1} max={20} defaultValue={job?.crewSize ?? 2} className={inputClass} /></Field>

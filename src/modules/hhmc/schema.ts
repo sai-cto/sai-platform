@@ -196,6 +196,15 @@ export const hhmcJobs = tenantTable(
     destinationNotes: text('destination_notes'),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     closedAt: timestamp('closed_at', { withTimezone: true }),
+    // ---- Service type from the addresses (managers' feedback round 1, Nov 2026) ----
+    /** 'auto': the service type follows the addresses; 'manual': a manager chose it (logged). */
+    serviceTypeSource: text('service_type_source').$type<'auto' | 'manual'>().notNull().default('auto'),
+    /** What the addresses (and the route, when checked) say the service type is. */
+    suggestedServiceType: text('suggested_service_type').$type<ServiceType>(),
+    /** The states the driving route passes through (two-letter codes), when it was checked. */
+    routeStates: text('route_states').array().$type<string[]>().notNull().default(sql`'{}'::text[]`),
+    /** False: the route was not checked with Google Maps (decided by the addresses' states only). */
+    routeChecked: boolean('route_checked').notNull().default(false),
   },
   (t) => [
     sameTenant('hhmc_jobs_customer_fk', t, t.customerId, customers),
@@ -310,6 +319,8 @@ export type EstimateSnapshot = {
   depositBp: number;
   termsTitle: string;
   termsBody: string;
+  /** The full Terms & Conditions PDF shown with this estimate (Settings › Documents), if one was on file. */
+  termsPdf?: { fileId: string; filename: string; version: string } | null;
   valuation: string;
 };
 
@@ -347,6 +358,8 @@ export const hhmcEstimates = tenantTable(
     /** Who made this estimate, by name (managers: "you can always tell who made which estimate").
      *  The signed-in staff member when sent here; the Movegistics creator when imported. */
     createdByName: text('created_by_name'),
+    /** The Terms & Conditions version shown when the customer signed (PDF version, or "no PDF on file"). */
+    signedTermsVersion: text('signed_terms_version'),
   },
   (t) => [
     sameTenant('hhmc_estimates_job_fk', t, t.jobId, hhmcJobs),
