@@ -39,8 +39,8 @@ test('reschedule a booked move in one step', async ({ page }) => {
   await expect(page.getByText('Rescheduled.')).toBeVisible();
   expect((await jobOf('J-000009')).days[0]).toBe(target);
   await expect(page.getByText(/Rescheduled from .* Reason: Customer asked/)).toBeVisible();
-  // The move date can no longer be typed over in "Change details".
-  await unfold(page, 'Change details', page.locator('#jf-date'));
+  // The move date can no longer be typed over in "Edit move details".
+  await unfold(page, 'Edit move details', page.locator('#jf-date'));
   await expect(page.locator('#jf-date')).toHaveAttribute('readonly', '');
 });
 
