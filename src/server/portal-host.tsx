@@ -8,8 +8,9 @@ import { notFound } from 'next/navigation';
 import type { PortalDef, PortalPageProps } from '@/core/modules/contract';
 import { matchRoute } from '@/core/modules/portal';
 import type { BusinessContext } from '@/core/tenancy/context';
-import { cn } from '@/ui/cn';
-import { SearchButton } from '@/ui/search-button';
+import { getModule } from '@/core/modules/registry';
+import { AppSectionsNav } from '@/ui/section-nav';
+import { staffSectionLinks, visibleNav } from './app-sections';
 import { FeedbackButton } from '@/ui/feedback-button';
 import { sendFeedbackAction } from './feedback-actions';
 import { guarded } from './session';
@@ -37,10 +38,9 @@ export async function PortalHost({
     ]),
   );
   const current = segments.join('/');
-  const nav = portal.nav.filter((item) => {
-    const route = portal.routes.find((r) => r.path === item.path);
-    return !route || ctx.permissions.has(route.permission);
-  });
+  const nav = visibleNav(ctx, portal);
+  // The staff app's bar also carries Data and Activity log for an adminInApp module.
+  const isStaff = !ctx.link && ctx.business.moduleKey !== null && getModule(ctx.business.moduleKey)?.portals.staff === portal;
 
   // Module pages are async server components, i.e. plain async functions. Calling the page
   // here (instead of leaving it for React to render later) means a page that finds nothing,
@@ -87,35 +87,13 @@ export async function PortalHost({
           </ol>
         </nav>
       ) : null}
-      {nav.length > 1 ? (
-        <nav
-          aria-label="App sections"
-          className="mb-4 flex gap-1 overflow-x-auto rounded-lg border border-zinc-200 bg-zinc-50 p-1 print:hidden"
-        >
-          {nav.map((item) => {
-            const active = item.path === activePath;
-            return (
-              <Link
-                key={item.path}
-                href={item.path ? `${basePath}/${item.path}` : basePath}
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  'flex min-h-11 shrink-0 items-center rounded-md px-3 py-1.5 text-[13px] whitespace-nowrap text-zinc-600 hover:text-zinc-900 sm:min-h-0',
-                  active && 'bg-white font-medium text-zinc-900 shadow-sm ring-1 ring-zinc-200',
-                )}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-          {/* The one search box: same as Ctrl/Cmd-K, on every page of the app. */}
-          {/* On a phone the top bar's search button does this; here it would sit off-screen. */}
-          <span className="ml-auto hidden sm:block" />
-          <span className="hidden sm:contents">
-            <SearchButton />
-          </span>
-        </nav>
-      ) : null}
+      <AppSectionsNav
+        links={
+          isStaff
+            ? staffSectionLinks(ctx, { path: activePath })
+            : nav.map((item) => ({ label: item.label, href: item.path ? `${basePath}/${item.path}` : basePath, active: item.path === activePath }))
+        }
+      />
       {content}
       {ctx.permissions.has('business.feedback.send') && !ctx.link ? (
         <FeedbackButton action={sendFeedbackAction.bind(null, ctx.business.slug, ctx.environment)} />

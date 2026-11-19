@@ -2,6 +2,7 @@
  * Turning the matrix into answers: "what may this person do here?"
  */
 import { ForbiddenError } from '../errors';
+import { adminInApp } from '../modules/portal';
 import { getModule } from '../modules/registry';
 import { CORE_ACTIONS, RECORD_READ, RECORD_WRITE, type ActionDef } from './actions';
 import type { BusinessRole, PlatformRole, Role } from './roles';
@@ -59,6 +60,11 @@ export function resolveBusinessPermissions(input: {
   for (const a of businessActions(input.moduleKey)) {
     const allow = a.allow[role];
     if (allow === true || (allow === 'grantable' && granted.has(a.key))) permissions.add(a.key);
+  }
+  // A module whose admin is run inside the app (managers' feedback round 1): its business
+  // admins change its settings too. Nothing platform-wide, and only in this business.
+  if (role === 'business_admin' && adminInApp(input.moduleKey)) {
+    permissions.add('business.settings.write');
   }
   return { role, permissions };
 }

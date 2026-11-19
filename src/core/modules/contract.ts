@@ -212,6 +212,15 @@ export type ModuleManifest = {
     /** Entity key whose rows are counted, by created date. */
     entityKey: string;
   };
+  /**
+   * The business's admins run it from inside the app (managers' feedback round 1, Nov 2026):
+   * the console tab bar is gone for this business (for everyone, super admin included) and the
+   * app's sections gain Data and Activity log; the app's Settings joins the module settings and
+   * People and access. Business admins may change the module settings (not the portals).
+   */
+  adminInApp?: boolean;
+  /** The areas of the app's Settings page (…/settings?area=<key>), for the combined Settings. */
+  settingsAreas?: { key: string; label: string }[];
   /** Module configuration, edited in the console's Settings tab. */
   settings?: {
     schema: z.ZodType<Record<string, unknown>>;
