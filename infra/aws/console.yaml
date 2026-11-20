@@ -13,7 +13,9 @@ Parameters:
     Description: At least two subnets of that VPC, in different Availability Zones.
   GitHubRepo:
     Type: String
-    Default: sai-cto/sai-platform
+    # GitHub's immutable OIDC subject for this repository (owner@id/repo@id), as reported by
+    # `gh api repos/sai-cto/sai-platform/actions/oidc/customization/sub`.
+    Default: sai-cto@42077112/sai-platform@1452250496
   ConsoleUrl:
     Type: String
     Default: ''

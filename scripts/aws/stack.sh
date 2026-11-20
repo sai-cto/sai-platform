@@ -20,7 +20,7 @@ aws cloudformation deploy \
   --template-file infra/aws/console.yaml \
   --capabilities CAPABILITY_NAMED_IAM \
   --no-fail-on-empty-changeset \
-  --parameter-overrides VpcId="$VPC" SubnetIds="$SUBNETS" CreateGitHubOidcProvider="$OIDC" ConsoleUrl="${CONSOLE_URL:-}" \
+  --parameter-overrides VpcId="$VPC" SubnetIds="$SUBNETS" CreateGitHubOidcProvider="$OIDC" GitHubRepo="sai-cto@42077112/sai-platform@1452250496" ConsoleUrl="${CONSOLE_URL:-}" \
   --tags project=sai-console
 
 aws cloudformation describe-stacks --stack-name sai-console --query 'Stacks[0].Outputs[].[OutputKey,OutputValue]' --output text
