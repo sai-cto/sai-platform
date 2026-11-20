@@ -18,6 +18,7 @@ import { P } from '../permissions';
 import { isDateText, SERVICE_TYPE_LABELS, stageMoveProblem, STAGE_LABELS, truckSizeOf } from '../rules';
 import { isUuid } from '@/core/ids';
 import {
+  AUTOMATION_TRIGGERS,
   hhmcCatalogItems,
   hhmcEstimates,
   hhmcJobDays,
@@ -472,6 +473,8 @@ export async function cancelJob(ctx: BusinessContext, jobId: string, reason: str
     if (job.stage === 'booked') await releaseAppointments(s, jobId, 'Job cancelled');
     const depositNote = deposit > 0 && options.deposit ? ` · Deposit ${money(deposit)}: ${DEPOSIT_OUTCOME_LABELS[options.deposit]}` : '';
     const updated = await moveStage(s, jobId, 'cancelled', { cancelledReason: `${why}${depositNote}` });
+    // Every email still waiting for this job stops (reminders, follow-ups, invoice reminders).
+    await cancelQueued(s, { triggers: [...AUTOMATION_TRIGGERS], jobId }, 'The job was cancelled.');
     await createRecord(s, noteEntity, { jobId, kind: 'note', body: `Cancelled: ${why}${depositNote}.`, authorName: ctx.actor.name });
     return updated;
   });

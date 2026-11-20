@@ -78,6 +78,7 @@ export const TEMPLATES: { key: string; kind: 'terms' | 'email'; name: string; su
   { key: 'lead_last_checkin', kind: 'email', name: 'Lead: last check-in (PLACEHOLDER – manager to replace)', subject: 'Last check-in about your move', body: 'Hi {{firstName}},\n\nThis is our last note. If you still need movers, just reply.' + SIGN_OFF },
   { key: 'payment_receipt', kind: 'email', name: 'Payment receipt (PLACEHOLDER – manager to replace)', subject: 'Payment receipt: {{amount}}', body: 'Hi {{firstName}},\n\nWe received your payment of {{amount}} on {{paymentDate}} (payment {{paymentId}}) for job {{jobNumber}}.' + SIGN_OFF },
   { key: 'booked', kind: 'email', name: "You're booked", subject: "You're Booked! Here's what to expect", body: 'Hi {{firstName}},\n\nYour move ({{jobNumber}}) on {{moveDate}} is booked. Our crew will arrive in the window on your estimate.' + SIGN_OFF },
+  { key: 'move_reminder', kind: 'email', name: 'Move reminder', subject: 'Your move is coming up, {{firstName}}', body: 'Hi {{firstName}},\n\nA reminder that your move ({{jobNumber}}) is on {{moveDate}}. Please have everything ready for the crew, and call us if anything has changed.' + SIGN_OFF },
   { key: 'review_request', kind: 'email', name: 'How did your move go? (PLACEHOLDER – manager to replace)', subject: 'How did your move go?', body: 'Hi {{firstName}},\n\nThanks for moving with us. We would be grateful for a review on Google.' + SIGN_OFF },
   { key: 'past_due', kind: 'email', name: 'Past-due invoice reminder (PLACEHOLDER – manager to replace)', subject: 'Reminder: invoice {{invoiceNumber}} is past due', body: 'Hi {{firstName}},\n\nInvoice {{invoiceNumber}} has a balance of {{balanceDue}}. Pay it here:\n{{link}}' + SIGN_OFF },
   { key: 'invoice_email', kind: 'email', name: 'Invoice (PLACEHOLDER – manager to replace)', subject: 'Invoice {{invoiceNumber}} from {{businessName}}', body: 'Hi {{firstName}},\n\nYour invoice {{invoiceNumber}} totals {{invoiceTotal}}. Balance due: {{balanceDue}} by {{dueDate}}.\n{{link}}' + SIGN_OFF },
@@ -100,4 +101,5 @@ export const RULES: { key: string; name: string; trigger: AutomationTrigger; del
   { key: 'booked', name: "You're Booked", trigger: 'job_booked', delayMinutes: 0, templateKey: 'booked', respectsOptIn: false },
   { key: 'review_request', name: 'How did your move go?', trigger: 'invoice_paid', delayMinutes: 0, templateKey: 'review_request', respectsOptIn: true },
   { key: 'past_due', name: 'Past Due Reminder', trigger: 'invoice_sent', delayMinutes: 8 * 1440, templateKey: 'past_due', respectsOptIn: false },
+  { key: 'move_reminder_2d', name: 'Move reminder (2 days before)', trigger: 'move_reminder', delayMinutes: -2 * 1440, templateKey: 'move_reminder', respectsOptIn: false },
 ];

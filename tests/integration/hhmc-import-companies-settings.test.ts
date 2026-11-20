@@ -64,7 +64,9 @@ describe('companies: copies of contacts are linked, real organizations become cu
     const ctx = await systemContext('hhmc', 'sandbox');
     const batch = <T,>(fn: (s: Scope) => Promise<T>) => withScope(ctx, 'hhmc.import.run', fn);
     const n = normalize({ ...fixture, contacts: contactsWithRef });
-    const withCompanies = { ...n, companies: normalizeCompanies(COMPANY_ROWS, n.contacts) };
+    // Contacts and companies only: the fixture's estimates, invoices and payments are another
+    // test file's subject, and loading them on top of what that file left behind is not the point.
+    const withCompanies = { ...n, estimates: [], invoices: [], payments: [], companies: normalizeCompanies(COMPANY_ROWS, n.contacts) };
     const first = await loadIntoHhmc(batch, withCompanies);
     const refOf = (sid: string) => batch(async (s) => (await s.db.select().from(hhmcImportRefs).where(and(s.where(hhmcImportRefs), eq(hhmcImportRefs.sourceType, 'company'), eq(hhmcImportRefs.sourceId, sid))))[0]);
     expect((await refOf('CO900001')).recordId).toBe(first.ids.get('contact:CN900001'));

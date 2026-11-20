@@ -93,3 +93,68 @@ describe('nothing sends twice', () => {
     expect(queued.every((r) => r.q.status === 'sent')).toBe(true);
   });
 });
+
+/** A move booked the normal way: quote, estimate sent, signed, deposit paid, confirmed. */
+async function bookedJob(ctx: BusinessContext, moveInDays: number) {
+  const { job, email } = await newJob(ctx, moveInDays);
+  const { hhmcCatalogItems } = await import('@/modules/hhmc/schema');
+  const { addQuoteLine } = await import('@/modules/hhmc/services/quote');
+  const { customerLinkFor, payDepositByLink, sendEstimate, signEstimateByLink } = await import('@/modules/hhmc/services/estimates');
+  const { buildLinkContext } = await import('@/core/links/links');
+  const { bookJob } = await import('@/modules/hhmc/services/booking');
+  const catalog = await withScope(ctx, P.catalogRead, (s) => s.db.select().from(hhmcCatalogItems).where(s.where(hhmcCatalogItems)));
+  await addQuoteLine(ctx, job.id, { section: 'transportation_labor', catalogItemId: catalog.find((c) => c.name === '2 Men')!.id, qty: '2.5' });
+  const estimate = await sendEstimate(ctx, job.id);
+  const customer = await buildLinkContext((await customerLinkFor(ctx, estimate.id)).split('/l/')[1]);
+  await signEstimateByLink(customer, { valuationInitials: 'RW', signatureName: 'Riley Workflow', agree: true, ip: null, userAgent: null });
+  await payDepositByLink(customer, { attemptKey: `t${tag()}d` });
+  await bookJob(ctx, job.id, new Date(), { allowNoTruck: true });
+  return { job, email };
+}
+
+describe('move reminders', () => {
+  it('booking queues the reminders before the move date; rescheduling moves them; nothing is sent twice', async () => {
+    const ctx = await admin();
+    const { job } = await bookedJob(ctx, 20);
+    const reminders = () => queueOf(ctx, job.id).then((rows) => rows.filter((r) => r.trigger === 'move_reminder'));
+    const first = (await reminders()).filter((r) => r.q.status === 'queued');
+    expect(first.length).toBeGreaterThan(0);
+    for (const r of first) expect(r.q.dueAt.getTime()).toBeLessThan(Date.parse(`${day(20)}T23:59:59Z`));
+
+    const { rescheduleJob } = await import('@/modules/hhmc/services/booking');
+    await rescheduleJob(ctx, job.id, { date: day(25), allowNoTruck: true });
+    const after = await reminders();
+    expect(after.filter((r) => r.q.status === 'cancelled' && r.q.cancelledReason === 'The move was rescheduled.')).toHaveLength(first.length);
+    const moved = after.filter((r) => r.q.status === 'queued');
+    expect(moved).toHaveLength(first.length);
+    for (const r of moved) expect(r.q.dueAt.getTime()).toBeGreaterThan(Date.parse(`${day(21)}T00:00:00Z`));
+
+    // Due time passes: each reminder is sent once, even with two runs at once.
+    const later = new Date(Date.parse(`${day(25)}T12:00:00Z`));
+    await Promise.all([
+      withScope(ctx, P.jobsWrite, (s) => processDueAutomationsInScope(s, later)),
+      withScope(ctx, P.jobsWrite, (s) => processDueAutomationsInScope(s, later)),
+    ]);
+    expect((await reminders()).filter((r) => r.q.status === 'sent')).toHaveLength(first.length);
+  });
+
+  it('a reminder whose time has already passed when the move is booked is not queued', async () => {
+    const ctx = await admin();
+    const { job } = await bookedJob(ctx, 1);
+    const rows = (await queueOf(ctx, job.id)).filter((r) => r.trigger === 'move_reminder');
+    for (const r of rows) expect(r.q.dueAt.getTime()).toBeGreaterThan(Date.now() - 60_000);
+  });
+});
+
+describe('cancelling a job stops all its scheduled emails', () => {
+  it('cancels every queued email of the job, whatever its trigger', async () => {
+    const ctx = await admin();
+    const { job } = await bookedJob(ctx, 30);
+    expect((await queueOf(ctx, job.id)).some((r) => r.q.status === 'queued')).toBe(true);
+    const { cancelJob } = await import('@/modules/hhmc/services/jobs');
+    await cancelJob(ctx, job.id, 'Customer changed plans', { deposit: 'kept' });
+    const rows = await queueOf(ctx, job.id);
+    expect(rows.filter((r) => r.q.status === 'queued')).toHaveLength(0);
+    expect(rows.some((r) => r.q.cancelledReason === 'The job was cancelled.')).toBe(true);
+  });
+});

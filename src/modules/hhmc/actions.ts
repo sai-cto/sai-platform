@@ -515,7 +515,9 @@ export async function ruleAction(slug: string, mode: string, id: string, _p: For
     const amount = Number(text(form, unit ? 'delay' : 'delayMinutes'));
     const minutes = unit === 'days' ? amount * 1440 : unit === 'hours' ? amount * 60 : amount;
     if (!Number.isInteger(minutes) || minutes < 0 || minutes > 60 * 24 * 60) throw new ValidationError('Enter the wait as a whole number (up to 60 days).');
-    await updateRule(ctx, id, { isActive: ticked(form, 'isActive'), delayMinutes: minutes });
+    // Move reminders are stored as minutes before the move's start (a negative delay).
+    const before = text(form, 'before') === '1';
+    await updateRule(ctx, id, { isActive: ticked(form, 'isActive'), delayMinutes: before ? -minutes : minutes });
     return 'Saved.';
   });
 }

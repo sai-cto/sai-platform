@@ -67,7 +67,14 @@ async function alreadyQueuedOrSent(s: Scope, key: string): Promise<boolean> {
 export async function enqueue(
   s: Scope,
   trigger: AutomationTrigger,
-  refs: QueueRefs & { recipient: string | null; optIn?: boolean; notBefore?: Date; variant?: string },
+  refs: QueueRefs & {
+    recipient: string | null;
+    optIn?: boolean;
+    notBefore?: Date;
+    variant?: string;
+    /** Move reminders: the moment the delay counts from (the move's start). */
+    anchor?: Date;
+  },
   now: Date = new Date(),
 ): Promise<number> {
   if (!refs.recipient) return 0;
@@ -87,6 +94,10 @@ export async function enqueue(
     if (rule.respectsOptIn && refs.optIn === false) continue;
     const dedupeKey = dedupeKeyOf(rule.id, refs, refs.variant);
     if (await alreadyQueuedOrSent(s, dedupeKey)) continue;
+    const base = refs.anchor ?? now;
+    const dueAt = new Date(Math.max(base.getTime() + rule.delayMinutes * 60_000, refs.notBefore?.getTime() ?? 0));
+    // A reminder whose moment has already passed (a move booked at short notice) is not sent late.
+    if (refs.anchor && dueAt.getTime() < now.getTime()) continue;
     const row = await createRecord(s, queueEntity, {
       dedupeKey,
       ruleId: rule.id,
@@ -96,15 +107,31 @@ export async function enqueue(
       invoiceId: refs.invoiceId ?? null,
       paymentId: refs.paymentId ?? null,
       recipient: refs.recipient,
-      dueAt: new Date(Math.max(now.getTime() + rule.delayMinutes * 60_000, refs.notBefore?.getTime() ?? 0)),
+      dueAt,
       status: 'queued',
     });
     queued++;
-    if (rule.delayMinutes === 0 && !refs.notBefore && can(s.ctx, CORE.notificationsWrite)) {
+    if (rule.delayMinutes === 0 && !refs.notBefore && !refs.anchor && can(s.ctx, CORE.notificationsWrite)) {
       await processRow(s, row, now);
     }
   }
   return queued;
+}
+
+/**
+ * Queues the reminders before a booked move (rules with trigger "move_reminder"), counted from
+ * the first day's start (09:00 when it has no start time). Once per move date: a reschedule
+ * cancels them (cancelMoveReminders) and queues them again for the new date.
+ */
+export async function queueMoveReminders(
+  s: Scope,
+  job: { id: string; automationOptIn: boolean },
+  firstDay: { dayDate: string; startTime: string | null },
+  recipient: string | null,
+  now: Date = new Date(),
+): Promise<number> {
+  const anchor = localTime(firstDay.dayDate, firstDay.startTime?.slice(0, 5) || '09:00', s.ctx.business.timeZone);
+  return enqueue(s, 'move_reminder', { jobId: job.id, recipient, optIn: job.automationOptIn, anchor, variant: firstDay.dayDate }, now);
 }
 
 /** Cancels queued emails matching `where` (for example: this job's estimate drip). */
@@ -181,6 +208,7 @@ async function processRow(s: Scope, row: QueueRow, now: Date): Promise<'sent' | 
           invoiceStatus: invoice?.archivedAt ? null : (invoice?.status ?? null),
           invoicePastDue: invoice ? invoice.dueDate < localDate(now, s.ctx.business.timeZone) : null,
           estimateExpired: estimate?.expiresAt ? estimate.expiresAt.getTime() <= now.getTime() : false,
+          moveDatePassed: job?.moveDate ? job.moveDate < localDate(now, s.ctx.business.timeZone) : null,
         });
   if (!verdict.ok && invoice && rule?.trigger === 'invoice_sent' && verdict.reason === NOT_PAST_DUE) {
     // Not due yet (e.g. its terms changed): wait until the day after the due date instead.

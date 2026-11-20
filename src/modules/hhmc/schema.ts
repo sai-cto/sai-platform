@@ -470,6 +470,8 @@ export const AUTOMATION_TRIGGERS = [
   'job_booked',
   'invoice_paid',
   'invoice_sent',
+  /** Before the move date: the rule's delay is negative, counted from the first day's start. */
+  'move_reminder',
 ] as const;
 export type AutomationTrigger = (typeof AUTOMATION_TRIGGERS)[number];
 
