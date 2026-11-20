@@ -1,0 +1,17 @@
+# Never send secrets, data or local state into the image build.
+.env
+.env.*
+!.env.example
+data/
+storage/
+node_modules/
+.next/
+test-results/
+playwright-report/
+coverage/
+*.dump
+*.sql.gz
+.git/
+.claude/
+hiredhands-site/
+docs/screenshots/

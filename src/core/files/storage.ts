@@ -1,9 +1,18 @@
 /**
  * Where file bytes live. Metadata is in the `files` table; this is only the bytes.
- * The one adapter today writes to a local folder (FILE_STORAGE_DIR, git-ignored).
+ * Local development and tests write to a local folder (FILE_STORAGE_DIR, git-ignored); the
+ * hosted site on AWS writes to a private S3 bucket (FILE_STORAGE_BUCKET).
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 
 export interface FileStorage {
   name: string;
@@ -38,7 +47,47 @@ export const localDiskStorage: FileStorage = {
   deletePrefix: async (prefix) => fs.rm(resolveKey(prefix), { recursive: true, force: true }),
 };
 
-export const fileStorage: FileStorage = localDiskStorage;
+/**
+ * Amazon S3 (hosted on AWS, docs/aws.md). The bucket is private and encrypted; the app reaches
+ * it with its task role, so no key is configured here. Keys are the same as on local disk.
+ */
+export function s3Storage(bucket: string): FileStorage {
+  let client: S3Client | undefined;
+  const s3 = () => (client ??= new S3Client({}));
+  const checked = (key: string) => {
+    if (key.split('/').some((part) => part === '' || part === '.' || part === '..')) throw new Error('Invalid storage key.');
+    return key;
+  };
+  return {
+    name: 's3',
+    async put(key, bytes) {
+      await s3().send(new PutObjectCommand({ Bucket: bucket, Key: checked(key), Body: bytes }));
+    },
+    async get(key) {
+      const out = await s3().send(new GetObjectCommand({ Bucket: bucket, Key: checked(key) }));
+      if (!out.Body) throw new Error('File not found in storage.');
+      return out.Body.transformToByteArray();
+    },
+    async delete(key) {
+      await s3().send(new DeleteObjectCommand({ Bucket: bucket, Key: checked(key) }));
+    },
+    async deletePrefix(prefix) {
+      const folder = `${checked(prefix)}/`;
+      let token: string | undefined;
+      do {
+        const page = await s3().send(new ListObjectsV2Command({ Bucket: bucket, Prefix: folder, ContinuationToken: token }));
+        const keys = (page.Contents ?? []).flatMap((o) => (o.Key ? [{ Key: o.Key }] : []));
+        if (keys.length > 0) await s3().send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: keys, Quiet: true } }));
+        token = page.IsTruncated ? page.NextContinuationToken : undefined;
+      } while (token);
+    },
+  };
+}
+
+/** FILE_STORAGE_BUCKET set (hosted on AWS): S3. Otherwise the local folder. */
+export const fileStorage: FileStorage = process.env.FILE_STORAGE_BUCKET
+  ? s3Storage(process.env.FILE_STORAGE_BUCKET)
+  : localDiskStorage;
 
 /** Every file key starts with this, so one business's files in one environment share a folder. */
 export function storagePrefix(businessId: string, environment: 'live' | 'sandbox'): string {

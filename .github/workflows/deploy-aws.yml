@@ -1,0 +1,87 @@
+# Deploys main to AWS (docs/aws.md): the SAI Console image to ECS Express, and the Hired Hands
+# website to S3 + CloudFront. GitHub signs in with a short-lived OIDC token; the role only trusts
+# main of this repository. No AWS keys are stored in GitHub.
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-aws
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: '960129066398'
+  DEPLOY_ROLE: arn:aws:iam::960129066398:role/sai-github-deploy
+
+jobs:
+  console:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push the image
+        env:
+          REPO: ${{ steps.ecr.outputs.registry }}/sai-console
+        run: |
+          docker build --platform linux/arm64 -t "$REPO:$GITHUB_SHA" -t "$REPO:latest" .
+          docker push "$REPO:$GITHUB_SHA"
+          docker push "$REPO:latest"
+      - name: Point the service at the new image (all other settings unchanged)
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/sai-console:${{ github.sha }}
+        run: |
+          ARN="arn:aws:ecs:$AWS_REGION:$AWS_ACCOUNT_ID:service/default/sai-console"
+          aws ecs describe-express-gateway-service --service-arn "$ARN" \
+            --query 'service.activeConfigurations[0].primaryContainer' --output json > container.json
+          jq --arg image "$IMAGE" '.image = $image' container.json > next.json
+          aws ecs update-express-gateway-service --service-arn "$ARN" \
+            --primary-container file://next.json --query 'service.status.statusCode' --output text
+          rm -f container.json next.json
+      - name: Wait until the new version is serving
+        run: |
+          ARN="arn:aws:ecs:$AWS_REGION:$AWS_ACCOUNT_ID:service/default/sai-console"
+          aws ecs wait services-stable --cluster default --services sai-console
+          URL=$(aws ecs describe-express-gateway-service --service-arn "$ARN" \
+            --query 'service.activeConfigurations[0].ingressPaths[0].endpoint' --output text)
+          curl -fsS --retry 10 --retry-delay 15 --retry-all-errors "https://${URL#https://}/api/health"
+
+  website:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Point the quote form at the AWS console
+        # The repository keeps the Vercel address so the Vercel copy of the site is unchanged until
+        # the switch; the copy on AWS posts to the console on AWS.
+        run: |
+          URL=$(aws ecs describe-express-gateway-service \
+            --service-arn "arn:aws:ecs:$AWS_REGION:$AWS_ACCOUNT_ID:service/default/sai-console" \
+            --query 'service.activeConfigurations[0].ingressPaths[0].endpoint' --output text)
+          URL="https://${URL#https://}"
+          sed -i -E "s#data-endpoint=\"https://[^\"/]+/api/public/website-lead\"#data-endpoint=\"$URL/api/public/website-lead\"#" hiredhands-site/free-quote.html
+          grep -q "data-endpoint=\"$URL/api/public/website-lead\"" hiredhands-site/free-quote.html
+      - name: Upload the site and clear the cache
+        run: |
+          aws s3 sync hiredhands-site/ "s3://hiredhands-site-$AWS_ACCOUNT_ID/" --delete \
+            --exclude 'audit.md' --exclude 'vercel.json' --exclude '.*'
+          ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Comment=='Hired Hands Moving website'].Id | [0]" --output text)
+          aws cloudfront create-invalidation --distribution-id "$ID" --paths '/*' --query 'Invalidation.Id' --output text
