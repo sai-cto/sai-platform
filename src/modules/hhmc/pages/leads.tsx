@@ -4,6 +4,7 @@ import { Badge } from '@/ui/badge';
 import type { PortalPageProps } from '@/core/modules/contract';
 import { can } from '@/core/rbac/permissions';
 import { ActionForm } from '@/ui/action-form';
+import { AddressInput } from '@/ui/address-input';
 import { buttonClass } from '@/ui/button';
 import { ConfirmButton } from '@/ui/confirm-button';
 import { formatDate, formatDateTime, formatRelative } from '@/ui/format';
@@ -147,8 +148,8 @@ function LeadFields({ lead }: { lead?: Lead }) {
         <div className="flex items-end pb-2"><Check name="storage" label="Needs storage" defaultChecked={lead?.storage} /></div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="From address" htmlFor="lf-from"><input id="lf-from" name="originAddress" defaultValue={lead?.originAddress ?? ''} className={inputClass} /></Field>
-        <Field label="To address" htmlFor="lf-to"><input id="lf-to" name="destinationAddress" defaultValue={lead?.destinationAddress ?? ''} className={inputClass} /></Field>
+        <Field label="From address" htmlFor="lf-from"><AddressInput id="lf-from" name="originAddress" defaultValue={lead?.originAddress ?? ''} /></Field>
+        <Field label="To address" htmlFor="lf-to"><AddressInput id="lf-to" name="destinationAddress" defaultValue={lead?.destinationAddress ?? ''} /></Field>
         <Field label="Customer note" htmlFor="lf-cnote"><textarea id="lf-cnote" name="customerNote" rows={3} defaultValue={lead?.customerNote ?? ''} className={areaClass} /></Field>
         <Field label="Internal note" htmlFor="lf-inote"><textarea id="lf-inote" name="internalNote" rows={3} defaultValue={lead?.internalNote ?? ''} className={areaClass} /></Field>
       </div>

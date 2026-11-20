@@ -5,6 +5,7 @@ import type { PortalPageProps } from '@/core/modules/contract';
 import { can } from '@/core/rbac/permissions';
 import { customerName } from '@/core/records/core-entities';
 import { ActionForm } from '@/ui/action-form';
+import { AddressInput } from '@/ui/address-input';
 import { buttonClass } from '@/ui/button';
 
 import { Card, EmptyState, Field, PageHeader, Table, Td, Th, inputClass } from '@/ui/layout';
@@ -183,8 +184,8 @@ export function JobFields({
         ) : null}
         {locations ? (
           <>
-            <Field label="From address" htmlFor="jf-from" className="sm:col-span-2"><input id="jf-from" name="originAddress" defaultValue={job?.originAddress ?? ''} className={inputClass} /></Field>
-            <Field label="To address" htmlFor="jf-to" className="sm:col-span-2"><input id="jf-to" name="destinationAddress" defaultValue={job?.destinationAddress ?? ''} className={inputClass} /></Field>
+            <Field label="From address" htmlFor="jf-from" className="sm:col-span-2"><AddressInput id="jf-from" name="originAddress" defaultValue={job?.originAddress ?? ''} /></Field>
+            <Field label="To address" htmlFor="jf-to" className="sm:col-span-2"><AddressInput id="jf-to" name="destinationAddress" defaultValue={job?.destinationAddress ?? ''} /></Field>
             <Field label="Extra stops" htmlFor="jf-stops" help="One per line, in driving order (at most 8). The mileage goes through every stop." className="sm:col-span-2"><textarea id="jf-stops" name="extraStops" rows={2} defaultValue={(job?.extraStops ?? []).join('\n')} className={areaClass} /></Field>
           </>
         ) : null}

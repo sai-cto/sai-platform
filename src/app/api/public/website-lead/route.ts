@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ValidationError } from '@/core/errors';
+import { allowedOrigins, corsHeaders, originOf, rateLimiter } from '@/core/http/public-door';
 import { runPublicIntake } from '@/core/intake/intake';
 
 /**
@@ -27,52 +28,21 @@ const MAX_BYTES = 20_000;
 const LIMIT = 5; // requests per address per window
 const WINDOW_MS = 10 * 60_000;
 
-const hits = new Map<string, number[]>();
-
-function allowedOrigins(): string[] {
-  return (process.env.WEBSITE_INTAKE_ORIGINS ?? '')
-    .split(',')
-    .map((o) => o.trim().replace(/\/$/, ''))
-    .filter(Boolean);
-}
-
-function cors(origin: string): Record<string, string> {
-  return {
-    'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Max-Age': '86400',
-    Vary: 'Origin',
-  };
-}
-
-function tooMany(request: Request, now: number): boolean {
-  const address = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-  const recent = (hits.get(address) ?? []).filter((t) => now - t < WINDOW_MS);
-  if (recent.length >= LIMIT) {
-    hits.set(address, recent);
-    return true;
-  }
-  recent.push(now);
-  hits.set(address, recent);
-  // Keep the map small on a long-lived instance.
-  if (hits.size > 5000) for (const [key, times] of hits) if (times.every((t) => now - t >= WINDOW_MS)) hits.delete(key);
-  return false;
-}
+const tooMany = rateLimiter(LIMIT, WINDOW_MS);
 
 /** The browser asks first ("may this page post here?"). */
 export async function OPTIONS(request: Request) {
-  const origin = (request.headers.get('origin') ?? '').replace(/\/$/, '');
+  const origin = originOf(request);
   if (!origin || !allowedOrigins().includes(origin)) return new NextResponse('Not found', { status: 404 });
-  return new NextResponse(null, { status: 204, headers: cors(origin) });
+  return new NextResponse(null, { status: 204, headers: corsHeaders(origin, 'POST, OPTIONS') });
 }
 
 export async function POST(request: Request) {
   const origins = allowedOrigins();
   if (origins.length === 0) return new NextResponse('Not found', { status: 404 });
-  const origin = (request.headers.get('origin') ?? '').replace(/\/$/, '');
+  const origin = originOf(request);
   if (!origins.includes(origin)) return new NextResponse('Not found', { status: 404 });
-  const headers = cors(origin);
+  const headers = corsHeaders(origin, 'POST, OPTIONS');
   const reply = (body: Record<string, unknown>, status: number) => NextResponse.json(body, { status, headers });
 
   if (tooMany(request, Date.now()))
