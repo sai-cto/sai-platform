@@ -136,7 +136,7 @@ describe('mileage through every stop', () => {
     const route = await routeThrough(['A', 'B', 'C', 'D']);
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe('https://routes.googleapis.com/directions/v2:computeRoutes');
-    expect(calls[0].headers['X-Goog-FieldMask']).toBe('routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.navigationInstruction.instructions');
+    expect(calls[0].headers['X-Goog-FieldMask']).toBe('routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.navigationInstruction.instructions,geocodingResults');
     expect(calls[0].body.origin.address).toBe('A');
     expect(calls[0].body.intermediates.map((i) => i.address)).toEqual(['B', 'C']);
     expect(calls[0].body.destination.address).toBe('D');
@@ -146,6 +146,34 @@ describe('mileage through every stop', () => {
   it('no route found (an empty answer) is "not found", never zero miles', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })));
     expect(await routeThrough(['A', 'B'])).toBeNull();
+  });
+
+  it('an address Google only partly matched (a guess, e.g. a street in another town) is never priced', async () => {
+    // What Google answered for a made-up Dryden address: a Stewart Ave on Long Island, 260 miles away.
+    const guessed = {
+      routes: [{ distanceMeters: 418993, duration: '16642s' }],
+      geocodingResults: {
+        origin: { type: ['street_address'], partialMatch: true, placeId: 'p1' },
+        intermediates: [{ type: ['street_address'], placeId: 'p2', intermediateWaypointRequestIndex: 0 }],
+        destination: { type: ['route'], partialMatch: true, placeId: 'p3' },
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(guessed), { status: 200 })));
+    expect(await routeThrough(['1 Made Up St, Dryden, NY', '2 Real St, Ithaca, NY', '3 Made Up St, Trumansburg, NY'])).toEqual({
+      unmatched: ['1 Made Up St, Dryden, NY', '3 Made Up St, Trumansburg, NY'],
+    });
+  });
+
+  it('"Look up mileage" names the address Google could not match, and the miles stay empty', async () => {
+    const ctx = await admin();
+    const partly = { routes: [{ distanceMeters: 418993, duration: '16642s' }], geocodingResults: { origin: { partialMatch: true } } };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(partly), { status: 200 })));
+    const job = await newCustomerJob(ctx);
+    const saved = await withScope(ctx, P.jobsWrite, (s) => loadJob(s, job.id));
+    expect(saved.distanceTenths).toBeNull();
+    expect(await refreshMileage(ctx, job.id)).toEqual({ status: 'unmatched' });
+    await expect(refreshMileage(ctx, job.id, { force: true })).rejects.toThrow(`could not match "${saved.originAddress}" exactly`);
+    expect((await withScope(ctx, P.jobsWrite, (s) => loadJob(s, job.id))).distanceTenths).toBeNull();
   });
 
   it('no key: not configured, and Google is not called', async () => {

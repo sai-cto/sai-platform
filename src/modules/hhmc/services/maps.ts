@@ -19,6 +19,10 @@ import { stateCode } from './us-states';
  *  not be checked (the route was found but the state lookup failed). */
 export type Route = { distanceTenths: number; driveMinutes: number; states?: string[] | null };
 
+/** Stops Google could not match exactly. Google then guesses (a "partial match": e.g. the same
+ *  street name in another town) and routes to the guess, so its miles would price the wrong move. */
+export type Unmatched = { unmatched: string[] };
+
 /** At most this many points along the route are looked up for their state (Geocoding API). */
 export const ROUTE_STATE_SAMPLES = 25;
 
@@ -34,7 +38,7 @@ export function routeStops(job: { originAddress: string | null; extraStops: stri
 /** Road distance and drive time through every stop, in order (at most 10 stops).
  *  Google Routes API "computeRoutes": one route through the stops, billed once. (The older
  *  Distance Matrix API is "Legacy" since March 2025 and cannot be enabled in new projects.) */
-export async function routeThrough(stops: string[]): Promise<Route | null | 'not_configured'> {
+export async function routeThrough(stops: string[]): Promise<Route | Unmatched | null | 'not_configured'> {
   const key = process.env.GOOGLE_MAPS_API_KEY;
   if (!key) return 'not_configured';
   if (stops.length < 2 || stops.length > 10) return null;
@@ -44,8 +48,9 @@ export async function routeThrough(stops: string[]): Promise<Route | null | 'not
       'Content-Type': 'application/json',
       'X-Goog-Api-Key': key,
       // Only what we use (Google bills by the fields asked for): the two numbers, and the line of
-      // the route and its turn-by-turn text to find the states it passes through.
-      'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.navigationInstruction.instructions',
+      // the route and its turn-by-turn text to find the states it passes through, and how well
+      // each address was matched.
+      'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.navigationInstruction.instructions,geocodingResults',
     },
     body: JSON.stringify({
       origin: { address: stops[0] },
@@ -59,6 +64,8 @@ export async function routeThrough(stops: string[]): Promise<Route | null | 'not
   }).catch(() => null);
   if (!response?.ok) return null;
   const body = (await response.json().catch(() => null)) as RoutesBody | null;
+  const unmatched = unmatchedStops(stops, body?.geocodingResults);
+  if (unmatched.length) return { unmatched };
   const route = body?.routes?.[0];
   const seconds = route?.duration ? Number(/^(\d+(?:\.\d+)?)s$/.exec(route.duration)?.[1]) : NaN;
   if (!route || typeof route.distanceMeters !== 'number' || !Number.isFinite(seconds)) return null;
@@ -68,7 +75,9 @@ export async function routeThrough(stops: string[]): Promise<Route | null | 'not
   return { distanceTenths: Math.round(route.distanceMeters / 160.9344), driveMinutes: Math.ceil(seconds / 60), states };
 }
 
+type Geocoded = { partialMatch?: boolean; geocoderStatus?: { code?: number } };
 type RoutesBody = {
+  geocodingResults?: { origin?: Geocoded; destination?: Geocoded; intermediates?: (Geocoded & { intermediateWaypointRequestIndex?: number })[] };
   routes?: {
     distanceMeters?: number;
     duration?: string;
@@ -76,6 +85,17 @@ type RoutesBody = {
     legs?: { steps?: { navigationInstruction?: { instructions?: string } }[] }[];
   }[];
 };
+
+/** The stops Google only partly matched or could not find, in driving order. */
+function unmatchedStops(stops: string[], results: RoutesBody['geocodingResults']): string[] {
+  if (!results) return [];
+  const bad = (g: Geocoded | undefined) => Boolean(g && (g.partialMatch || (g.geocoderStatus?.code ?? 0) !== 0));
+  return stops.filter((_, i) => {
+    if (i === 0) return bad(results.origin);
+    if (i === stops.length - 1) return bad(results.destination);
+    return bad(results.intermediates?.find((g) => (g.intermediateWaypointRequestIndex ?? 0) === i - 1));
+  });
+}
 
 /** Google's encoded polyline → [lat, lng] points (the published algorithm). */
 export function decodePolyline(encoded: string): [number, number][] {
