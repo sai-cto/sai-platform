@@ -18,7 +18,9 @@ EXISTING=$(aws ecs describe-services --cluster default --services sai-console \
   --query 'services[?status==`ACTIVE`].serviceArn' --output text 2>/dev/null || true)
 APP_URL="${APP_URL:-}"
 
-CONTAINER=$(node -e '
+CONTAINER=$(ORIGINS="$ORIGINS" IMAGE="$IMAGE" APP_URL="$APP_URL" DB_HOST="$(out DatabaseHost)" BUCKET="$(out UploadsBucketName)" \
+  DB_SECRET="$(out DatabaseOwnerSecretArn)" LINK_SECRET="$(out LinkSigningSecretArn)" CRON_SECRET_ARN="$(out CronSecretArn)" \
+  MS_SECRET="$(out MicrosoftClientSecretArn)" LOG_GROUP="$(out LogGroupName)" node -e '
 const e = process.env;
 const env = {
   NODE_ENV: "production", AWS_REGION: e.AWS_REGION,
@@ -42,9 +44,7 @@ process.stdout.write(JSON.stringify({
   environment: Object.entries(env).filter(([, v]) => v).map(([name, value]) => ({ name, value: String(value) })),
   secrets: secrets.map(([name, valueFrom]) => ({ name, valueFrom })),
 }));
-' ORIGINS="$ORIGINS" IMAGE="$IMAGE" APP_URL="$APP_URL" DB_HOST="$(out DatabaseHost)" BUCKET="$(out UploadsBucketName)" \
-  DB_SECRET="$(out DatabaseOwnerSecretArn)" LINK_SECRET="$(out LinkSigningSecretArn)" CRON_SECRET_ARN="$(out CronSecretArn)" \
-  MS_SECRET="$(out MicrosoftClientSecretArn)" LOG_GROUP="$(out LogGroupName)")
+')
 
 ensure_cluster
 NETWORK="securityGroups=$(out AppSecurityGroupId),subnets=$(subnets)"

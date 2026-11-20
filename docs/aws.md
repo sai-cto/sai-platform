@@ -3,6 +3,12 @@
 The SAI Console and the Hired Hands website run on AWS in account `960129066398`, region
 `us-east-1` (N. Virginia). This replaced Vercel + Neon in November 2026.
 
+- SAI Console: <https://sa-c95d7b62b8154ff2a92f661e2c28a8a2.ecs.us-east-1.on.aws>
+- Hired Hands website: <https://d19nd4qfh33bnj.cloudfront.net> (its quote form posts to the
+  console's `/api/public/website-lead`)
+- Microsoft sign-in redirect URI (registered in Entra):
+  `https://sa-c95d7b62b8154ff2a92f661e2c28a8a2.ecs.us-east-1.on.aws/api/auth/microsoft/callback`
+
 | What | Where |
 | --- | --- |
 | SAI Console | ECS Express Mode service `sai-console` (Fargate, ARM, 0.5 vCPU / 1 GB) behind its load balancer |
@@ -51,8 +57,11 @@ A budget alert in AWS Budgets emails cto@studentagencies.com above $50/month.
   address from the `sai/console/database-owner` secret, runs `scripts/demo-prepare.ts`
   (app role, migrations, pilot accounts) and starts Next.js.
 - The database only accepts connections from the console's security group. To run a one-off
-  job against it (a restore, an import), run it as an ECS task with that security group:
-  `scripts/aws/run-task.sh`.
+  job against it, run it as an ECS task with that security group. Two such jobs are scripted:
+  - `scripts/aws/restore-db.sh <dump.sql.gz>`: loads a plain-SQL dump into an empty database.
+  - `scripts/aws/import-movegistics.sh [data/movegistics]`: the guarded Movegistics import
+    (same as `npm run hhmc:import:pilot`), run with the console image. Safe to re-run.
+  Both upload their input to the private transfer bucket, use a 15-minute link, and delete it.
 - The certificate of the database is verified (`sslmode=verify-full`, Amazon RDS CA bundle in
   the image).
 
@@ -100,4 +109,18 @@ To change the infrastructure, edit `infra/aws/console.yaml` and run `scripts/aws
   console: *Restore to point in time*, into a new instance).
 - Deleting the stack would keep a final snapshot of the database and keep the files bucket and
   secrets.
-- `npm run db:backup` still works for a portable copy, run as an ECS task (`scripts/aws/run-task.sh`).
+- For a portable copy, take a manual snapshot in the RDS console (*Actions → Take snapshot*).
+
+## Moving from Vercel + Neon (November 2026)
+
+1. The Neon database was dumped (`pg_dump`), restored into RDS with `scripts/aws/restore-db.sh`
+   (row counts matched exactly), then the Movegistics history was imported with
+   `scripts/aws/import-movegistics.sh`.
+2. Vercel and Neon were left running and unchanged until AWS was confirmed working.
+3. Anything entered on the Vercel console after the dump is not in AWS. If that happened, take a
+   fresh Neon dump and restore it into a new, empty database before switching people over (the
+   restore refuses a database that already has tables).
+4. `LINK_SIGNING_SECRET` and `MICROSOFT_CLIENT_SECRET` could not be read back from Vercel. A new
+   link secret was generated (estimate links sent from Vercel stop working; there were none
+   outstanding), and the Microsoft secret must be a new client secret from Entra
+   (`scripts/aws/set-secret.sh microsoft-client-secret`, then redeploy).
