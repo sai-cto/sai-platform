@@ -18,7 +18,11 @@ EXISTING=$(aws ecs describe-services --cluster default --services sai-console \
   --query 'services[?status==`ACTIVE`].serviceArn' --output text 2>/dev/null || true)
 APP_URL="${APP_URL:-}"
 
-CONTAINER=$(ORIGINS="$ORIGINS" IMAGE="$IMAGE" APP_URL="$APP_URL" DB_HOST="$(out DatabaseHost)" BUCKET="$(out UploadsBucketName)" \
+# Optional secrets: passed to the app only once they exist (scripts/aws/set-secret.sh).
+secret_arn() { aws secretsmanager describe-secret --secret-id "sai/console/$1" --query ARN --output text 2>/dev/null || true; }
+MAPS_SERVER=$(secret_arn google-maps-server-key); MAPS_BROWSER=$(secret_arn google-maps-browser-key)
+
+CONTAINER=$(MAPS_SERVER="$MAPS_SERVER" MAPS_BROWSER="$MAPS_BROWSER" ORIGINS="$ORIGINS" IMAGE="$IMAGE" APP_URL="$APP_URL" DB_HOST="$(out DatabaseHost)" BUCKET="$(out UploadsBucketName)" \
   DB_SECRET="$(out DatabaseOwnerSecretArn)" LINK_SECRET="$(out LinkSigningSecretArn)" CRON_SECRET_ARN="$(out CronSecretArn)" \
   MS_SECRET="$(out MicrosoftClientSecretArn)" LOG_GROUP="$(out LogGroupName)" node -e '
 const e = process.env;
@@ -37,6 +41,8 @@ const secrets = [
   ["LINK_SIGNING_SECRET", e.LINK_SECRET],
   ["CRON_SECRET", e.CRON_SECRET_ARN],
   ["MICROSOFT_CLIENT_SECRET", e.MS_SECRET],
+  ...(e.MAPS_SERVER ? [["GOOGLE_MAPS_API_KEY", e.MAPS_SERVER]] : []),
+  ...(e.MAPS_BROWSER ? [["GOOGLE_MAPS_EMBED_KEY", e.MAPS_BROWSER]] : []),
 ];
 process.stdout.write(JSON.stringify({
   image: e.IMAGE, containerPort: 3000,
