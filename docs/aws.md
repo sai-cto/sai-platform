@@ -4,8 +4,8 @@ The SAI Console and the Hired Hands website run on AWS in account `960129066398`
 `us-east-1` (N. Virginia). This replaced Vercel + Neon in November 2026.
 
 - SAI Console: <https://sa-c95d7b62b8154ff2a92f661e2c28a8a2.ecs.us-east-1.on.aws>
-- Hired Hands website: <https://d19nd4qfh33bnj.cloudfront.net> (its quote form posts to the
-  console's `/api/public/website-lead`)
+- Hired Hands website: <https://d19nd4qfh33bnj.cloudfront.net> (the deploy points its quote form at the
+  AWS console; the file in the repository keeps the Vercel address until Vercel is switched off)
 - Microsoft sign-in redirect URI (registered in Entra):
   `https://sa-c95d7b62b8154ff2a92f661e2c28a8a2.ecs.us-east-1.on.aws/api/auth/microsoft/callback`
 

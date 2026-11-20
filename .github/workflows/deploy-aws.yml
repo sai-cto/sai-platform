@@ -68,6 +68,16 @@ jobs:
         with:
           role-to-assume: ${{ env.DEPLOY_ROLE }}
           aws-region: ${{ env.AWS_REGION }}
+      - name: Point the quote form at the AWS console
+        # The repository keeps the Vercel address so the Vercel copy of the site is unchanged until
+        # the switch; the copy on AWS posts to the console on AWS.
+        run: |
+          URL=$(aws ecs describe-express-gateway-service \
+            --service-arn "arn:aws:ecs:$AWS_REGION:$AWS_ACCOUNT_ID:service/default/sai-console" \
+            --query 'service.activeConfigurations[0].ingressPaths[0].endpoint' --output text)
+          URL="https://${URL#https://}"
+          sed -i -E "s#data-endpoint=\"https://[^\"/]+/api/public/website-lead\"#data-endpoint=\"$URL/api/public/website-lead\"#" hiredhands-site/free-quote.html
+          grep -q "data-endpoint=\"$URL/api/public/website-lead\"" hiredhands-site/free-quote.html
       - name: Upload the site and clear the cache
         run: |
           aws s3 sync hiredhands-site/ "s3://hiredhands-site-$AWS_ACCOUNT_ID/" --delete \
