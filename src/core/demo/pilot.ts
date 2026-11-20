@@ -19,6 +19,16 @@ export function siteUrl(fallback = 'http://localhost:3000'): string {
   return (process.env.APP_URL || (vercel ? `https://${vercel}` : fallback)).replace(/\/$/, '');
 }
 
+/**
+ * The host the browser used for this request. Behind a load balancer (AWS) the server listens on
+ * its own address, so request.url names that address; the Host header (or X-Forwarded-Host, when
+ * a proxy sets it) still carries the public one.
+ */
+export function requestHost(request: Request): string {
+  const forwarded = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
+  return forwarded || request.headers.get('host') || new URL(request.url).host;
+}
+
 /** cto = super admin; tech = tech team; gm = admin of the pilot business; staff = its staff. */
 export type PilotRole = 'cto' | 'tech' | 'gm' | 'staff';
 export type PilotAccount = { email: string; name: string; role: PilotRole };

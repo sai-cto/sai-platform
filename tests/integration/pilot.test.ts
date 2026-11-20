@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { isDevLoginEnabled, loginWithIdentity } from '@/core/auth/login';
 import { microsoftIdentityFromClaims } from '@/core/auth/providers/microsoft';
 import { withScope } from '@/core/db/scope';
-import { parsePilotAccounts, siteUrl } from '@/core/demo/pilot';
+import { parsePilotAccounts, requestHost, siteUrl } from '@/core/demo/pilot';
 import { ValidationError } from '@/core/errors';
 import { sendNotification, setEmailChannel, consoleEmailChannel } from '@/core/notifications/notifications';
 import { takePayment } from '@/core/payments/payments';
@@ -104,5 +104,25 @@ describe('pilot safety', () => {
     expect(siteUrl()).toBe('https://sai-platform.vercel.app');
     process.env.APP_URL = 'https://hhmc.example.org/';
     expect(siteUrl()).toBe('https://hhmc.example.org');
+  });
+});
+
+describe('requestHost', () => {
+  it('uses the public host behind a load balancer, not the address the server listens on', () => {
+    const request = new Request('http://0.0.0.0:3000/api/auth/microsoft/start', {
+      headers: { host: 'console.example.org' },
+    });
+    expect(requestHost(request)).toBe('console.example.org');
+  });
+
+  it('prefers the first X-Forwarded-Host when a proxy sets it', () => {
+    const request = new Request('http://10.0.0.5:3000/x', {
+      headers: { host: '10.0.0.5:3000', 'x-forwarded-host': 'console.example.org, inner.example.org' },
+    });
+    expect(requestHost(request)).toBe('console.example.org');
+  });
+
+  it('falls back to the request URL without host headers', () => {
+    expect(requestHost(new Request('https://hhmc.example.org/x'))).toBe('hhmc.example.org');
   });
 });

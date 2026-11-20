@@ -2,7 +2,7 @@ import { generateCodeVerifier, generateState } from 'arctic';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { getOAuthProvider } from '@/core/auth/login';
-import { siteUrl } from '@/core/demo/pilot';
+import { requestHost, siteUrl } from '@/core/demo/pilot';
 
 /** Starts a Microsoft / Google sign-in. Returns 404 while the provider is not configured. */
 export async function GET(
@@ -14,7 +14,7 @@ export async function GET(
   // The provider returns to the site's own address; start there too, or the state cookie set
   // below would be on another host (e.g. a deployment-specific address) and sign-in would fail.
   const site = siteUrl('');
-  if (site && new URL(site).host !== new URL(request.url).host)
+  if (site && new URL(site).host !== requestHost(request))
     return NextResponse.redirect(`${site}/api/auth/${provider.id}/start`);
   const state = generateState();
   const codeVerifier = generateCodeVerifier();
