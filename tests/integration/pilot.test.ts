@@ -126,3 +126,18 @@ describe('requestHost', () => {
     expect(requestHost(new Request('https://hhmc.example.org/x'))).toBe('hhmc.example.org');
   });
 });
+
+describe('the pilot import reaches the site as its own app role', () => {
+  it("derives sai_app's password from the owner URL exactly as the site has it, then verifies the certificate", async () => {
+    const { pilotAppUrl } = await import('../../scripts/lib/pilot-target');
+    const { derivedAppPassword } = await import('@/core/db/client');
+    const raw = 'postgresql://owner:not-a-real-password@ep-fake-name-000000.example.com/db?sslmode=require&channel_binding=require';
+    const url = new URL(await pilotAppUrl(raw));
+    expect(url.username).toBe('sai_app');
+    // The site derives it from this exact text; deriving from the verify-full spelling gave another password.
+    expect(url.password).toBe(derivedAppPassword(raw));
+    expect(url.password).not.toBe(derivedAppPassword(raw.replace('sslmode=require', 'sslmode=verify-full')));
+    expect(url.searchParams.get('sslmode')).toBe('verify-full');
+    expect(await pilotAppUrl(raw, 'postgresql://sai_app:x@db.example.com/db?sslmode=verify-full')).toBe('postgresql://sai_app:x@db.example.com/db?sslmode=verify-full');
+  });
+});

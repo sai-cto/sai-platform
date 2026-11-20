@@ -302,6 +302,25 @@ export async function loadIntoHhmc(batch: Batch, n: Normalized): Promise<{ stats
   });
   const customerId = (sid: string | null) => (sid ? (ids.get(`contact:${sid}`) ?? null) : null);
 
+  // ---- companies (optional export): copies of contacts stay on their customer; organizations are customers
+  if (n.companies) {
+    await each(n.companies.links, async (l) => {
+      const id = customerId(l.contactSid);
+      if (id) await linkAlso('company', l.sid, customerEntity, id, l.raw);
+    });
+    await each(n.companies.organizations, async (o) => {
+      const existing = existingCustomer(o.email, o.phone);
+      const { id, created } = await upsert(
+        'company',
+        o.sid,
+        customerEntity,
+        { kind: 'organization', firstName: '', lastName: '', organizationName: o.name, email: o.email, phone: o.phone, notes: o.notes, externalRef: `movegistics:${o.sid}` },
+        { createdOn: o.createdOn, existing: refs.has(`company:${o.sid}`) ? null : existing, raw: o.raw },
+      );
+      if (created && o.email) customerByEmail.set(o.email, id);
+    });
+  }
+
   // ---- leads (never converted in Movegistics: status New)
   await each(n.leads as NLead[], async (l) => {
     await upsert(

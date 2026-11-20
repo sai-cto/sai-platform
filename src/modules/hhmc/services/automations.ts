@@ -178,6 +178,7 @@ async function processRow(s: Scope, row: QueueRow, now: Date): Promise<'sent' | 
     estimateTotal: estimate ? money(baseTotalCents(estimate)) : '',
     invoiceNumber: invoice?.invoiceNumber ?? '',
     invoiceTotal: invoice ? money(baseTotalCents(invoice)) : '',
+    dueDate: invoice?.dueDate ?? '',
     balanceDue: invoice
       ? money(balanceDueCents(baseTotalCents(invoice), invoice.depositReceivedCents, invoice.paidCents))
       : '',

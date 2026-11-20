@@ -32,7 +32,7 @@ function monthOf(v: string): string {
 }
 
 type Month = string; // YYYY-MM
-type Side = { jobs: Map<Month, number>; invoiced: Map<Month, number>; collected: Map<Month, number>; leads: Map<string, number>; leadsPerMonth: Map<Month, number>; openBalance: number; openBalanceAsExported?: number; openBalanceAsShown?: number; invoiceCount: number; paymentCount: number; unverifiedMonths?: Set<Month>; paidNotCovered?: { count: number; cents: number }; paidWithBalance?: number };
+type Side = { jobs: Map<Month, number>; invoiced: Map<Month, number>; collected: Map<Month, number>; leads: Map<string, number>; leadsPerMonth: Map<Month, number>; openBalance: number; openBalanceAsExported?: number; openBalanceAsShown?: number; invoiceCount: number; paymentCount: number; unverifiedMonths?: Set<Month>; paidNotCovered?: { count: number; cents: number }; paidWithBalance?: number; /** Companies export rows, and their import links (undefined: no Companies export). */ companyRows?: number };
 const add = (m: Map<string, number>, k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v);
 
 /** `refunds`: hand-entered partial refund amounts (refund-amounts.csv), the same input the import uses. */
@@ -83,6 +83,7 @@ export function movegisticsSide(files: Files, refunds: Map<string, number> = new
     add(side.leads, `${m}|${leadSource(val(r, 'Referral Source')).source}`, 1);
     add(side.leadsPerMonth, m, 1);
   }
+  if (files.companies !== undefined) side.companyRows = rowsOf(files.companies).filter((r) => val(r, 'Company ID')).length;
   return side;
 }
 
@@ -125,6 +126,7 @@ export async function ourSide(s: Scope, tz: string): Promise<Side> {
     add(side.leads, `${r.m}|${r.source}`, r.n);
     add(side.leadsPerMonth, r.m, r.n);
   }
+  side.companyRows = await s.db.$count(hhmcImportRefs, and(s.where(hhmcImportRefs), eq(hhmcImportRefs.source, 'movegistics'), eq(hhmcImportRefs.sourceType, 'company')));
   return side;
 }
 
@@ -189,6 +191,18 @@ export function reconciliationReport(
     `| Invoices | ${mg.invoiceCount} | ${ours.invoiceCount} | ${cell(mg.invoiceCount, ours.invoiceCount, false)} |`,
     `| Payments received | ${mg.paymentCount} | ${ours.paymentCount} | ${cell(mg.paymentCount, ours.paymentCount, false)} |`,
     '',
+    ...(mg.companyRows === undefined
+      ? []
+      : [
+          '## Companies',
+          '',
+          'Every row of the Companies export is kept: a copy of a contact on that contact\'s customer, a real organization as a customer of its own.',
+          '',
+          '| | Movegistics | Ours | |',
+          '|---|---|---|---|',
+          `| Company rows / their import links | ${mg.companyRows} | ${ours.companyRows ?? 0} | ${cell(mg.companyRows, ours.companyRows ?? 0, false)} |`,
+          '',
+        ]),
     '## Leads per month (leads still open in Movegistics; independent of the source mapping)',
     '',
     '| Month | Movegistics | Ours | |',

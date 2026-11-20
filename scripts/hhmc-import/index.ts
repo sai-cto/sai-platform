@@ -138,15 +138,29 @@ async function main() {
   const dryRun = process.argv.includes('--dry-run');
   let clear = process.argv.includes('--clear-live-demo');
 
-  const { FILE_NAMES, normalize, parseRefundOverrides } = await import('./movegistics');
+  const { FILE_NAMES, OPTIONAL_FILE_NAMES, normalize, parseRefundOverrides } = await import('./movegistics');
+  const { normalizeCompanies } = await import('./companies');
+  const { parseSettingsDocs } = await import('./settings-docs');
   FILE_NAMES_LIST = FILE_NAMES;
   const paths = Object.fromEntries(Object.entries(FILE_NAMES).map(([k, f]) => [k, findExport(dir, k, f)]));
-  const files = Object.fromEntries(Object.entries(paths).map(([k, p]) => [k, fs.readFileSync(p, 'utf8')])) as import('./movegistics').Files;
+  // Optional exports (newer folders): the Companies list, and HHMC's settings documents.
+  const companiesFile = path.join(dir, OPTIONAL_FILE_NAMES.companies);
+  const files = {
+    ...Object.fromEntries(Object.entries(paths).map(([k, p]) => [k, fs.readFileSync(p, 'utf8')])),
+    ...(fs.existsSync(companiesFile) ? { companies: fs.readFileSync(companiesFile, 'utf8') } : {}),
+  } as import('./movegistics').Files;
   const refundFile = path.join(dir, 'refund-amounts.csv');
   const refunds = fs.existsSync(refundFile) ? parseRefundOverrides(fs.readFileSync(refundFile, 'utf8')) : new Map<string, number>();
   if (refunds.size) console.log(`Read ${refunds.size} hand-entered refund amount(s) from refund-amounts.csv.`);
-  const n = normalize(files, { refunds, today: new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) });
+  const settingsDir = path.join(dir, 'settings');
+  const templates = fs.existsSync(path.join(settingsDir, 'email-templates.md')) && fs.existsSync(path.join(settingsDir, 'terms-and-conditions.md'))
+    ? parseSettingsDocs({ emailTemplates: fs.readFileSync(path.join(settingsDir, 'email-templates.md'), 'utf8'), terms: fs.readFileSync(path.join(settingsDir, 'terms-and-conditions.md'), 'utf8') })
+    : [];
+  const base0 = normalize(files, { refunds, today: new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) });
+  const n = files.companies ? { ...base0, companies: normalizeCompanies(files.companies, base0.contacts) } : base0;
   console.log(`Read: ${n.contacts.length} contacts, ${n.leads.length} leads, ${n.jobs.length} work requests, ${n.estimates.length} estimates, ${n.invoices.length} invoices, ${n.payments.length} payments.`);
+  if (n.companies) console.log(`Read: ${n.companies.links.length + n.companies.organizations.length} companies (${n.companies.links.length} copies of a contact, ${n.companies.organizations.length} organizations).`);
+  console.log(templates.length ? `Read: ${templates.length} templates from settings/ (terms & conditions, email templates).` : 'No settings/ documents: templates left as they are.');
 
   const { systemContext } = await import('../../src/core/tenancy/system');
   const { withScope } = await import('../../src/core/db/scope');
@@ -185,6 +199,11 @@ async function main() {
     const { stats } = await loadIntoHhmc(scoped, n);
     for (const [type, st] of Object.entries(stats))
       console.log(`  ${type}: ${st.created} created, ${st.updated} updated, ${st.unchanged} unchanged, ${st.kept} kept (changed in SAI), ${st.linked} linked to an existing record`);
+    if (templates.length) {
+      const { loadTemplates } = await import('./load-templates');
+      const t = await loadTemplates(scoped, templates);
+      console.log(`  template: ${t.created} created, ${t.updated} updated, ${t.unchanged} unchanged, ${t.kept} kept (changed in SAI)`);
+    }
     console.log(`Loaded in ${((Date.now() - t0) / 1000).toFixed(1)} s.`);
     const r = reconciliationReport(movegisticsSide(files, refunds, n.openDepositCredits), await scoped((s) => ourSide(s, ctx.business.timeZone)), n.issues, EXPLANATIONS, n.followups);
     report = r.markdown;
