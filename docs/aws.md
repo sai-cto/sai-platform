@@ -61,6 +61,7 @@ A budget alert in AWS Budgets emails the CTO address above $50/month.
   - `scripts/aws/restore-db.sh <dump.sql.gz>`: loads a plain-SQL dump into an empty database.
   - `scripts/aws/import-movegistics.sh [data/movegistics]`: the guarded Movegistics import
     (same as `npm run hhmc:import:pilot`), run with the console image. Safe to re-run.
+  - `scripts/aws/query.sh "select ..."`: one read-only query (writes are refused), for checks.
   Both upload their input to the private transfer bucket, use a 15-minute link, and delete it.
 - The certificate of the database is verified (`sslmode=verify-full`, Amazon RDS CA bundle in
   the image).
