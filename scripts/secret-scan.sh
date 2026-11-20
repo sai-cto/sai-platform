@@ -8,6 +8,8 @@
 #     .example, .test, .invalid or .localhost (RFC 2606 / 6761);
 #   - North American phone numbers in the fictional 555-0100 … 555-0199 range (e.g. 607-555-0101).
 #     Other 555 numbers (555-1212, toll-free 800-555-xxxx) can be real, so they fail too.
+#   - HHMC's own public business contacts, printed on its website and in its emails:
+#     hiredhands@studentagencies.com and (607) 524-3150. Nothing else of the business's.
 # Anything else is treated as possibly real and fails the scan, including +1 E.164 numbers and,
 # in data files (.csv / .tsv / .json), bare 10-digit numbers. Spreadsheets, documents and other
 # binary files that grep cannot read (.xlsx .xls .numbers .docx .pdf …) may not be committed at
@@ -37,6 +39,9 @@ SAFE_EMAIL='@([A-Za-z0-9-]+\.)*(example\.(com|org|net)|[A-Za-z0-9-]*\.?example|[
 PHONE='(\+1[-. ]?)?\(?\b[2-9][0-9]{2}\)?[-. ]?[0-9]{3}[-. ][0-9]{4}\b|(\([2-9][0-9]{2}\)[-. ]?|\b[2-9][0-9]{2}[-. ])[0-9]{3}[-. ]?[0-9]{4}\b|\+1[2-9][0-9]{9}\b'
 SAFE_PHONE='^(\+1[-. ]?)?\(?[2-9][0-9]{2}\)?[-. ]?555[-. ]?01[0-9]{2}$'
 BARE='(^|[^0-9])1?[2-9][0-9]{2}[2-9][0-9]{6}([^0-9]|$)'
+# HHMC's public business contacts (see the rule above).
+BUSINESS_EMAIL='^hiredhands@studentagencies\.com$'
+BUSINESS_DIGITS='6075243150'
 PII=""
 while IFS= read -r line; do
   [ -z "$line" ] && continue
@@ -44,12 +49,14 @@ while IFS= read -r line; do
   # Only the user:password@ part right after "scheme://" is not an email (postgres://u:p@host);
   # an email anywhere else in a URL (…?email=jane@…) still counts.
   noUrl=$(printf '%s\n' "$text" | sed -E 's#%40#@#g; s#(://)[^/@[:space:]]*:[^/@[:space:]]*@#\1#g')
-  for m in $(printf '%s\n' "$noUrl" | grep -oE "$EMAIL" | grep -viE "$SAFE_EMAIL"); do PII+="$loc:$ln (email)"$'\n'; done
+  for m in $(printf '%s\n' "$noUrl" | grep -oE "$EMAIL" | grep -viE "$SAFE_EMAIL" | grep -viE "$BUSINESS_EMAIL"); do PII+="$loc:$ln (email)"$'\n'; done
   for m in $(printf '%s\n' "$text" | grep -oE "$PHONE" | tr ' ' '_' ); do
+    digits=$(printf '%s' "$m" | tr -cd '0-9'); digits=${digits#1}
+    [ "$digits" = "$BUSINESS_DIGITS" ] && continue
     printf '%s\n' "${m//_/ }" | grep -qE "$SAFE_PHONE" || PII+="$loc:$ln (phone)"$'\n'
   done
   case "$loc" in
-    *.csv|*.tsv|*.json|*.txt|*.md|*.yaml|*.yml|*.sql|*.xml|*.html) printf '%s\n' "$text" | grep -qE "$BARE" && PII+="$loc:$ln (phone, digits only)"$'\n' ;;
+    *.csv|*.tsv|*.json|*.txt|*.md|*.yaml|*.yml|*.sql|*.xml|*.html) printf '%s\n' "$text" | sed -E "s/1?$BUSINESS_DIGITS//g" | grep -qE "$BARE" && PII+="$loc:$ln (phone, digits only)"$'\n' ;;
   esac
 done < <(echo "$PII_FILES" | tr '\n' '\0' | xargs -0 -r grep -InE "$EMAIL|%40|$PHONE|$BARE" 2>/dev/null || true)
 PII=$(printf '%s' "$PII" | sort -u)

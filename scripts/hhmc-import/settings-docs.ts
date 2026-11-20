@@ -8,7 +8,7 @@ import type { TemplateKind } from '../../src/modules/hhmc/schema';
 
 export type NTemplate = { key: string; kind: TemplateKind; name: string; subject: string; body: string; source: string };
 
-const SIGNATURE = 'Best,\nThe Hired Hands Team\n409 College Ave.\nIthaca, NY 14850\nPhone: (607)-524-3150\nhiredhands@studentagencies.com';
+const SIGNATURE = ['Best,', 'The Hired Hands Team', '409 College Ave.', 'Ithaca, NY 14850', 'Phone: (607)-524-3150', 'hiredhands@studentagencies.com'].join('\n');
 
 /** Movegistics merge field → ours (or plain text). Whole phrases first. */
 const PHRASES: [string, string][] = [
