@@ -61,7 +61,7 @@ import { SourceRecords } from './source-records';
 
 export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
   const data = await jobPage(ctx, params.id);
-  const { job, customer, quote, estimates, liveEstimate, days, booked, invoices, notes, queue, source } = data;
+  const { job, customer, quote, estimates, liveEstimate, days, booked, invoices, notes, queue, emailLog, source } = data;
   const depositPaid = data.depositPaid;
   const activity = await jobActivity(ctx, job.id, [...estimates.map((e) => e.id), ...(invoices ?? []).map((i) => i.id)]);
   const slug = ctx.business.slug;
@@ -525,6 +525,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
           ) : null}
 
           <Card title="Emails">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Automatic emails</h3>
             {queue.length === 0 ? (
               <p className="text-sm text-zinc-500">No automatic emails.</p>
             ) : (
@@ -537,6 +538,26 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                 ))}
               </ul>
             )}
+            {emailLog ? (
+              <>
+                <h3 className="mt-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">Emails sent</h3>
+                {emailLog.length === 0 ? (
+                  <p className="text-sm text-zinc-500">None yet.</p>
+                ) : (
+                  <ul className="space-y-1 text-sm">
+                    {emailLog.map((m) => (
+                      <li key={m.id}>
+                        {m.subject}
+                        <span className="block text-xs text-zinc-500">
+                          {formatDateTime(m.createdAt)} · to {m.recipient} ·{' '}
+                          {m.status === 'failed' ? `not sent: ${m.error ?? 'failed'}` : m.adapter === 'console-email' ? 'held, not emailed (real email is switched off for this address)' : 'emailed'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            ) : null}
           </Card>
 
           {activity ? (

@@ -158,3 +158,67 @@ describe('cancelling a job stops all its scheduled emails', () => {
     expect(rows.some((r) => r.q.cancelledReason === 'The job was cancelled.')).toBe(true);
   });
 });
+
+describe("the job's email log", () => {
+  it('lists every email the job sent (estimate, signed copy, receipt, booking) with its recipient, newest first', async () => {
+    const ctx = await admin();
+    const { job } = await bookedJob(ctx, 40);
+    const { jobPage } = await import('@/modules/hhmc/services/views');
+    const page = await jobPage(ctx, job.id);
+    expect(page.emailLog).not.toBeNull();
+    const log = page.emailLog!;
+    expect(log.length).toBeGreaterThanOrEqual(2);
+    // The customer's address (the lead may have matched an existing customer).
+    const email = log[0].recipient;
+    expect(log.every((m) => m.recipient === email)).toBe(true);
+    expect(log.map((m) => m.subject).join('|')).toMatch(/Booked/);
+    expect(log.every((m) => m.adapter === 'recorder' && m.status === 'sent')).toBe(true);
+    const times = log.map((m) => m.createdAt.getTime());
+    expect([...times].sort((a, b) => b - a)).toEqual(times);
+    expect(sent.filter((m) => m.recipient === email).length).toBe(log.length);
+  });
+});
+
+describe('each trigger queues its emails at the moment Movegistics sent them', () => {
+  const at = (rows: { q: { dueAt: Date }; key: string }[], key: string, from: number) =>
+    Math.round((rows.find((r) => r.key === key)!.q.dueAt.getTime() - from) / 60_000);
+
+  it('estimate sent: 2 hours, then 1, 3 and 7 days', async () => {
+    const ctx = await admin();
+    const { job } = await newJob(ctx);
+    const { hhmcCatalogItems } = await import('@/modules/hhmc/schema');
+    const { addQuoteLine } = await import('@/modules/hhmc/services/quote');
+    const { sendEstimate } = await import('@/modules/hhmc/services/estimates');
+    const catalog = await withScope(ctx, P.catalogRead, (s) => s.db.select().from(hhmcCatalogItems).where(s.where(hhmcCatalogItems)));
+    await addQuoteLine(ctx, job.id, { section: 'transportation_labor', catalogItemId: catalog.find((c) => c.name === '2 Men')!.id, qty: '3' });
+    const t0 = Date.now();
+    await sendEstimate(ctx, job.id);
+    const rows = await queueOf(ctx, job.id);
+    for (const [key, minutes] of [['drip_same_day', 120], ['drip_day2', 1440], ['drip_day3', 4320], ['drip_day7', 10080]] as const)
+      expect(Math.abs(at(rows, key, t0) - minutes)).toBeLessThanOrEqual(1);
+    // The estimate itself goes out at once.
+    expect(sent.some((m) => /Please (Sign|Review)/.test(m.subject))).toBe(true);
+  });
+
+  it("lead couldn't be reached: at once, after 24 hours, after 2 days; converting the lead stops the rest", async () => {
+    const ctx = await admin();
+    const t = tag();
+    const lead = await createLead(ctx, { firstName: 'Noor', lastName: `Unreached${t}`, email: `noor.${t}@example.com`, phone: `607-555-02${String(counter % 100).padStart(2, '0')}`, source: 'Google', moveDate: day(60), originAddress: '1 Test St, Ithaca, NY', destinationAddress: '2 Test St, Ithaca, NY' });
+    const { startNoContactEmails } = await import('@/modules/hhmc/services/leads');
+    const t0 = Date.now();
+    await startNoContactEmails(ctx, lead.id);
+    const rows = await withScope(ctx, P.jobsRead, (s) =>
+      s.db
+        .select({ q: hhmcAutomationQueue, key: hhmcAutomationRules.key })
+        .from(hhmcAutomationQueue)
+        .innerJoin(hhmcAutomationRules, eq(hhmcAutomationRules.id, hhmcAutomationQueue.ruleId))
+        .where(and(s.where(hhmcAutomationQueue), eq(hhmcAutomationQueue.leadId, lead.id))),
+    );
+    expect(Math.abs(at(rows, 'lead_didnt_connect', t0) - 1440)).toBeLessThanOrEqual(1);
+    expect(Math.abs(at(rows, 'lead_last_checkin', t0) - 2880)).toBeLessThanOrEqual(1);
+    expect(sent.filter((m) => m.recipient === `noor.${t}@example.com`)).toHaveLength(1);
+    await convertLead(ctx, lead.id, { serviceType: 'local', jobType: 'Local Full Service Move', crewSize: 2, trucks: 1 });
+    const after = await withScope(ctx, P.jobsRead, (s) => s.db.select().from(hhmcAutomationQueue).where(and(s.where(hhmcAutomationQueue), eq(hhmcAutomationQueue.leadId, lead.id))));
+    expect(after.filter((r) => r.status === 'queued')).toHaveLength(0);
+  });
+});
