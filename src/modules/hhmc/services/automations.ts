@@ -45,6 +45,20 @@ export type QueueRefs = {
   paymentId?: string | null;
 };
 
+/** One email per rule and records; `variant` tells apart emails about different move dates. */
+export function dedupeKeyOf(ruleId: string, refs: QueueRefs, variant = ''): string {
+  return [ruleId, refs.leadId, refs.jobId, refs.estimateId, refs.invoiceId, refs.paymentId, variant].map((v) => v ?? '').join('|');
+}
+
+async function alreadyQueuedOrSent(s: Scope, key: string): Promise<boolean> {
+  const [row] = await s.db
+    .select({ id: hhmcAutomationQueue.id })
+    .from(hhmcAutomationQueue)
+    .where(and(s.where(hhmcAutomationQueue), eq(hhmcAutomationQueue.dedupeKey, key), inArray(hhmcAutomationQueue.status, ['queued', 'sending', 'sent'])))
+    .limit(1);
+  return Boolean(row);
+}
+
 /**
  * Puts the emails of every active rule for this trigger in the queue. Rules that respect the
  * job's opt-in are skipped when it is off. Zero-delay emails are sent straight away if the
@@ -53,7 +67,7 @@ export type QueueRefs = {
 export async function enqueue(
   s: Scope,
   trigger: AutomationTrigger,
-  refs: QueueRefs & { recipient: string | null; optIn?: boolean; notBefore?: Date },
+  refs: QueueRefs & { recipient: string | null; optIn?: boolean; notBefore?: Date; variant?: string },
   now: Date = new Date(),
 ): Promise<number> {
   if (!refs.recipient) return 0;
@@ -71,7 +85,10 @@ export async function enqueue(
   let queued = 0;
   for (const rule of rules) {
     if (rule.respectsOptIn && refs.optIn === false) continue;
+    const dedupeKey = dedupeKeyOf(rule.id, refs, refs.variant);
+    if (await alreadyQueuedOrSent(s, dedupeKey)) continue;
     const row = await createRecord(s, queueEntity, {
+      dedupeKey,
       ruleId: rule.id,
       leadId: refs.leadId ?? null,
       jobId: refs.jobId ?? null,
@@ -125,7 +142,15 @@ async function one<T>(rows: Promise<T[]>): Promise<T | null> {
 }
 
 /** Sends one queued email if it is still wanted; otherwise cancels it with the reason. */
-async function processRow(s: Scope, row: QueueRow, now: Date): Promise<'sent' | 'cancelled' | 'failed' | 'deferred'> {
+async function processRow(s: Scope, row: QueueRow, now: Date): Promise<'sent' | 'cancelled' | 'failed' | 'deferred' | 'skipped'> {
+  // Claim it first: of two runs that picked the same email, the second waits on this row's lock
+  // and then finds it no longer queued (sent, cancelled or deferred by the first).
+  const [current] = await s.db
+    .select({ status: hhmcAutomationQueue.status, dueAt: hhmcAutomationQueue.dueAt })
+    .from(hhmcAutomationQueue)
+    .where(and(s.where(hhmcAutomationQueue), eq(hhmcAutomationQueue.id, row.id)))
+    .for('update');
+  if (current?.status !== 'queued' || current.dueAt.getTime() !== row.dueAt.getTime()) return 'skipped';
   const rule = await one(
     s.db.select().from(hhmcAutomationRules).where(and(s.where(hhmcAutomationRules, 'include'), eq(hhmcAutomationRules.id, row.ruleId))),
   );
@@ -214,14 +239,14 @@ async function processRow(s: Scope, row: QueueRow, now: Date): Promise<'sent' | 
 export async function processDueAutomationsInScope(
   s: Scope,
   now: Date,
-): Promise<{ sent: number; cancelled: number; failed: number; deferred: number }> {
+): Promise<{ sent: number; cancelled: number; failed: number; deferred: number; skipped: number }> {
   const due = await s.db
     .select()
     .from(hhmcAutomationQueue)
     .where(and(s.where(hhmcAutomationQueue), eq(hhmcAutomationQueue.status, 'queued'), lte(hhmcAutomationQueue.dueAt, now)))
     .orderBy(asc(hhmcAutomationQueue.dueAt))
     .limit(500);
-  const result = { sent: 0, cancelled: 0, failed: 0, deferred: 0 };
+  const result = { sent: 0, cancelled: 0, failed: 0, deferred: 0, skipped: 0 };
   for (const row of due) result[await processRow(s, row, now)]++;
   return result;
 }
