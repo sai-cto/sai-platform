@@ -48,7 +48,7 @@ reachable from the internet, low cost at our size, and simple enough for a stude
 | Secrets Manager (4 secrets), CloudWatch logs, ECR, S3, CloudFront, EventBridge | 3 |
 | **Total** | **~55-60** |
 
-A budget alert in AWS Budgets emails cto@studentagencies.com above $50/month.
+A budget alert in AWS Budgets emails the CTO address above $50/month.
 
 ## How it fits together
 
