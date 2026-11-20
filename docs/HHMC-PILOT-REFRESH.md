@@ -19,7 +19,11 @@ updated, never duplicated, and anything a person changed in SAI is kept.
 1. **Export from Movegistics** (view and download only). Use each list's All view, all columns, CSV:
    Contacts, Leads, Work Requests, Estimates, Work Orders, Invoices, Payments. Save them in
    `data/movegistics/<today, YYYY-MM-DD>/` (git-ignored). Optional:
-   `refund-amounts.csv` there ("Payment ID","Refunded Amount") for partial refunds.
+   `refund-amounts.csv` there ("Payment ID","Refunded Amount") for partial refunds;
+   `movegistics-companies.csv` (Sales › Companies › Export), kept on each customer (PAR-14); and a
+   `settings/` folder with `terms-and-conditions.md` and `email-templates.md` copied from
+   Movegistics' settings, which replace HHMC's placeholder templates (PAR-15; a template a manager
+   changed in SAI is kept).
 2. **Laptop:**
    ```bash
    npm run db:migrate

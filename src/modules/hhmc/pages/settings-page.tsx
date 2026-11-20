@@ -43,17 +43,21 @@ export const TRIGGER_TEXT: Record<AutomationTrigger, string> = {
   job_booked: 'a move is booked',
   invoice_sent: 'an invoice is sent',
   invoice_paid: 'an invoice is paid in full',
+  move_reminder: 'a booked move is coming up (the delay is counted back from the move’s start)',
 };
 
 function delayParts(minutes: number): { amount: number; unit: 'days' | 'hours' | 'minutes' } {
-  if (minutes % 1440 === 0) return { amount: minutes / 1440, unit: 'days' };
-  if (minutes % 60 === 0) return { amount: minutes / 60, unit: 'hours' };
-  return { amount: minutes, unit: 'minutes' };
+  const m = Math.abs(minutes);
+  if (m % 1440 === 0) return { amount: m / 1440, unit: 'days' };
+  if (m % 60 === 0) return { amount: m / 60, unit: 'hours' };
+  return { amount: m, unit: 'minutes' };
 }
-const delayText = (minutes: number) => {
-  if (minutes === 0) return 'straight away';
+/** Move reminders count back from the move's start ("2 days before the move"). */
+const delayText = (minutes: number, trigger?: AutomationTrigger) => {
+  if (minutes === 0) return trigger === 'move_reminder' ? 'at the move’s start' : 'straight away';
   const { amount, unit } = delayParts(minutes);
-  return `after ${amount} ${amount === 1 ? unit.slice(0, -1) : unit}`;
+  const span = `${amount} ${amount === 1 ? unit.slice(0, -1) : unit}`;
+  return trigger === 'move_reminder' ? `${span} before the move` : `after ${span}`;
 };
 
 export async function SettingsPage({ ctx, searchParams, basePath }: PortalPageProps) {
@@ -166,19 +170,21 @@ export async function SettingsPage({ ctx, searchParams, basePath }: PortalPagePr
                     <p className="text-sm">
                       <span className="text-zinc-500">When </span>
                       <span className="font-medium">{TRIGGER_TEXT[r.trigger]}</span>
-                      <span className="text-zinc-500">{` → ${delayText(r.delayMinutes)} → send `}</span>
+                      <span className="text-zinc-500">{` → ${delayText(r.delayMinutes, r.trigger)} → send `}</span>
                       <span className="font-medium">{t ? `“${t.subject || t.name}”` : r.templateKey}</span>
                       {r.isActive ? null : <span className="ml-2 text-xs text-amber-700">(off)</span>}
                     </p>
                     {canWrite ? (
                       <ActionForm action={ruleAction.bind(null, slug, mode, r.id)} submitLabel="Save" submitVariant="ghost" resetOnSuccess={false} className="flex flex-wrap items-center gap-2 space-y-0">
-                        <span className="text-xs text-zinc-500">Wait</span>
+                        <span className="text-xs text-zinc-500">{r.trigger === 'move_reminder' ? 'Send' : 'Wait'}</span>
+                        {r.trigger === 'move_reminder' ? <input type="hidden" name="before" value="1" /> : null}
                         <input aria-label={`Wait for ${r.name}`} name="delay" defaultValue={amount} inputMode="numeric" className={`${inputClass} w-16`} />
                         <Select aria-label={`Wait unit for ${r.name}`} name="delayUnit" defaultValue={unit}>
                           <option value="minutes">minutes</option>
                           <option value="hours">hours</option>
                           <option value="days">days</option>
                         </Select>
+                        {r.trigger === 'move_reminder' ? <span className="text-xs text-zinc-500">before the move</span> : null}
                         <Check name="isActive" label="On" defaultChecked={r.isActive} />
                       </ActionForm>
                     ) : null}

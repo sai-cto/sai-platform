@@ -37,6 +37,14 @@ export function appDatabaseUrl(): string | undefined {
   if ((process.env.DEMO_MODE !== 'true' && process.env.PILOT_MODE !== 'true') || !owner) return undefined;
   // Only the production site uses the demo database: a preview of another branch must not.
   if (process.env.VERCEL && process.env.VERCEL_ENV !== 'production') return undefined;
+  return derivedAppUrl(owner);
+}
+
+/**
+ * sai_app's connection on the owner's server. The password is derived from the owner URL EXACTLY
+ * as given (the hosting's DATABASE_OWNER_URL): any other spelling of it gives another password.
+ */
+export function derivedAppUrl(owner: string): string {
   const url = new URL(owner);
   url.username = 'sai_app';
   url.password = derivedAppPassword(owner);

@@ -11,6 +11,8 @@ import { ForbiddenError, NotFoundError, ValidationError } from '@/core/errors';
 import { buildLinkContext, signLink, verifyLink } from '@/core/links/links';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { P } from '@/modules/hhmc/permissions';
+import { queueEntity } from '@/modules/hhmc/entities';
+import { updateRecord } from '@/core/records/records';
 import { canMoveStage, findMatchingCustomer, probableDuplicates, stageMoveProblem } from '@/modules/hhmc/rules';
 import { hhmcAutomationQueue, hhmcAutomationRules, hhmcEstimates, hhmcJobs } from '@/modules/hhmc/schema';
 import { enqueue, processDueAutomations, processDueAutomationsInScope } from '@/modules/hhmc/services/automations';
@@ -332,7 +334,7 @@ describe('automations', () => {
     expect(result.failed).toBe(0);
   });
 
-  it('lead no-contact: three emails over a week (same day, day 3, day 7) that stop when the lead is converted', async () => {
+  it('lead no-contact: three emails as in Movegistics (at once, after 24 hours, after 2 days) that stop when the lead is converted', async () => {
     const ctx = await admin();
     const lead = await newLead(ctx);
     expect(await startNoContactEmails(ctx, lead.id)).toBe(3);
@@ -343,7 +345,7 @@ describe('automations', () => {
     expect(rows.map((r) => r.status).sort()).toEqual(['queued', 'queued', 'sent']);
     // Managers: "a series of three follow-up emails are sent over the following week".
     const first = Math.min(...rows.map((r) => r.dueAt.getTime()));
-    expect(rows.map((r) => Math.round((r.dueAt.getTime() - first) / 86_400_000)).sort((a, b) => a - b)).toEqual([0, 3, 7]);
+    expect(rows.map((r) => Math.round((r.dueAt.getTime() - first) / 86_400_000)).sort((a, b) => a - b)).toEqual([0, 1, 2]);
     await convertLead(ctx, lead.id, {});
     const after = await withScope(ctx, P.jobsRead, (s) =>
       s.db.select().from(hhmcAutomationQueue).where(and(s.where(hhmcAutomationQueue), eq(hhmcAutomationQueue.leadId, lead.id))),
@@ -768,8 +770,11 @@ describe('review gate round 3: regressions', () => {
     await bookJob(ctx, job.id);
     const invoice = await createInvoice(ctx, job.id, { terms: 'net_60' });
     const sent = await sendInvoice(ctx, invoice.id);
-    // A reminder queued the old way (8 days after sending, ignoring the terms).
-    await withScope(ctx, P.jobsWrite, (s) => enqueue(s, 'invoice_sent', { jobId: job.id, invoiceId: invoice.id, recipient: 'x@example.com', optIn: true }, sent.sentAt!));
+    // A reminder queued the old way (8 days after sending, ignoring the terms). Queuing it again
+    // is refused (nothing is queued twice), so the queued one is moved back to that time.
+    expect(await withScope(ctx, P.jobsWrite, (s) => enqueue(s, 'invoice_sent', { jobId: job.id, invoiceId: invoice.id, recipient: 'x@example.com', optIn: true }, sent.sentAt!))).toBe(0);
+    const [reminder] = (await queueOf(ctx, job.id)).filter((r) => r.trigger === 'invoice_sent');
+    await withScope(ctx, P.jobsWrite, (s) => updateRecord(s, queueEntity, reminder.q.id, { dueAt: new Date(sent.sentAt!.getTime() + 8 * DAY) }));
     const day9 = new Date(sent.sentAt!.getTime() + 9 * DAY);
     const result = await withScope(ctx, P.jobsWrite, (s) => processDueAutomationsInScope(s, day9));
     expect(result.deferred).toBe(1);

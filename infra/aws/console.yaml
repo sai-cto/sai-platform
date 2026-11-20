@@ -183,7 +183,13 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
-                Resource: [!Ref DatabaseOwnerSecret, !Ref LinkSigningSecret, !Ref CronSecret, !Ref MicrosoftClientSecret]
+                Resource:
+                  - !Ref DatabaseOwnerSecret
+                  - !Ref LinkSigningSecret
+                  - !Ref CronSecret
+                  - !Ref MicrosoftClientSecret
+                  # Optional keys created by scripts/aws/set-secret.sh (Google Maps).
+                  - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:sai/console/google-maps-*'
 
   TaskRole:
     Type: AWS::IAM::Role
@@ -200,6 +206,16 @@ Resources:
               - { Effect: Allow, Action: [s3:GetObject, s3:PutObject, s3:DeleteObject], Resource: !Sub '${UploadsBucket.Arn}/*' }
               - { Effect: Allow, Action: s3:ListBucket, Resource: !GetAtt UploadsBucket.Arn }
               - { Effect: Allow, Action: s3:GetObject, Resource: !Sub '${TransferBucket.Arn}/*' }
+        - PolicyName: send-email
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Amazon SES, only from HHMC's address (EMAIL_FROM); who may receive it is decided by
+              # the app (EMAIL_ALLOWED_RECIPIENTS) and, while in the SES sandbox, by SES itself.
+              - Effect: Allow
+                Action: [ses:SendEmail, ses:SendRawEmail]
+                Resource: !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:*'
+                Condition: { StringEquals: { 'ses:FromAddress': hiredhands@studentagencies.com } }
 
   ExpressInfrastructureRole:
     Type: AWS::IAM::Role
@@ -293,8 +309,9 @@ Resources:
     Condition: HasConsoleUrl
     Properties:
       Name: sai-console-daily
-      Description: Daily scheduled emails and automations (13:17 UTC, as on Vercel)
-      ScheduleExpression: cron(17 13 * * ? *)
+      # Name kept from the first (daily) version so the rule is updated in place, not replaced.
+      Description: Scheduled emails and automations, every 15 minutes (two-hour follow-ups and move reminders go out on time)
+      ScheduleExpression: rate(15 minutes)
       State: ENABLED
       Targets:
         - Id: console

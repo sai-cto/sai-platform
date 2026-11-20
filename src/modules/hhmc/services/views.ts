@@ -4,7 +4,7 @@
  * fewer permissions still gets the rest of the page.
  */
 import { and, asc, desc, eq, inArray, or } from 'drizzle-orm';
-import { appointments, customers, payments, resources } from '@/core/db/schema/tenant';
+import { appointments, customers, notifications, payments, resources } from '@/core/db/schema/tenant';
 import { withScope } from '@/core/db/scope';
 import { listBusinessActivity } from '@/core/audit/read';
 import { NotFoundError } from '@/core/errors';
@@ -50,6 +50,16 @@ export async function jobPage(ctx: BusinessContext, jobId: string) {
       .where(and(s.where(hhmcNotes), or(eq(hhmcNotes.jobId, jobId), fromLead)))
       .orderBy(desc(hhmcNotes.createdAt));
     const queue = await queueFor(s, { jobId });
+    // Every email this job sent or held (estimates, invoices, automatic emails), newest first.
+    const emailSubjects = [...queue.map((q) => q.id), ...estimates.map((e) => e.id), ...(invoices ?? []).map((i) => i.id), ...days.map((d) => d.id)];
+    const emailLog =
+      can(ctx, CORE.notificationsRead) && emailSubjects.length
+        ? await s.db
+            .select({ id: notifications.id, createdAt: notifications.createdAt, recipient: notifications.recipient, subject: notifications.subject, status: notifications.status, adapter: notifications.adapter, error: notifications.error })
+            .from(notifications)
+            .where(and(s.where(notifications), inArray(notifications.subjectId, emailSubjects)))
+            .orderBy(desc(notifications.createdAt))
+        : null;
     const lead = job.leadId ? await loadLead(s, job.leadId).catch(() => null) : null;
     let jobPayments: (typeof payments.$inferSelect)[] | null = null;
     if (can(ctx, CORE.paymentsRead)) {
@@ -103,6 +113,7 @@ export async function jobPage(ctx: BusinessContext, jobId: string) {
       payments: jobPayments,
       notes,
       queue,
+      emailLog,
       catalog,
       discounts,
     };

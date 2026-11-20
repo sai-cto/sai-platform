@@ -20,6 +20,19 @@ export type PilotTarget = {
   appUrl: string;
 };
 
+/**
+ * The pilot's app connection: DATABASE_URL from .env.pilot when given, else the site's own derived
+ * sai_app URL. Derived from the owner URL as written in .env.pilot (as the site has it), and only
+ * then switched to verify the certificate: deriving from the rewritten URL gives a wrong password.
+ */
+export async function pilotAppUrl(rawOwnerUrl: string, explicitAppUrl?: string): Promise<string> {
+  if (explicitAppUrl) return explicitAppUrl;
+  const { derivedAppUrl } = await import('../../src/core/db/client');
+  const url = new URL(derivedAppUrl(rawOwnerUrl));
+  url.searchParams.set('sslmode', 'verify-full');
+  return url.toString();
+}
+
 export const LOCAL_HOSTS = ['127.0.0.1', 'localhost', '::1', '[::1]'];
 
 /**
@@ -57,9 +70,8 @@ export async function connectPilotDatabase(confirmHost: string | undefined): Pro
   delete process.env.VERCEL;
   delete process.env.VERCEL_ENV;
   process.env.DATABASE_POOL_MAX = '3';
-  const { appDatabaseUrl } = await import('../../src/core/db/client');
-  const appText = appDatabaseUrl();
-  if (!appText) throw new Error('Refusing: no app connection for the pilot could be worked out from .env.pilot.');
+  const appText = await pilotAppUrl(env.DATABASE_OWNER_URL, process.env.DATABASE_URL);
+  process.env.DATABASE_URL = appText;
   const postgres = (await import('postgres')).default;
   const mark = (sql: import('postgres').Sql) =>
     sql`select current_database() as name, shobj_description(oid, 'pg_database') as note from pg_database where datname = current_database()`;

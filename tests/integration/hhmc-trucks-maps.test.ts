@@ -15,7 +15,9 @@ import { addTruck, bookJob, jobDaysOf, scheduleBetween } from '@/modules/hhmc/se
 import { archiveRecord } from '@/core/records/records';
 import { resourceEntity } from '@/core/records/core-entities';
 import { CORE } from '@/modules/hhmc/permissions';
-import { applyBuilder, buildLines, refreshMileage, type BuilderInput, type CatalogRow } from '@/modules/hhmc/services/builder';
+import { applyBuilder, buildLines, refreshMileage, setMileageByHand, type BuilderInput, type CatalogRow } from '@/modules/hhmc/services/builder';
+import { and, eq } from 'drizzle-orm';
+import { hhmcNotes } from '@/modules/hhmc/schema';
 import { loadJob } from '@/modules/hhmc/services/common';
 import { customerLinkFor, payDepositByLink, sendEstimate, signEstimateByLink } from '@/modules/hhmc/services/estimates';
 import { createJob, updateJob } from '@/modules/hhmc/services/jobs';
@@ -184,6 +186,39 @@ describe('mileage through every stop', () => {
     expect((await jobOf(ctx, job.id)).distanceTenths).toBe(400);
     await refreshMileage(ctx, job.id, { force: true });
     expect(await jobOf(ctx, job.id)).toMatchObject({ distanceTenths: 124, distanceSource: 'maps' });
+  });
+
+  it('a manager overrides the miles: saved, used for the service type, logged with the old value; automatic lookups keep it', async () => {
+    const ctx = await admin();
+    fakeGoogle([12.4], [25]);
+    // The service type follows the addresses and miles ("Automatic").
+    const job = await newCustomerJob(ctx, { serviceType: 'auto', originAddress: '10 Example Rd, Ithaca, NY 14850', destinationAddress: '20 Sample Ave, Albany, NY 12203' });
+    await refreshMileage(ctx, job.id);
+    expect((await jobOf(ctx, job.id)).serviceType).toBe('local');
+
+    await setMileageByHand(ctx, job.id, { miles: '212.4', driveMinutes: '' });
+    const after = await jobOf(ctx, job.id);
+    expect(after).toMatchObject({ distanceTenths: 2124, driveMinutes: 25, distanceSource: 'manual' });
+    // One state, over the local miles setting: Intrastate (the auto-detection uses the new miles).
+    expect(after.serviceType).toBe('intrastate');
+    const notes = await withScope(ctx, P.jobsRead, (s) => s.db.select().from(hhmcNotes).where(and(s.where(hhmcNotes), eq(hhmcNotes.jobId, job.id))));
+    expect(notes.map((n) => n.body)).toContain('Miles overridden from 12.4 mi · 25 min (Google Maps) to 212.4 mi · 25 min.');
+    expect(await refreshMileage(ctx, job.id)).toEqual({ status: 'already_set' });
+    expect((await jobOf(ctx, job.id)).distanceTenths).toBe(2124);
+
+    await setMileageByHand(ctx, job.id, { miles: '20.5', driveMinutes: '40' });
+    expect(await jobOf(ctx, job.id)).toMatchObject({ distanceTenths: 205, driveMinutes: 40 });
+  });
+
+  it('only a manager may override the miles, with a real number', async () => {
+    const ctx = await admin();
+    const job = await newCustomerJob(ctx);
+    const staff = await ctxFor(USERS.hhmcStaff, 'hhmc', 'live');
+    await expect(setMileageByHand(staff, job.id, { miles: '30', driveMinutes: '' })).rejects.toThrow(/Only a manager/);
+    await expect(setMileageByHand(ctx, job.id, { miles: 'far', driveMinutes: '' })).rejects.toThrow(/number/);
+    await expect(setMileageByHand(ctx, job.id, { miles: '0', driveMinutes: '' })).rejects.toThrow(/number/);
+    await expect(setMileageByHand(ctx, job.id, { miles: '30', driveMinutes: '2h' })).rejects.toThrow(/whole minutes/);
+    expect((await jobOf(ctx, job.id)).distanceSource).not.toBe('manual');
   });
 
   it('automatic lookups never fail the save; "Look up mileage" explains what is wrong', async () => {

@@ -1,0 +1,2 @@
+ALTER TABLE "hhmc_automation_queue" ADD COLUMN "dedupe_key" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "hhmc_queue_dedupe" ON "hhmc_automation_queue" USING btree ("business_id","environment","dedupe_key") WHERE "hhmc_automation_queue"."dedupe_key" is not null and "hhmc_automation_queue"."status" in ('queued', 'sending', 'sent');

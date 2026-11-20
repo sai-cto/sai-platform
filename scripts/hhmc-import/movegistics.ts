@@ -11,6 +11,7 @@
  */
 import { createHash } from 'node:crypto';
 import Papa from 'papaparse';
+import type { NCompanies } from './companies';
 import type { EstimateStatus, InvoiceStatus, LeadSource, LeadStatus, Rating, ServiceType, Stage } from '../../src/modules/hhmc/schema';
 
 export type Files = {
@@ -21,9 +22,14 @@ export type Files = {
   workOrders: string;
   invoices: string;
   payments: string;
+  /** Optional (exports from 2026-11-12 on): mostly copies of contacts, see companies.ts. */
+  companies?: string;
 };
 
-export const FILE_NAMES: Record<keyof Files, string> = {
+/** Read when present; an older export folder without them still imports. */
+export const OPTIONAL_FILE_NAMES = { companies: 'movegistics-companies.csv' } as const;
+
+export const FILE_NAMES: Record<Exclude<keyof Files, 'companies'>, string> = {
   contacts: 'movegistics-contacts.csv',
   leads: 'movegistics-leads.csv',
   workRequests: 'movegistics-work-requests.csv',
@@ -80,6 +86,8 @@ export type Normalized = {
   contacts: NContact[]; leads: NLead[]; jobs: NJob[]; estimates: NEstimate[]; invoices: NInvoice[]; payments: NPayment[]; issues: Issues; followups: Followups;
   /** Invoice id → work-request deposit credited to it while it was still open (the reconciliation applies the same). */
   openDepositCredits?: Map<string, number>;
+  /** From the optional Companies export (normalizeCompanies). */
+  companies?: NCompanies;
 };
 
 /** Hand-entered corrections (data/movegistics/refund-amounts.csv): Payment ID → refunded cents. */

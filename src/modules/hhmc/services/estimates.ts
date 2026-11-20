@@ -22,7 +22,7 @@ import { createRecord, updateRecord } from '@/core/records/records';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { estimateEntity } from '../entities';
 import { CORE, P } from '../permissions';
-import { canSignEstimate, canVoidEstimate, isLiveEstimate } from '../rules';
+import { canSignEstimate, canVoidEstimate, isLiveEstimate, renderTemplate } from '../rules';
 import { hhmcEstimates, hhmcInvoices, type EstimateSnapshot } from '../schema';
 import { brandOf, loadSettings } from '../settings';
 import { cancelQueued, enqueue } from './automations';
@@ -129,6 +129,7 @@ export async function sendEstimate(ctx: BusinessContext, jobId: string, now: Dat
     const estimateNumber =
       previous?.number ?? (await nextRecordNumber(s, estimateEntity, hhmcEstimates.estimateNumber, 'E'))[0];
     const { options, totals, lines } = summary;
+    const contractValues = { businessName: ctx.business.name, customerName: personName(customer), originAddress: job.originAddress ?? '', moveDate: job.moveDate ?? '' };
     const snapshot: EstimateSnapshot = {
       title: `${job.serviceType === 'local' ? 'Local' : job.serviceType === 'intrastate' ? 'Intrastate' : 'Interstate'} Estimate for ${personName(customer)}`,
       customerName: personName(customer),
@@ -161,8 +162,9 @@ export async function sendEstimate(ctx: BusinessContext, jobId: string, now: Dat
       convenienceFeeBp: options.convenienceFeeBp,
       depositBp: options.depositBp,
       termsTitle: terms?.name ?? 'Terms & Conditions',
-      termsBody: terms?.body ?? '',
-      valuation: valuation?.body ?? 'Basic Coverage: $0.60 per pound per article, at no charge.',
+      // The contract names the customer, the origin and the date (HHMC's own wording, PAR-14).
+      termsBody: renderTemplate(terms?.body ?? '', contractValues),
+      valuation: renderTemplate(valuation?.body ?? 'Basic Coverage: $0.60 per pound per article, at no charge.', contractValues),
       termsPdf: await currentTermsPdf(s).then((pdf) => (pdf ? { fileId: pdf.fileId, filename: pdf.filename, version: pdf.version } : null)),
     };
     const deposit = computeDeposit(totals, options.depositBp, { byCard: false, convenienceFeeBp: options.convenienceFeeBp });

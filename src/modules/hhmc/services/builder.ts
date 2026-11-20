@@ -17,17 +17,18 @@
  */
 import { z } from 'zod';
 import { withScope, type Scope } from '@/core/db/scope';
-import { ValidationError } from '@/core/errors';
+import { ForbiddenError, ValidationError } from '@/core/errors';
+import { can } from '@/core/rbac/permissions';
 import { isUuid } from '@/core/ids';
 import { archiveRecord, createRecord, updateRecord } from '@/core/records/records';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { and, asc, eq } from 'drizzle-orm';
-import { jobEntity, quoteLineEntity } from '../entities';
+import { jobEntity, noteEntity, quoteLineEntity } from '../entities';
 import { P } from '../permissions';
 import { ACCESS_FLAGS, hhmcCatalogItems, hhmcEstimates, type AccessFlag, type Stage } from '../schema';
 import { loadSettings, type HhmcSettings } from '../settings';
 import { optionalText, parse } from './input';
-import { routeStops, routeThrough, type Route } from './maps';
+import { formatRoute, routeStops, routeThrough, type Route } from './maps';
 import { loadJob, trucksOf } from './common';
 import { parseQty, type SectionKey } from './pricing';
 import { editableQuote, quoteLines } from './quote';
@@ -380,4 +381,36 @@ export async function lookupMileage(ctx: BusinessContext, jobId: string): Promis
   const result = await refreshMileage(ctx, jobId, { force: true });
   if (result.status !== 'updated') throw new ValidationError('Could not look up the mileage. Try again.');
   return result.route;
+}
+
+/**
+ * A manager types the miles (and, optionally, the drive time) over Google's: the address was not
+ * found, or the crew takes another way. Saved as typed by staff, priced from then on, and logged
+ * on the work request with the old value. Changing the addresses later looks the route up again.
+ */
+export async function setMileageByHand(ctx: BusinessContext, jobId: string, input: { miles: string; driveMinutes: string }) {
+  if (!can(ctx, P.jobsBook)) throw new ForbiddenError(P.jobsBook, 'Only a manager can change the miles.');
+  const q = parseQty(input.miles.trim());
+  if (q === null || q <= 0 || q > 10_000_00) throw new ValidationError('Enter the miles as a number, e.g. 212.4');
+  const minutes = input.driveMinutes.trim();
+  if (minutes && !/^\d{1,4}$/.test(minutes)) throw new ValidationError('Enter the drive time in whole minutes, or leave it empty.');
+  return withScope(ctx, P.jobsWrite, async (s) => {
+    const job = await loadJob(s, jobId);
+    if (!(await mileageChangeable(s, job)))
+      throw new ValidationError('The price is settled (signed, booked or closed), so the mileage is not changed. Release the booking or send a new estimate first.');
+    const distanceTenths = Math.round(q / 10);
+    const driveMinutes = minutes ? Number(minutes) : job.driveMinutes;
+    const before = formatRoute(job.distanceTenths, job.driveMinutes);
+    const source = job.distanceSource === 'maps' ? ' (Google Maps)' : job.distanceSource === 'manual' ? ' (typed in)' : '';
+    await updateRecord(s, jobEntity, jobId, { distanceTenths, driveMinutes, distanceSource: 'manual' });
+    await createRecord(s, noteEntity, {
+      jobId,
+      kind: 'note',
+      body: `Miles overridden${before ? ` from ${before}${source}` : ''} to ${formatRoute(distanceTenths, driveMinutes)}.`,
+      authorName: s.ctx.actor.name,
+    });
+    // More miles can make a one-state move Intrastate (over the local miles setting).
+    await refreshServiceType(s, jobId);
+    return { distanceTenths, driveMinutes };
+  });
 }

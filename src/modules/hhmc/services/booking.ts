@@ -25,7 +25,7 @@ import { CORE, P } from '../permissions';
 import { addDays, isDateText, isTimeText, localDate, localTime, STAGE_LABELS } from '../rules';
 import { hhmcEstimates, hhmcJobDays, hhmcJobs } from '../schema';
 import { loadSettings } from '../settings';
-import { cancelQueued, enqueue } from './automations';
+import { cancelQueued, enqueue, queueMoveReminders } from './automations';
 import { loadCustomer, loadJob, money, personName, trucksOf } from './common';
 import { optionalText, parse } from './input';
 import { depositsReceived, moveStage } from './jobs';
@@ -231,6 +231,7 @@ export async function bookJob(ctx: BusinessContext, jobId: string, now: Date = n
     await moveStage(s, jobId, 'booked', {}, now);
     const customer = await loadCustomer(s, job.customerId);
     await enqueue(s, 'job_booked', { jobId, recipient: customer.email, optIn: job.automationOptIn }, now);
+    await queueMoveReminders(s, job, days[0], customer.email, now);
   });
 }
 
@@ -270,6 +271,9 @@ export async function rescheduleJob(ctx: BusinessContext, jobId: string, raw: un
     for (const d of days) moved.push(await updateRecord(s, jobDayEntity, d.id, { dayDate: addDays(d.dayDate, shift), ...(startTime ? { startTime } : {}) }));
     await bookDays(s, job, moved, { allowNoTruck: input.allowNoTruck });
     await updateRecord(s, jobEntity, jobId, { moveDate: moved[0].dayDate });
+    // The reminders follow the move: the old ones stop, new ones are queued for the new date.
+    await cancelQueued(s, { triggers: ['move_reminder'], jobId }, 'The move was rescheduled.');
+    await queueMoveReminders(s, job, moved[0], (await loadCustomer(s, job.customerId)).email, now);
     const to = moved.map((d) => `${formatDay(d.dayDate)}, ${formatClock(d.startTime)}`).join(', ');
     await createRecord(s, noteEntity, {
       jobId,
@@ -311,7 +315,7 @@ export async function releaseBooking(ctx: BusinessContext, jobId: string, now: D
     if (job.stage !== 'booked') throw new ValidationError('Only a booked job can be released.');
     await releaseAppointments(s, jobId, 'Booking released');
     await moveStage(s, jobId, 'estimate_sent', {}, now);
-    await cancelQueued(s, { triggers: ['job_booked'], jobId }, 'The booking was released.');
+    await cancelQueued(s, { triggers: ['job_booked', 'move_reminder'], jobId }, 'The booking was released.');
   });
 }
 
@@ -340,7 +344,7 @@ export async function unconfirmMovesWithoutDeposit(s: Scope, options: { apply: b
     await takeLock(s, `hhmc-booking:${job.id}`);
     await releaseAppointments(s, job.id, 'Not confirmed: the deposit is not paid');
     await moveStage(s, job.id, 'estimate_sent', {}, options.now ?? new Date());
-    await cancelQueued(s, { triggers: ['job_booked'], jobId: job.id }, 'Not confirmed: the deposit is not paid.');
+    await cancelQueued(s, { triggers: ['job_booked', 'move_reminder'], jobId: job.id }, 'Not confirmed: the deposit is not paid.');
     await createRecord(s, noteEntity, {
       jobId: job.id,
       kind: 'note',

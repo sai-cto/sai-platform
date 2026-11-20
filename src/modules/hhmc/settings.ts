@@ -78,7 +78,7 @@ export const settingsFields: SettingField[] = [
   { key: 'convenienceFeePercent', label: 'Card convenience fee (%)', type: 'number', help: 'Applied when ticked on a quote or invoice, and on a deposit paid by card.' },
   { key: 'serviceTaxOnByDefault', label: 'New quotes include service tax', type: 'boolean', help: 'Off until a manager confirms HHMC charges service tax (DECISIONS H4).' },
   { key: 'cardFeeOnByDefault', label: 'New quotes add the card fee to card payments', type: 'boolean', help: 'The fee is only ever added when the customer pays by card. Cash and check never pay it.' },
-  { key: 'autoSendDueEmails', label: 'Send due automatic emails on a schedule', type: 'boolean', help: 'Needs the hosting scheduler (daily). Off: due emails go out only when the tech team presses "Run due emails".' },
+  { key: 'autoSendDueEmails', label: 'Send due automatic emails on a schedule', type: 'boolean', help: 'The hosting scheduler runs every 15 minutes. Off: due emails go out only when the tech team presses "Run due emails".' },
   { key: 'roundingMinutes', label: 'Bill time in steps of (minutes)', type: 'number' },
   { key: 'estimateExpiryDays', label: 'Estimates expire after (days)', type: 'number' },
   { key: 'crewCapacityPerDay', label: 'Movers available per day', type: 'number' },

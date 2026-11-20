@@ -72,7 +72,7 @@ import {
   setQuoteOptions,
   updateQuoteLine,
 } from './services/quote';
-import { applyBuilder, lookupMileage, refreshMileage } from './services/builder';
+import { applyBuilder, lookupMileage, refreshMileage, setMileageByHand } from './services/builder';
 import { createCatalogItem, updateCatalogItem, updateTemplate } from './services/settings';
 
 type Form = ActionResult | null;
@@ -306,6 +306,13 @@ export async function buildQuoteAction(slug: string, mode: string, jobId: string
   });
 }
 
+export async function setMileageAction(slug: string, mode: string, jobId: string, _p: Form, form: FormData) {
+  return run(slug, mode, async (ctx) => {
+    const r = await setMileageByHand(ctx, jobId, { miles: text(form, 'miles') ?? '', driveMinutes: text(form, 'driveMinutes') ?? '' });
+    return `Miles set to ${(r.distanceTenths / 10).toFixed(1)} and logged on the work request.`;
+  });
+}
+
 export async function lookupMileageAction(slug: string, mode: string, jobId: string) {
   return run(slug, mode, async (ctx) => {
     const route = await lookupMileage(ctx, jobId);
@@ -515,7 +522,9 @@ export async function ruleAction(slug: string, mode: string, id: string, _p: For
     const amount = Number(text(form, unit ? 'delay' : 'delayMinutes'));
     const minutes = unit === 'days' ? amount * 1440 : unit === 'hours' ? amount * 60 : amount;
     if (!Number.isInteger(minutes) || minutes < 0 || minutes > 60 * 24 * 60) throw new ValidationError('Enter the wait as a whole number (up to 60 days).');
-    await updateRule(ctx, id, { isActive: ticked(form, 'isActive'), delayMinutes: minutes });
+    // Move reminders are stored as minutes before the move's start (a negative delay).
+    const before = text(form, 'before') === '1';
+    await updateRule(ctx, id, { isActive: ticked(form, 'isActive'), delayMinutes: before ? -minutes : minutes });
     return 'Saved.';
   });
 }

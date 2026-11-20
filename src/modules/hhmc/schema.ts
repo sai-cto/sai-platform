@@ -470,6 +470,8 @@ export const AUTOMATION_TRIGGERS = [
   'job_booked',
   'invoice_paid',
   'invoice_sent',
+  /** Before the move date: the rule's delay is negative, counted from the first day's start. */
+  'move_reminder',
 ] as const;
 export type AutomationTrigger = (typeof AUTOMATION_TRIGGERS)[number];
 
@@ -493,7 +495,8 @@ export const hhmcAutomationRules = tenantTable(
   ],
 );
 
-export type QueueStatus = 'queued' | 'sent' | 'cancelled' | 'failed';
+/** "sending": claimed by one run of the scheduler, so no other run sends it too. */
+export type QueueStatus = 'queued' | 'sending' | 'sent' | 'cancelled' | 'failed';
 
 /** Emails waiting to go out. processDueAutomations(now) sends the due ones. */
 export const hhmcAutomationQueue = tenantTable(
@@ -511,8 +514,16 @@ export const hhmcAutomationQueue = tenantTable(
     sentAt: timestamp('sent_at', { withTimezone: true }),
     cancelledReason: text('cancelled_reason'),
     notificationId: uuid('notification_id'),
+    /**
+     * The same email about the same records (rule + lead/job/estimate/invoice/payment, and the
+     * move date for reminders) is queued or sent once: see the unique index below.
+     */
+    dedupeKey: text('dedupe_key'),
   },
   (t) => [
+    uniqueIndex('hhmc_queue_dedupe')
+      .on(t.businessId, t.environment, t.dedupeKey)
+      .where(sql`${t.dedupeKey} is not null and ${t.status} in ('queued', 'sending', 'sent')`),
     sameTenant('hhmc_queue_rule_fk', t, t.ruleId, hhmcAutomationRules),
     sameTenant('hhmc_queue_lead_fk', t, t.leadId, hhmcLeads),
     sameTenant('hhmc_queue_job_fk', t, t.jobId, hhmcJobs),

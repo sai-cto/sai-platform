@@ -14,6 +14,12 @@ OIDC=true
 aws iam list-open-id-connect-providers --output text | grep -q token.actions.githubusercontent.com && OIDC=false
 # Keep the provider if this stack already created it.
 if aws cloudformation describe-stack-resource --stack-name sai-console --logical-resource-id GitHubOidcProvider >/dev/null 2>&1; then OIDC=true; fi
+# Keep the console's address (and so the scheduler) unless a new one is given.
+if [ -z "${CONSOLE_URL:-}" ]; then
+  CONSOLE_URL=$(aws cloudformation describe-stacks --stack-name sai-console \
+    --query "Stacks[0].Parameters[?ParameterKey=='ConsoleUrl'].ParameterValue" --output text 2>/dev/null || true)
+  [ "$CONSOLE_URL" = None ] && CONSOLE_URL=
+fi
 
 aws cloudformation deploy \
   --stack-name sai-console \

@@ -26,7 +26,7 @@ const header = (text: string) => text.split('\n')[0];
 const columns = (text: string) => header(text).split(',').map((c) => c.replace(/^"|"$/g, ''));
 
 /** A CSV in the fixture's own column layout; the work-order export has two "Status" columns. */
-function csv(of: keyof Files, rows: Record<string, string>[]): string {
+function csv(of: keyof typeof FILE_NAMES, rows: Record<string, string>[]): string {
   const cols = columns(fixture[of]);
   const line = (r: Record<string, string>) => cols.map((c, i) => `"${(cols.indexOf(c) === i ? r[c] : r[`${c}#2`]) ?? ''}"`).join(',');
   return [header(fixture[of]), ...rows.map(line)].join('\n') + '\n';

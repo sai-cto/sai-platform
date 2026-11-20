@@ -327,6 +327,8 @@ export function automationStillWanted(input: {
   /** Due date already passed (for the past-due reminder). */
   invoicePastDue?: boolean | null;
   estimateExpired?: boolean;
+  /** The move's date is before today (for move reminders). */
+  moveDatePassed?: boolean | null;
 }): { ok: true } | { ok: false; reason: string } {
   if (input.respectsOptIn && input.jobOptIn === false)
     return { ok: false, reason: 'Automation opt-in is off for this job.' };
@@ -343,6 +345,10 @@ export function automationStillWanted(input: {
       return input.jobStage === 'booked' || input.jobStage === 'completed' || input.jobStage === 'closed'
         ? { ok: true }
         : { ok: false, reason: 'The booking was released.' };
+    case 'move_reminder':
+      if (input.jobStage !== 'booked') return { ok: false, reason: 'The move is no longer booked.' };
+      if (input.moveDatePassed) return { ok: false, reason: 'The move date has passed.' };
+      return { ok: true };
     case 'invoice_sent':
       if (input.invoiceStatus !== 'sent' && input.invoiceStatus !== 'partially_paid')
         return { ok: false, reason: `The invoice is ${input.invoiceStatus ?? 'gone'}.` };
