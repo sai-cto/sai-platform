@@ -261,7 +261,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                       : stops.length < 2
                         ? 'Add both addresses to get the mileage.'
                         : mapsReady
-                          ? 'Google Maps could not find a driving route through these addresses. Check the addresses, or a manager can enter the miles below.'
+                          ? 'Google Maps could not find these addresses exactly, or no driving route between them. Check the street number, town and ZIP, then press "Look up mileage" to see which one; or a manager can enter the miles below.'
                           : 'Automatic mileage is not set up yet. A manager can enter the miles below.'}
                   {routeText ? (longDistance ? ` Long distance (over ${settings.longDistanceMiles} mi).` : ` Local (up to ${settings.longDistanceMiles} mi).`) : ''}
                 </p>

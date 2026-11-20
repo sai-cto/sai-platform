@@ -317,7 +317,7 @@ export async function applyBuilder(ctx: BusinessContext, jobId: string, raw: unk
 
 export type MileageResult =
   | { status: 'updated'; route: Route }
-  | { status: 'not_configured' | 'missing_addresses' | 'already_set' | 'no_route' | 'changed' | 'locked' };
+  | { status: 'not_configured' | 'missing_addresses' | 'already_set' | 'no_route' | 'unmatched' | 'changed' | 'locked' };
 
 /**
  * Fills the work request's mileage and drive time from the maps adapter, through every stop.
@@ -346,6 +346,11 @@ export async function refreshMileage(ctx: BusinessContext, jobId: string, option
   const route = await routeThrough(stops);
   if (route === 'not_configured') return fail('not_configured', 'Automatic mileage is not set up yet (no Google Maps key). Enter the miles by hand.');
   if (!route) return fail('no_route', 'Google Maps could not find a driving route through those addresses. Check them, or enter the miles by hand.');
+  if ('unmatched' in route)
+    return fail(
+      'unmatched',
+      `Google Maps could not match ${route.unmatched.map((a) => `"${a}"`).join(' or ')} exactly, so the miles were not filled in. Check the street number, town and ZIP, or a manager can enter the miles by hand.`,
+    );
   return withScope(ctx, P.jobsWrite, async (s) => {
     const now = await loadJob(s, jobId);
     if (routeStops(now).join('\n') !== stops.join('\n')) return fail('changed', 'The addresses changed while looking up the mileage. Try again.');
