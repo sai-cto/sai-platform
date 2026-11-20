@@ -15,7 +15,7 @@ The SAI Console and the Hired Hands website run on AWS in account `960129066398`
 | Database | RDS PostgreSQL 18 `sai-console` (db.t4g.micro, 20 GB gp3, encrypted, 7-day backups, not public) |
 | Uploaded files | S3 bucket `sai-console-files-960129066398` (private, encrypted, versioned) |
 | Secrets | Secrets Manager `sai/console/*` |
-| Daily scheduler | EventBridge rule `sai-console-daily` (13:17 UTC) → `/api/cron/scheduled` |
+| Scheduler | EventBridge rule `sai-console-daily` (every 15 minutes, despite its name) → `/api/cron/scheduled` |
 | Website | S3 bucket `hiredhands-site-960129066398` + CloudFront |
 | Deploys | GitHub Actions `.github/workflows/deploy-aws.yml` on every push to `main` |
 | Everything above | CloudFormation stack `sai-console` from `infra/aws/console.yaml` |
@@ -83,6 +83,8 @@ secret value in a file in this repository.
 | `FILE_STORAGE_BUCKET` | service settings |
 | `WEBSITE_INTAKE_ORIGINS`, `WEBSITE_INTAKE_ENVIRONMENT` | service settings |
 | `DATABASE_POOL_MAX` | service settings |
+| `EMAIL_PROVIDER` (`ses`), `EMAIL_FROM`, `EMAIL_ALLOWED_RECIPIENTS` | service settings (docs/hhmc-emails.md) |
+| `GOOGLE_MAPS_API_KEY` (server), `GOOGLE_MAPS_EMBED_KEY` (browser) | secrets `sai/console/google-maps-server-key`, `sai/console/google-maps-browser-key` (optional) |
 
 To change a secret: `scripts/aws/set-secret.sh <name>` (it reads the value from your keyboard,
 never from the command line), then redeploy.
