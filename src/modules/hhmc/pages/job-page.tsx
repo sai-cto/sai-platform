@@ -56,7 +56,7 @@ import { EstimateBuilder } from './estimate-builder';
 import { loadSettings } from '../settings';
 import { directionsLink, embedMapUrl, formatRoute, mapsConfigured, routeStops } from '../services/maps';
 import { depositCovered, listTrucks } from '../services/booking';
-import { lookupMileageAction } from '../actions';
+import { lookupMileageAction, setMileageAction } from '../actions';
 import { SourceRecords } from './source-records';
 
 export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
@@ -196,6 +196,7 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                   hasLines={quote.lines.length > 0}
                   pickedTrucks={pickedTrucks}
                   cornellianPerHour={settings.cornellianDiscountPerHour}
+                  route={{ text: routeText, embed }}
                 />
               </Disclosure>
             ) : null}
@@ -260,8 +261,8 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                       : stops.length < 2
                         ? 'Add both addresses to get the mileage.'
                         : mapsReady
-                          ? 'Not looked up yet.'
-                          : 'Automatic mileage is not set up yet. Add a mileage line to the quote for now.'}
+                          ? 'Google Maps could not find a driving route through these addresses. Check the addresses, or a manager can enter the miles below.'
+                          : 'Automatic mileage is not set up yet. A manager can enter the miles below.'}
                   {routeText ? (longDistance ? ` Long distance (over ${settings.longDistanceMiles} mi).` : ` Local (up to ${settings.longDistanceMiles} mi).`) : ''}
                 </p>
                 <ol className="mt-2 space-y-0.5 text-sm">
@@ -286,6 +287,19 @@ export async function JobPage({ ctx, params, basePath }: PortalPageProps) {
                 ) : null}
               </div>
             </div>
+            {canBook && editable && stops.length >= 2 ? (
+              <div className="border-t border-zinc-200 px-4 py-3">
+                <Disclosure summary={job.distanceTenths === null ? 'Enter the miles by hand' : 'Override the miles'}>
+                  <ActionForm action={setMileageAction.bind(null, slug, mode, job.id)} submitLabel="Set miles" resetOnSuccess={false}>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="Miles" htmlFor="mi-miles"><input id="mi-miles" name="miles" inputMode="decimal" required className={inputClass} placeholder="e.g. 212.4" defaultValue={job.distanceTenths !== null ? (job.distanceTenths / 10).toFixed(1) : ''} /></Field>
+                      <Field label="Drive time in minutes (optional)" htmlFor="mi-minutes"><input id="mi-minutes" name="driveMinutes" inputMode="numeric" className={inputClass} placeholder="e.g. 245" defaultValue={job.driveMinutes ?? ''} /></Field>
+                    </div>
+                    <p className="text-xs text-zinc-500">Used for pricing and the service type. The change is logged in the notes.</p>
+                  </ActionForm>
+                </Disclosure>
+              </div>
+            ) : null}
             {embed ? (
               <iframe
                 title="Route map"

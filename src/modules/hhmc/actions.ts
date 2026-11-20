@@ -72,7 +72,7 @@ import {
   setQuoteOptions,
   updateQuoteLine,
 } from './services/quote';
-import { applyBuilder, lookupMileage, refreshMileage } from './services/builder';
+import { applyBuilder, lookupMileage, refreshMileage, setMileageByHand } from './services/builder';
 import { createCatalogItem, updateCatalogItem, updateTemplate } from './services/settings';
 
 type Form = ActionResult | null;
@@ -303,6 +303,13 @@ export async function buildQuoteAction(slug: string, mode: string, jobId: string
     });
     const kind = result.truckPricing === 'long_distance' ? 'long-distance truck pricing' : result.truckPricing === 'local' ? 'local truck pricing' : 'labor only (customer\'s truck)';
     return [`Added ${result.lines.length} line${result.lines.length === 1 ? '' : 's'} with ${kind}.`, ...result.warnings].join(' ');
+  });
+}
+
+export async function setMileageAction(slug: string, mode: string, jobId: string, _p: Form, form: FormData) {
+  return run(slug, mode, async (ctx) => {
+    const r = await setMileageByHand(ctx, jobId, { miles: text(form, 'miles') ?? '', driveMinutes: text(form, 'driveMinutes') ?? '' });
+    return `Miles set to ${(r.distanceTenths / 10).toFixed(1)} and logged on the work request.`;
   });
 }
 

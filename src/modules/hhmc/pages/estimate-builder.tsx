@@ -36,6 +36,7 @@ export function EstimateBuilder({
   hasLines,
   pickedTrucks = [],
   cornellianPerHour,
+  route,
 }: {
   slug: string;
   mode: string;
@@ -45,12 +46,23 @@ export function EstimateBuilder({
   /** Names of the trucks picked on the work request. */
   pickedTrucks?: string[];
   cornellianPerHour: number;
+  /** The route as on the work request: miles and drive time, and the embedded map (when a browser key is set). */
+  route?: { text: string | null; embed: string | null };
 }) {
   const materials = catalog.filter((c) => c.section === 'packing_materials' || (c.category === 'Equipment' && !/truck/i.test(c.name)));
   const crews = [...new Set(catalog.map((c) => /^(\d+) Men$/.exec(c.name)?.[1]).filter(Boolean))].map(Number).sort((a, b) => a - b);
   const miles = job.distanceTenths !== null ? (job.distanceTenths / 10).toFixed(1) : '';
   return (
     <div className="space-y-4">
+      {route ? (
+        <div className="overflow-hidden rounded-md border border-zinc-200">
+          <p className="px-3 py-2 text-sm">
+            <span className="font-medium">Route: </span>
+            <span className="tabular-nums" data-testid="builder-route">{route.text ?? 'mileage not set (see Route and mileage)'}</span>
+          </p>
+          {route.embed ? <iframe title="Route map (estimate)" src={route.embed} className="h-56 w-full border-t border-zinc-200" loading="lazy" referrerPolicy="strict-origin-when-cross-origin" /> : null}
+        </div>
+      ) : null}
       <ActionForm action={buildQuoteAction.bind(null, slug, mode, job.id)} submitLabel={hasLines ? 'Add to quote' : 'Build quote'} resetOnSuccess={false}>
         <fieldset className="grid gap-3 sm:grid-cols-4">
           <legend className="mb-1 text-sm font-medium">Crew and time</legend>
