@@ -1,0 +1,394 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  SAI Console on AWS (docs/aws.md): private PostgreSQL, uploads bucket, image registry, secrets,
+  roles, daily scheduler and the Hired Hands website. The ECS Express service itself is created
+  by scripts/aws/console-service.sh (it needs the image this stack's registry holds).
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: The account's default VPC.
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: At least two subnets of that VPC, in different Availability Zones.
+  GitHubRepo:
+    Type: String
+    Default: sai-cto/sai-platform
+  ConsoleUrl:
+    Type: String
+    Default: ''
+    Description: The console's https address once its service exists (enables the daily scheduler).
+  CreateGitHubOidcProvider:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+    Description: false when the account already has token.actions.githubusercontent.com.
+
+Conditions:
+  HasConsoleUrl: !Not [!Equals [!Ref ConsoleUrl, '']]
+  CreateOidc: !Equals [!Ref CreateGitHubOidcProvider, 'true']
+
+Resources:
+  # ---------- Network: the database accepts connections only from the app's tasks ----------
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SAI Console tasks (load balancer traffic in, everything out)
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 3000, ToPort: 3000, CidrIp: 172.31.0.0/16, Description: Load balancer inside the VPC }
+      Tags: [{ Key: Name, Value: sai-console-app }]
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SAI PostgreSQL (only the console tasks and its one-off jobs)
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 5432, ToPort: 5432, SourceSecurityGroupId: !Ref AppSecurityGroup, Description: Console tasks }
+      Tags: [{ Key: Name, Value: sai-database }]
+
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: SAI PostgreSQL subnets
+      SubnetIds: !Ref SubnetIds
+
+  # ---------- Database ----------
+  DatabaseOwnerSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: sai/console/database-owner
+      Description: Password of sai_owner, the PostgreSQL owner role (migrations only; the app uses sai_app).
+      GenerateSecretString:
+        SecretStringTemplate: '{"username":"sai_owner"}'
+        GenerateStringKey: password
+        PasswordLength: 40
+        ExcludePunctuation: true
+
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: sai-console
+      Engine: postgres
+      EngineVersion: '18'
+      DBInstanceClass: db.t4g.micro
+      AllocatedStorage: '20'
+      MaxAllocatedStorage: 100
+      StorageType: gp3
+      StorageEncrypted: true
+      DBName: sai
+      MasterUsername: sai_owner
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${DatabaseOwnerSecret}:SecretString:password}}'
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      VPCSecurityGroups: [!Ref DatabaseSecurityGroup]
+      PubliclyAccessible: false
+      MultiAZ: false
+      BackupRetentionPeriod: 7
+      PreferredBackupWindow: '08:00-08:30'
+      PreferredMaintenanceWindow: 'sun:09:00-sun:09:30'
+      CopyTagsToSnapshot: true
+      DeletionProtection: true
+      AutoMinorVersionUpgrade: true
+      EnablePerformanceInsights: false
+      Tags: [{ Key: Name, Value: sai-console }]
+
+  # ---------- Files ----------
+  UploadsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub sai-console-files-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }]
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+      OwnershipControls: { Rules: [{ ObjectOwnership: BucketOwnerEnforced }] }
+      VersioningConfiguration: { Status: Enabled }
+
+  # Database dumps for the move from Neon (and later restores). Kept 30 days.
+  TransferBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub sai-console-transfer-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }]
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+      OwnershipControls: { Rules: [{ ObjectOwnership: BucketOwnerEnforced }] }
+      LifecycleConfiguration: { Rules: [{ Id: expire, Status: Enabled, ExpirationInDays: 30 }] }
+
+  # ---------- Image registry and logs ----------
+  ImageRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: sai-console
+      ImageScanningConfiguration: { ScanOnPush: true }
+      ImageTagMutability: MUTABLE
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"description":"keep 20 images","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":20},"action":{"type":"expire"}}]}'
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /sai/console
+      RetentionInDays: 90
+
+  # ---------- App secrets (values never in this file) ----------
+  LinkSigningSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: sai/console/link-signing-secret
+      Description: Signs customers' estimate and invoice links (LINK_SIGNING_SECRET).
+      GenerateSecretString: { PasswordLength: 64, ExcludePunctuation: true }
+
+  CronSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: sai/console/cron-secret
+      Description: Lets the daily scheduler call /api/cron/scheduled (CRON_SECRET).
+      GenerateSecretString: { PasswordLength: 48, ExcludePunctuation: true }
+
+  MicrosoftClientSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: sai/console/microsoft-client-secret
+      Description: Microsoft Entra app client secret (MICROSOFT_CLIENT_SECRET). Put the real value with scripts/aws/set-secret.sh.
+      GenerateSecretString: { PasswordLength: 32, ExcludePunctuation: true }
+
+  # ---------- Roles (none for people) ----------
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: sai-console-task-execution
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement: [{ Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: sts:AssumeRole }]
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy]
+      Policies:
+        - PolicyName: read-app-secrets
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: [!Ref DatabaseOwnerSecret, !Ref LinkSigningSecret, !Ref CronSecret, !Ref MicrosoftClientSecret]
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: sai-console-task
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement: [{ Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: sts:AssumeRole }]
+      Policies:
+        - PolicyName: uploads-bucket
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - { Effect: Allow, Action: [s3:GetObject, s3:PutObject, s3:DeleteObject], Resource: !Sub '${UploadsBucket.Arn}/*' }
+              - { Effect: Allow, Action: s3:ListBucket, Resource: !GetAtt UploadsBucket.Arn }
+              - { Effect: Allow, Action: s3:GetObject, Resource: !Sub '${TransferBucket.Arn}/*' }
+
+  ExpressInfrastructureRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: sai-console-express-infrastructure
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement: [{ Effect: Allow, Principal: { Service: ecs.amazonaws.com }, Action: sts:AssumeRole }]
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices]
+
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CreateOidc
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: sai-github-deploy
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Federated: !Sub 'arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com' }
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubRepo}:ref:refs/heads/main'
+      Policies:
+        - PolicyName: deploy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - { Effect: Allow, Action: ecr:GetAuthorizationToken, Resource: '*' }
+              - Effect: Allow
+                Action: [ecr:BatchCheckLayerAvailability, ecr:BatchGetImage, ecr:CompleteLayerUpload, ecr:InitiateLayerUpload, ecr:PutImage, ecr:UploadLayerPart, ecr:DescribeImages]
+                Resource: !GetAtt ImageRepository.Arn
+              - Effect: Allow
+                Action: [ecs:DescribeExpressGatewayService, ecs:UpdateExpressGatewayService, ecs:DescribeServices, ecs:DescribeServiceDeployments, ecs:ListServiceDeployments, ecs:DescribeTaskDefinition, ecs:RegisterTaskDefinition, ecs:DescribeClusters]
+                Resource: '*'
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: [!GetAtt TaskExecutionRole.Arn, !GetAtt TaskRole.Arn, !GetAtt ExpressInfrastructureRole.Arn]
+              - { Effect: Allow, Action: [s3:PutObject, s3:DeleteObject, s3:GetObject], Resource: !Sub '${SiteBucket.Arn}/*' }
+              - { Effect: Allow, Action: s3:ListBucket, Resource: !GetAtt SiteBucket.Arn }
+              - { Effect: Allow, Action: cloudfront:CreateInvalidation, Resource: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${SiteDistribution}' }
+
+  # ---------- Daily scheduler (was Vercel cron "17 13 * * *") ----------
+  CronConnection:
+    Type: AWS::Events::Connection
+    Condition: HasConsoleUrl
+    Properties:
+      Name: sai-console-cron
+      AuthorizationType: API_KEY
+      AuthParameters:
+        ApiKeyAuthParameters:
+          ApiKeyName: Authorization
+          ApiKeyValue: !Sub 'Bearer {{resolve:secretsmanager:${CronSecret}}}'
+
+  CronDestination:
+    Type: AWS::Events::ApiDestination
+    Condition: HasConsoleUrl
+    Properties:
+      Name: sai-console-cron
+      ConnectionArn: !GetAtt CronConnection.Arn
+      InvocationEndpoint: !Sub '${ConsoleUrl}/api/cron/scheduled'
+      HttpMethod: GET
+      InvocationRateLimitPerSecond: 1
+
+  CronRole:
+    Type: AWS::IAM::Role
+    Condition: HasConsoleUrl
+    Properties:
+      RoleName: sai-console-cron
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement: [{ Effect: Allow, Principal: { Service: events.amazonaws.com }, Action: sts:AssumeRole }]
+      Policies:
+        - PolicyName: invoke
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement: [{ Effect: Allow, Action: events:InvokeApiDestination, Resource: !GetAtt CronDestination.Arn }]
+
+  CronRule:
+    Type: AWS::Events::Rule
+    Condition: HasConsoleUrl
+    Properties:
+      Name: sai-console-daily
+      Description: Daily scheduled emails and automations (13:17 UTC, as on Vercel)
+      ScheduleExpression: cron(17 13 * * ? *)
+      State: ENABLED
+      Targets:
+        - Id: console
+          Arn: !GetAtt CronDestination.Arn
+          RoleArn: !GetAtt CronRole.Arn
+          RetryPolicy: { MaximumRetryAttempts: 2 }
+
+  # ---------- Hired Hands website (static) ----------
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub hiredhands-site-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }]
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+      OwnershipControls: { Rules: [{ ObjectOwnership: BucketOwnerEnforced }] }
+
+  SiteOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: hiredhands-site
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  SiteDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: Hired Hands Moving website
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: site
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt SiteOriginAccessControl.Id
+            S3OriginConfig: { OriginAccessIdentity: '' }
+        DefaultCacheBehavior:
+          TargetOriginId: site
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # Managed-CachingOptimized
+          ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03 # Managed-SecurityHeadersPolicy
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt SitePathFunction.FunctionMetadata.FunctionARN
+        CustomErrorResponses:
+          - { ErrorCode: 403, ResponseCode: 404, ResponsePagePath: /index.html, ErrorCachingMinTTL: 60 }
+
+  # "/about" serves about.html and "/" serves index.html, as Vercel did.
+  SitePathFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: hiredhands-site-paths
+      AutoPublish: true
+      FunctionConfig: { Comment: Clean URLs, Runtime: cloudfront-js-2.0 }
+      FunctionCode: |
+        function handler(event) {
+          var r = event.request;
+          if (r.uri.endsWith('/')) r.uri += 'index.html';
+          else if (r.uri.lastIndexOf('.') < r.uri.lastIndexOf('/') + 1) r.uri += '.html';
+          return r;
+        }
+
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub '${SiteBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${SiteDistribution}'
+
+Outputs:
+  DatabaseHost: { Value: !GetAtt Database.Endpoint.Address }
+  DatabaseOwnerSecretArn: { Value: !Ref DatabaseOwnerSecret }
+  LinkSigningSecretArn: { Value: !Ref LinkSigningSecret }
+  CronSecretArn: { Value: !Ref CronSecret }
+  MicrosoftClientSecretArn: { Value: !Ref MicrosoftClientSecret }
+  AppSecurityGroupId: { Value: !Ref AppSecurityGroup }
+  UploadsBucketName: { Value: !Ref UploadsBucket }
+  TransferBucketName: { Value: !Ref TransferBucket }
+  ImageRepositoryUri: { Value: !GetAtt ImageRepository.RepositoryUri }
+  LogGroupName: { Value: !Ref LogGroup }
+  TaskExecutionRoleArn: { Value: !GetAtt TaskExecutionRole.Arn }
+  TaskRoleArn: { Value: !GetAtt TaskRole.Arn }
+  ExpressInfrastructureRoleArn: { Value: !GetAtt ExpressInfrastructureRole.Arn }
+  GitHubDeployRoleArn: { Value: !GetAtt GitHubDeployRole.Arn }
+  SiteBucketName: { Value: !Ref SiteBucket }
+  SiteDistributionId: { Value: !Ref SiteDistribution }
+  SiteUrl: { Value: !Sub 'https://${SiteDistribution.DomainName}' }
