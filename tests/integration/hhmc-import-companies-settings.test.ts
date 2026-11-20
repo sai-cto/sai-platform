@@ -211,12 +211,12 @@ describe('settings documents: terms and email templates', () => {
 
   it('maps each HHMC template to its key, with our merge fields and a link where the email needs one', () => {
     expect(docs().map((t) => t.key).sort()).toEqual(
-      ['addresses_needed', 'booked', 'drip_day2', 'drip_day3', 'drip_day7', 'drip_same_day', 'estimate_email', 'inventory_needed', 'invoice_email', 'lead_didnt_connect', 'lead_last_checkin', 'lead_sorry', 'past_due', 'payment_receipt', 'review_request', 'terms_interstate', 'terms_intrastate', 'terms_local', 'valuation_basic'].sort(),
+      ['addresses_needed', 'booked', 'drip_day2', 'drip_day3', 'drip_day7', 'drip_same_day', 'estimate_follow_up', 'inventory_needed', 'move_reminder', 'invoice_email', 'lead_didnt_connect', 'lead_last_checkin', 'lead_sorry', 'past_due', 'payment_receipt', 'review_request', 'terms_interstate', 'terms_intrastate', 'terms_local', 'valuation_basic'].sort(),
     );
     expect(byKey('past_due')).toMatchObject({ kind: 'email', subject: 'Invoice reminder' });
     expect(byKey('past_due').body).toBe('Hi {{firstName}},\n\nInvoice Amount: {{invoiceTotal}} Due date: {{dueDate}}\n\nPlease call us to pay the remaining balance.\n\n{{link}}');
-    expect(byKey('estimate_email').body).toContain('please e-sign the estimate so our team can book your move.\n\n{{link}}\n\n');
-    expect(byKey('estimate_email').subject).toBe('Please Sign: {{estimateTitle}}');
+    expect(byKey('estimate_follow_up').body).toContain('please e-sign the estimate so our team can book your move.\n\n{{link}}\n\n');
+    expect(byKey('estimate_follow_up').subject).toBe('Following up on your estimate: {{estimateTitle}}');
     expect(byKey('booked').subject).toBe('Booked, {{firstName}}');
     expect(byKey('payment_receipt').body).toBe('Dear {{customerName}},\n\nYou paid {{amount}}\n\nto {{businessName}} on {{paymentDate}}\n\nPayment ID : {{paymentId}}\nTotal : {{amount}}');
     expect(byKey('invoice_email')).toMatchObject({ subject: 'Your Invoice: {{invoiceNumber}} from {{businessName}}' });

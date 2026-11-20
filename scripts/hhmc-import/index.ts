@@ -153,14 +153,21 @@ async function main() {
   const refunds = fs.existsSync(refundFile) ? parseRefundOverrides(fs.readFileSync(refundFile, 'utf8')) : new Map<string, number>();
   if (refunds.size) console.log(`Read ${refunds.size} hand-entered refund amount(s) from refund-amounts.csv.`);
   const settingsDir = path.join(dir, 'settings');
-  const templates = fs.existsSync(path.join(settingsDir, 'email-templates.md')) && fs.existsSync(path.join(settingsDir, 'terms-and-conditions.md'))
-    ? parseSettingsDocs({ emailTemplates: fs.readFileSync(path.join(settingsDir, 'email-templates.md'), 'utf8'), terms: fs.readFileSync(path.join(settingsDir, 'terms-and-conditions.md'), 'utf8') })
-    : [];
+  const settingsFile = (name: string) => (fs.existsSync(path.join(settingsDir, name)) ? fs.readFileSync(path.join(settingsDir, name), 'utf8') : undefined);
+  const emailDoc = settingsFile('email-templates.md');
+  const termsDoc = settingsFile('terms-and-conditions.md');
+  const templates = emailDoc && termsDoc ? parseSettingsDocs({ emailTemplates: emailDoc, terms: termsDoc, extra: settingsFile('email-templates-extra.md') }) : [];
+  // HHMC's pricing (line items, discounts) and automatic emails, when the export has them.
+  const pricingDoc = settingsFile('pricing.json');
+  const automationsDoc = settingsFile('automations.json');
+  const { parsePricingSettings } = await import('./settings-pricing');
+  const pricing = pricingDoc && automationsDoc ? parsePricingSettings(pricingDoc, automationsDoc) : null;
   const base0 = normalize(files, { refunds, today: new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) });
   const n = files.companies ? { ...base0, companies: normalizeCompanies(files.companies, base0.contacts) } : base0;
   console.log(`Read: ${n.contacts.length} contacts, ${n.leads.length} leads, ${n.jobs.length} work requests, ${n.estimates.length} estimates, ${n.invoices.length} invoices, ${n.payments.length} payments.`);
   if (n.companies) console.log(`Read: ${n.companies.links.length + n.companies.organizations.length} companies (${n.companies.links.length} copies of a contact, ${n.companies.organizations.length} organizations).`);
   console.log(templates.length ? `Read: ${templates.length} templates from settings/ (terms & conditions, email templates).` : 'No settings/ documents: templates left as they are.');
+  console.log(pricing ? `Read: ${pricing.catalog.length} catalog items, ${pricing.discounts.length} discounts, ${pricing.rules.length} email automations from settings/.` : 'No settings/pricing.json and automations.json: pricing and automations left as they are.');
 
   const { systemContext } = await import('../../src/core/tenancy/system');
   const { withScope } = await import('../../src/core/db/scope');
@@ -204,11 +211,23 @@ async function main() {
       const t = await loadTemplates(scoped, templates);
       console.log(`  template: ${t.created} created, ${t.updated} updated, ${t.unchanged} unchanged, ${t.kept} kept (changed in SAI)`);
     }
+    if (pricing) {
+      const { loadPricing } = await import('./load-pricing');
+      for (const [type, st] of Object.entries(await loadPricing(scoped, pricing)))
+        console.log(`  ${type}: ${st.created} created, ${st.updated} updated, ${st.unchanged} unchanged, ${st.kept} kept (changed in SAI)`);
+    }
     console.log(`Loaded in ${((Date.now() - t0) / 1000).toFixed(1)} s.`);
     const r = reconciliationReport(movegisticsSide(files, refunds, n.openDepositCredits), await scoped((s) => ourSide(s, ctx.business.timeZone)), n.issues, EXPLANATIONS, n.followups);
     report = r.markdown;
     differences = r.differences;
     console.log(`\n${r.summary}\n`);
+    if (pricing) {
+      const { pricingReport } = await import('./reconcile-pricing');
+      const pr = await scoped((s) => pricingReport(s, pricing));
+      report += `\n${pr.markdown}`;
+      differences += pr.differences;
+      console.log(`${pr.summary}\n`);
+    }
   } finally {
     await closeDb();
   }

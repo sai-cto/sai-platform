@@ -16,6 +16,12 @@ const PHRASES: [string, string][] = [
   ['{{contacts.firstName}} {{contacts.lastName}}', '{{customerName}}'],
   ['{{workRequest.originAddressLineOne}}, {{workRequest.originCity}}, {{workRequest.originState}} {{workRequest.originZipCode}}', '{{originAddress}}'],
   // Our amounts are formatted with their "$" already.
+  ['{{estimate.senderFirstName}} {{estimate.senderLastName}}', 'The Hired Hands Team'],
+  // Movegistics shows the link in brackets on a line of its own.
+  [' [{{url}}]', '{{link}}'],
+  [' [{{reviewUrl}}]', '{{link}}'],
+  ['[{{url}}]', '{{link}}'],
+  ['[{{reviewUrl}}]', '{{link}}'],
   ['${{amount}}', '{{amount}}'],
   ['$ {{amount}}', '{{amount}}'],
 ];
@@ -35,6 +41,9 @@ const FIELDS: Record<string, string> = {
   'company.name': '{{businessName}}',
   'company.companyName': '{{businessName}}',
   displayId: '{{invoiceNumber}}',
+  'estimate.title': '{{estimateTitle}}',
+  'estimate.displayId': '{{estimateNumber}}',
+  'estimate.senderCompanyName': '{{businessName}}',
   signature: SIGNATURE,
   'owner.name': 'The Hired Hands Team',
 };
@@ -63,7 +72,9 @@ const EMAILS: EmailMap[] = [
   { key: 'drip_day2', title: 'Is the price giving you pause? - Day 2', fills: 'automation', linkAfter: 'talk through the estimate' },
   { key: 'drip_same_day', title: 'Same Day', fills: 'automation', linkAfter: 'Sign your estimate and place a deposit' },
   // Movegistics sends the estimate itself as a button; it has no subject of its own.
-  { key: 'estimate_email', title: 'Estimate Follow-up', fills: 'estimate', subject: 'Please Sign: {{estimateTitle}}', linkAfter: 'please e-sign the estimate' },
+  // HHMC's follow-up wording, for staff to send by hand (the estimate itself goes out with
+  // Movegistics' "ACTIVE Sent Estimate Template", EXTRA below).
+  { key: 'estimate_follow_up', title: 'Estimate Follow-up', fills: 'estimate', subject: 'Following up on your estimate: {{estimateTitle}}', linkAfter: 'please e-sign the estimate' },
   { key: 'inventory_needed', title: 'Inventory Needed', fills: 'manual', subject: 'A few details for your moving estimate' },
   { key: 'addresses_needed', title: 'Addresses Needed', fills: 'manual', subject: 'Your addresses, to finish your quote' },
   { key: 'payment_receipt', title: 'Payment Receipt', fills: 'automation' },
@@ -78,7 +89,8 @@ function convert(text: string, fills: readonly string[], what: string): string {
   let out = PHRASES.reduce((t, [from, to]) => t.split(from).join(to), text);
   out = out
     .split('\n')
-    .filter((line) => !line.includes('{{paymentDescription}}') && !/Powered by Movegistics/i.test(line))
+    // No attachment is sent (the link shows the signed estimate), and no Movegistics footer.
+    .filter((line) => !line.includes('{{paymentDescription}}') && !/Powered by Movegistics/i.test(line) && !/^Please find the attached/i.test(line.trim()))
     .join('\n');
   out = out.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (whole, name: string) => FIELDS[name] ?? whole);
   const left = [...out.matchAll(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g)].map((m) => m[1]).filter((n) => !fills.includes(n));
@@ -138,6 +150,39 @@ function termsTemplates(markdown: string): NTemplate[] {
   ];
 }
 
-export function parseSettingsDocs(docs: { emailTemplates: string; terms: string }): NTemplate[] {
-  return [...emailTemplates(docs.emailTemplates), ...termsTemplates(docs.terms)];
+/** Movegistics' system emails HHMC uses (settings/email-templates-extra.md: "- Subject: `…`", then a text block). */
+const EXTRA: { key: string; title: string; fills: keyof typeof FILLS }[] = [
+  { key: 'estimate_email', title: 'ACTIVE Sent Estimate Template', fills: 'estimate' },
+  { key: 'estimate_signed', title: 'ACTIVE Post-Signature Estimate Template', fills: 'estimate' },
+];
+
+export function extraTemplates(markdown: string): NTemplate[] {
+  const sections = markdown.split(/^### /m).slice(1);
+  return EXTRA.map((m) => {
+    const chunk = sections.find((c) => c.split('\n')[0].split(' › ').at(-1)!.replace(/ \([^)]*\)\s*$/, '').trim() === m.title);
+    if (!chunk) return refuse(`no email template "${m.title}".`);
+    const subject = /^- Subject: `(.*)`\s*$/m.exec(chunk)?.[1] ?? refuse(`"${m.title}" has no subject.`);
+    const body = /```text\n([\s\S]*?)\n```/.exec(chunk)?.[1] ?? refuse(`"${m.title}" has no text.`);
+    const fills = FILLS[m.fills];
+    return { key: m.key, kind: 'email' as const, name: m.title.replace(/^ACTIVE /, ''), subject: convert(subject, fills, `${m.title} (subject)`), body: convert(body, fills, m.title), source: `Settings › Email Templates › ${m.title}` };
+  });
+}
+
+/**
+ * Emails SAI sends that Movegistics never had (docs/hhmc-emails.md), written in HHMC's style and
+ * signed like its own templates. Managers may reword them in Settings.
+ */
+export const SAI_TEMPLATES: NTemplate[] = [
+  {
+    key: 'move_reminder',
+    kind: 'email',
+    name: 'Move reminder (2 days before)',
+    subject: 'Your move is coming up, {{firstName}}',
+    body: `Hi {{firstName}},\n\nThis is a friendly reminder that your move with Hired Hands is on {{moveDate}}. Our crew will arrive in the window on your estimate.\n\nIf anything has changed, or you have any questions, call us at (607) 524-3150 or reply to this email.\n\n${SIGNATURE}`,
+    source: 'SAI (no Movegistics automation)',
+  },
+];
+
+export function parseSettingsDocs(docs: { emailTemplates: string; terms: string; extra?: string }): NTemplate[] {
+  return [...emailTemplates(docs.emailTemplates), ...(docs.extra ? extraTemplates(docs.extra) : []), ...SAI_TEMPLATES, ...termsTemplates(docs.terms)];
 }
