@@ -12,9 +12,18 @@ test('a manager lands on the HHMC dashboard with no platform tabs', async ({ pag
   await expect(page).toHaveURL(/\/console\/hhmc\/live\/app$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
   await expect(page.locator('a[data-business-tab]')).toHaveCount(1);
-  for (const hidden of ['Overview', 'Data', 'Activity log', 'Module health']) {
+  for (const hidden of ['Overview', 'Module settings', 'Module health']) {
     await expect(page.getByRole('link', { name: hidden, exact: true })).toHaveCount(0);
   }
+  // HHMC's admins run HHMC from inside the app (managers' feedback round 1): Data and Activity
+  // log are app sections, and Settings holds Business settings and People and access.
+  const sections = page.getByRole('navigation', { name: 'App sections' });
+  for (const shown of ['Data', 'Activity log', 'Settings']) await expect(sections.getByRole('link', { name: shown, exact: true })).toBeVisible();
+  await sections.getByRole('link', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings areas' }).getByRole('link', { name: 'People and access' }).click();
+  await expect(page).toHaveURL(/\/console\/hhmc\/people$/);
+  await expect(page.getByRole('navigation', { name: 'App sections' }).getByRole('link', { name: 'Settings', exact: true })).toHaveAttribute('aria-current', 'page');
+  await page.goto('/console/hhmc');
   await expect(page.getByTestId('how-to-test-banner')).toBeVisible();
   await expect(page).toHaveTitle(/^Dashboard · /);
 });

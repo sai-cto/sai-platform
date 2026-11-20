@@ -6,6 +6,7 @@
  * Deposit. Invoice link: the invoice and Pay the balance.
  */
 import Link from 'next/link';
+import { TERMS_PDF_LINK_NAME } from '../services/terms-pdf';
 import type { ReactNode } from 'react';
 import { isPilotMode } from '@/core/demo/pilot';
 import { NotFoundError } from '@/core/errors';
@@ -98,7 +99,7 @@ export async function CustomerPage(props: PortalPageProps) {
 }
 
 async function EstimateReview({ ctx, searchParams, basePath }: PortalPageProps) {
-  const { estimate: e, settings, expired } = await openEstimateByLink(ctx);
+  const { estimate: e, settings, expired, termsPdf } = await openEstimateByLink(ctx);
   const s = e.snapshot;
   const business = ctx.business.name;
   const brand = brandOf(await loadSettings(ctx), business);
@@ -171,6 +172,7 @@ async function EstimateReview({ ctx, searchParams, basePath }: PortalPageProps) 
           <p className="text-sm whitespace-pre-wrap text-zinc-700">{s.valuation}</p>
           <h2 className="mt-5 text-sm font-semibold">{s.termsTitle}</h2>
           <p className="max-h-80 overflow-y-auto rounded border border-zinc-200 p-3 text-sm whitespace-pre-wrap text-zinc-700">{s.termsBody}</p>
+          {termsPdf ? <TermsPdfLink basePath={basePath} /> : null}
           <div className="mt-4 flex flex-wrap justify-between gap-2 print:hidden">
             <Link className="inline-flex min-h-11 items-center rounded-md border border-zinc-300 px-3 py-2 text-sm" href={go('summary')}>Back</Link>
             <PrintButton />
@@ -187,6 +189,7 @@ async function EstimateReview({ ctx, searchParams, basePath }: PortalPageProps) 
               <p className="mt-1 text-zinc-700">{s.valuation}</p>
               <Field label="Your initials" htmlFor="initials" className="mt-2 max-w-40"><input id="initials" name="valuationInitials" autoComplete="off" maxLength={6} className={inputClass} /></Field>
             </div>
+            {termsPdf ? <TermsPdfLink basePath={basePath} /> : null}
             <label className="flex items-start gap-2 text-sm">
               <input type="checkbox" name="agree" className="mt-0.5 size-4" />
               <span>I have reviewed and initialed each section of this estimate and agree to the terms, pricing and services described in it.</span>
@@ -278,5 +281,16 @@ async function InvoicePay({ ctx, basePath }: PortalPageProps) {
         </Card>
       )}
     </Shell>
+  );
+}
+
+/** The full Terms & Conditions PDF, opened in a new tab (read before signing). */
+function TermsPdfLink({ basePath }: { basePath: string }) {
+  return (
+    <p className="mt-2 text-sm">
+      <a className="inline-flex min-h-11 items-center underline sm:min-h-0" href={`${basePath}/file/${TERMS_PDF_LINK_NAME}`} target="_blank" rel="noopener noreferrer">
+        Read the full Terms &amp; Conditions (PDF) ↗
+      </a>
+    </p>
   );
 }

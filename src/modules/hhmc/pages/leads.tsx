@@ -19,10 +19,10 @@ import {
   updateLeadAction,
 } from '../actions';
 import { listTrucks } from '../services/booking';
-import { TruckPicker } from './jobs';
+import { ServiceTypeFields, TruckPicker } from './jobs';
 import { CORE, P } from '../permissions';
-import { BEDROOMS, CALL_OUTCOME_LABELS, JOB_TYPES, LEAD_STATUS_LABELS, SERVICE_TYPE_LABELS } from '../rules';
-import { LEAD_SOURCES, SERVICE_TYPES, type hhmcLeads, type LeadStatus } from '../schema';
+import { BEDROOMS, CALL_OUTCOME_LABELS, LEAD_STATUS_LABELS } from '../rules';
+import { LEAD_SOURCES, type hhmcLeads, type LeadStatus } from '../schema';
 import { conversionPreview, LEADS_PAGE_SIZE, listLeads } from '../services/leads';
 import { leadPage } from '../services/views';
 import { Disclosure } from './disclosure';
@@ -34,8 +34,8 @@ import { formatPhone } from '@/ui/format';
 type Lead = typeof hhmcLeads.$inferSelect;
 
 export async function LeadsPage({ ctx, searchParams, basePath }: PortalPageProps) {
-  const statuses = ['new', 'disqualified', 'converted', 'all'] as const;
-  const status = statuses.find((s) => s === searchParams.status) ?? 'new';
+  const statuses = ['all', 'new', 'disqualified', 'converted'] as const;
+  const status = statuses.find((s) => s === searchParams.status) ?? 'all';
   const page = Math.max(1, Number.parseInt(searchParams.page ?? '1', 10) || 1);
   const { rows, total } = await listLeads(ctx, {
     status: status as LeadStatus | 'all',
@@ -266,20 +266,7 @@ export async function LeadPage({ ctx, params, basePath }: PortalPageProps) {
               )}
               <ActionForm action={convertLeadAction.bind(null, slug, mode, lead.id)} submitLabel="Convert to job" className="mt-3">
                 <div className="grid gap-3 sm:grid-cols-4">
-                  <Field label="Service type" htmlFor="cv-service">
-                    <Select id="cv-service" name="serviceType" defaultValue="local">
-                      {SERVICE_TYPES.map((t) => <option key={t} value={t}>{SERVICE_TYPE_LABELS[t]}</option>)}
-                    </Select>
-                  </Field>
-                  <Field label="Job type" htmlFor="cv-type" help="Must match the service type.">
-                    <Select id="cv-type" name="jobType" defaultValue="Local Full Service Move">
-                      {SERVICE_TYPES.map((t) => (
-                        <optgroup key={t} label={SERVICE_TYPE_LABELS[t]}>
-                          {JOB_TYPES[t].map((j) => <option key={j} value={j}>{j}</option>)}
-                        </optgroup>
-                      ))}
-                    </Select>
-                  </Field>
+                  <ServiceTypeFields idPrefix="cv" />
                   <Field label="Movers" htmlFor="cv-crew"><input id="cv-crew" name="crewSize" type="number" min={1} max={20} defaultValue={2} className={inputClass} /></Field>
                   <Field label="Trucks" htmlFor="cv-trucks"><input id="cv-trucks" name="trucks" type="number" min={0} max={10} defaultValue={1} className={inputClass} /></Field>
                   <TruckPicker trucks={trucks} idPrefix="cv-truck" />

@@ -19,6 +19,7 @@ import { getDb } from '../db/client';
 import { businessModules, businesses } from '../db/schema';
 import { NotFoundError, ValidationError } from '../errors';
 import { isUuid } from '../ids';
+import type { LinkFile } from '../modules/contract';
 import { getModule } from '../modules/registry';
 import type { BusinessContext, Environment } from '../tenancy/context';
 
@@ -151,4 +152,17 @@ export async function buildLinkContext(
 /** For module services: is this context a link for exactly this purpose and record? */
 export function linkFor(ctx: BusinessContext, purpose: string, subjectId: string): boolean {
   return ctx.link?.purpose === purpose && ctx.link.subjectId === subjectId;
+}
+
+/**
+ * A file a link's purpose serves by name (LinkPurposeDef.files), e.g. the terms PDF of an
+ * estimate link. Anything wrong (bad token, a purpose without files, an unknown name) is
+ * "not found".
+ */
+export async function openLinkFile(token: string, name: string): Promise<LinkFile> {
+  const ctx = await buildLinkContext(token);
+  const purpose = findPurpose(ctx.business.moduleKey, ctx.link?.purpose ?? '');
+  const file = purpose?.files ? await purpose.files(ctx, name) : null;
+  if (!file) throw new NotFoundError();
+  return file;
 }

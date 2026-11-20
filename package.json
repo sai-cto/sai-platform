@@ -26,6 +26,7 @@
     "db:restore": "tsx scripts/db-restore.ts",
     "docs:permissions": "tsx scripts/generate-permissions-doc.ts",
     "hhmc:automations": "tsx scripts/hhmc-automations.ts",
+    "hhmc:confirmed-only": "tsx scripts/hhmc-confirmed-only.ts",
     "demo:prepare": "tsx scripts/demo-prepare.ts",
     "demo:seed": "tsx scripts/demo-prepare.ts --reset",
     "demo:build": "tsx scripts/demo-prepare.ts && next build",

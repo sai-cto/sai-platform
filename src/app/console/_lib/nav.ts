@@ -2,6 +2,7 @@
  * What appears in the console's navigation for a given person. Built on the server from
  * their permissions, so the sidebar never shows a link the server would refuse.
  */
+import { adminInApp } from '@/core/modules/portal';
 import { PLATFORM_ROLES } from '@/core/rbac/roles';
 import type { BusinessContext, PlatformContext } from '@/core/tenancy/context';
 
@@ -131,6 +132,8 @@ export function isPlatformPerson(ctx: Pick<BusinessContext, 'role'>): boolean {
  */
 export function businessTabs(ctx: BusinessContext): BusinessTab[] {
   const allowed = BUSINESS_TABS.filter((tab) => ctx.permissions.has(tab.permission));
+  // One set of tabs, inside the app (src/server/app-sections.tsx), for everyone.
+  if (runsAdminInApp(ctx)) return allowed.filter((tab) => tab.key === 'app');
   return isPlatformPerson(ctx) ? allowed : allowed.filter((tab) => tab.key === 'app');
 }
 
@@ -148,4 +151,9 @@ export function homeTab(ctx: BusinessContext, appHomeOpen = true): BusinessTab |
 
 export function tabHref(slug: string, mode: 'live' | 'sandbox', tab: BusinessTab): string {
   return tab.usesMode ? `/console/${slug}/${mode}/${tab.key}` : `/console/${slug}/${tab.key}`;
+}
+
+/** The business's module runs its admin inside the app (ModuleManifest.adminInApp). */
+export function runsAdminInApp(ctx: Pick<BusinessContext, 'business'>): boolean {
+  return adminInApp(ctx.business.moduleKey);
 }

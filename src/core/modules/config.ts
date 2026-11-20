@@ -92,7 +92,9 @@ export async function setPortalEnabled(
   portal: PortalKind,
   enabled: boolean,
 ): Promise<void> {
-  authorize(ctx, 'business.settings.write');
+  // Not business.settings.write: business admins may hold that (adminInApp) but never switch
+  // a portal off (their own staff portal included).
+  authorize(ctx, 'business.portals.write');
   const row = await loadRow(ctx.business.id);
   if (!Object.hasOwn(PORTAL_COLUMN, portal)) throw new ValidationError('Unknown portal.');
   const column = PORTAL_COLUMN[portal];

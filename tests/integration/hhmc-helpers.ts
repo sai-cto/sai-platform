@@ -2,7 +2,7 @@
 import { buildLinkContext } from '@/core/links/links';
 import type { BusinessContext } from '@/core/tenancy/context';
 import { addJobDay, bookJob } from '@/modules/hhmc/services/booking';
-import { customerLinkFor, sendEstimate, signEstimateByLink } from '@/modules/hhmc/services/estimates';
+import { customerLinkFor, payDepositByLink, sendEstimate, signEstimateByLink } from '@/modules/hhmc/services/estimates';
 import { convertLead, createLead } from '@/modules/hhmc/services/leads';
 import { ctxFor, USERS } from './helpers';
 
@@ -40,9 +40,16 @@ export async function signedJob(ctx: BusinessContext, moveDate?: string) {
   return { job, estimate };
 }
 
-/** A booked move (one day on the move date unless more are given). */
+/** The customer pays the deposit through their link (a move is confirmed only once it is paid). */
+export async function payDeposit(ctx: BusinessContext, estimateId: string) {
+  const customer = await buildLinkContext((await customerLinkFor(ctx, estimateId)).split('/l/')[1]);
+  await payDepositByLink(customer, { attemptKey: `dep${tag()}` });
+}
+
+/** A booked (Confirmed) move: signed, deposit paid, one day on the move date unless more are given. */
 export async function bookedJob(ctx: BusinessContext, moveDate?: string, extraDays: string[] = []) {
   const { job, estimate } = await signedJob(ctx, moveDate);
+  await payDeposit(ctx, estimate.id);
   for (const d of extraDays) await addJobDay(ctx, job.id, { dayDate: d, startTime: '08:00', hours: '4', crewSize: '2', trucks: '1' });
   await bookJob(ctx, job.id);
   return { job, estimate };

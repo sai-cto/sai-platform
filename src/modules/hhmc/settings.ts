@@ -23,6 +23,8 @@ export const settingsSchema = z.object({
   defaultJobHours: z.number().min(0.5).max(24),
   // Estimate builder (managers' requirements, Nov 2026)
   longDistanceMiles: z.number().min(1).max(5000),
+  // Service type from the addresses (managers' feedback round 1)
+  localServiceMaxMiles: z.number().min(1).max(5000),
   cornellianDiscountPerHour: z.number().min(0).max(1000),
   // Branding on the customer's estimate and invoice pages and documents
   brandColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a colour like #1d4ed8'),
@@ -54,6 +56,9 @@ export const settingsDefaults: HhmcSettings = {
   defaultJobHours: 4,
   // Managers: "Over roughly 150 miles we apply a long-distance rate" (NEEDS JAI REVIEW: exact cut-off).
   longDistanceMiles: 150,
+  // No Local vs Intrastate rule existed (Movegistics left it to staff). NEEDS MANAGER REVIEW:
+  // starts at the long-distance cut-off, since Movegistics' Intrastate terms are "Intrastate Long Distance".
+  localServiceMaxMiles: 150,
   // Managers: "unless they are a Cornellian of which they get a $20 an hour discount".
   cornellianDiscountPerHour: 20,
   // NEEDS JAI REVIEW: placeholders until the managers give their brand colour and company details.
@@ -81,6 +86,7 @@ export const settingsFields: SettingField[] = [
   { key: 'defaultArrivalWindow', label: 'Default arrival window', type: 'text' },
   { key: 'defaultJobHours', label: 'Default length of a job day (hours)', type: 'number' },
   { key: 'longDistanceMiles', label: 'Long distance starts at (miles)', type: 'number', help: 'Over this distance the estimate builder uses the long-distance truck day fee plus the per-mile rate (set the rates in Settings › Line items; managers price per-mile about $0.10 below U-Haul). Below it, the local truck day fee.' },
+  { key: 'localServiceMaxMiles', label: 'Local moves go up to (miles)', type: 'number', help: 'A move inside one state is Local up to this road distance and Intrastate beyond it. A move that touches another state (either address, a stop, or the driving route) is always Interstate.' },
   { key: 'cornellianDiscountPerHour', label: 'Cornellian discount ($ per labor hour)', type: 'number', help: 'When "Cornellian" is ticked in the estimate builder, the movers\' hourly rate is this much lower (packing labor is not discounted).' },
   { key: 'brandColor', label: 'Brand colour (customer pages)', type: 'text', help: 'A hex colour such as #1d4ed8, used for the header band and buttons on estimates and invoices.' },
   { key: 'brandHeaderText', label: 'Header line on estimates and invoices', type: 'text' },

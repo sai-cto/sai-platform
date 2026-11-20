@@ -13,11 +13,11 @@ async function confirm(page: Page, label: string) {
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
 }
 
-test('a move from lead to Closed, with the customer signing and paying from their links', async ({ page, browser }) => {
+test('a move from lead to Completed · paid, with the customer signing and paying from their links', async ({ page, browser }) => {
   const tag = Date.now().toString(36);
   await loginAs(page, SEED.hhmcAdmin);
   await page.goto(APP);
-  await expect(page.getByRole('navigation', { name: 'App sections' }).getByRole('link')).toHaveText(['Dashboard', 'Leads', 'Estimates', 'Work Requests', 'Contacts', 'Calendar', 'Invoices', 'Settings', 'How to test']);
+  await expect(page.getByRole('navigation', { name: 'App sections' }).getByRole('link')).toHaveText(['Dashboard', 'Leads', 'Estimates', 'Work Requests', 'Contacts', 'Calendar', 'Invoices', 'Data', 'Activity log', 'Settings', 'How to test']);
 
   // Lead.
   await page.goto(`${APP}/leads/new`);
@@ -33,7 +33,7 @@ test('a move from lead to Closed, with the customer signing and paying from thei
   // Convert → the Job page.
   await page.getByRole('button', { name: 'Convert to job' }).click();
   await expect(page).toHaveURL(/\/app\/jobs\/[0-9a-f-]{36}$/);
-  await expect(page.getByText('Qualified', { exact: true })).toBeVisible();
+  await expect(page.getByText('Request', { exact: true }).first()).toBeVisible();
 
   // Quote: the default 16' truck is there; add 2 Men × 2.5 h. The total updates while typing.
   await page.getByLabel('Item', { exact: true }).selectOption({ label: '2 Men · $195.00/hour' });
@@ -48,7 +48,7 @@ test('a move from lead to Closed, with the customer signing and paying from thei
   // Send the estimate, then copy the customer's link.
   await page.getByRole('button', { name: 'Send estimate' }).click();
   await confirm(page, 'Send estimate');
-  await expect(page.getByText('Estimate Sent', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Estimate sent', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Copy link' }).click();
   const link = await page.getByLabel('Customer link').inputValue();
   expect(link).toMatch(/\/l\/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
@@ -81,13 +81,13 @@ test('a move from lead to Closed, with the customer signing and paying from thei
   // A tampered link is "not found".
   expect((await customer.request.get(`${linkPath}x`)).status()).toBe(404);
 
-  // Staff: ready to book, but nothing booked itself.
+  // Staff: ready to confirm (the deposit is paid), but nothing confirmed itself.
   await page.reload();
-  await expect(page.getByText('Ready to book')).toBeVisible();
+  await expect(page.getByText('Ready to confirm')).toBeVisible();
   await expect(page.getByText('Deposit paid: $141.96')).toBeVisible();
-  await page.getByRole('button', { name: 'Book this move' }).click();
-  await confirm(page, 'Book');
-  await expect(page.getByText('Booked', { exact: true }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Confirm move' }).click();
+  await confirm(page, 'Confirm');
+  await expect(page.getByText('Confirmed', { exact: true }).first()).toBeVisible();
   const jobUrl = page.url();
   const jobNumber = (await page.getByRole('heading', { level: 1 }).innerText()).split(' ')[0];
 
@@ -120,10 +120,10 @@ test('a move from lead to Closed, with the customer signing and paying from thei
   await expect(customer.getByText('Paid in full. Thank you!')).toBeVisible();
 
   await page.goto(jobUrl);
-  await expect(page.getByText('Closed', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Completed · paid', { exact: true }).first()).toBeVisible();
 });
 
-test('staff see what they were granted: no Book button or invoice actions without the permission', async ({ page }) => {
+test('staff see what they were granted: no Confirm button or invoice actions without the permission', async ({ page }) => {
   const jobId = await asOwner(async (sql) =>
     (await sql`select j.id from hhmc_jobs j join businesses b on b.id = j.business_id
                join hhmc_estimates e on e.job_id = j.id and e.status = 'signed'
@@ -131,8 +131,8 @@ test('staff see what they were granted: no Book button or invoice actions withou
   );
   await loginAs(page, 'hhmc.staff@sai.example');
   await page.goto(`${APP}/jobs/${jobId}`);
-  await expect(page.getByText('Ready to book')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Book this move' })).toHaveCount(0);
+  await expect(page.getByText('Estimate sent', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Confirm move' })).toHaveCount(0);
   const sections = page.getByRole('navigation', { name: 'App sections' });
   await expect(sections.getByRole('link', { name: 'Leads' })).toBeVisible();
   // Executives get no app at all; another business's admin gets "not found".

@@ -173,6 +173,8 @@ export async function seedDemoData(s: Scope): Promise<void> {
         tentative: job.stage === 'qualified' && i % 2 === 0,
         arrivalWindow: settings.defaultArrivalWindow,
         serviceType: job.service,
+        // Demo moves have their type chosen, like imported ones (never re-decided by the addresses).
+        serviceTypeSource: 'manual',
         jobType: JOB_TYPE[job.service],
         bedrooms: lead?.bedrooms ?? '2 bedrooms',
         crewSize: job.crew,

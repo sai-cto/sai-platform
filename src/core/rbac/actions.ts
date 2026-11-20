@@ -77,7 +77,9 @@ export const CORE_ACTIONS: ActionDef[] = [
   action('business.data.purge', 'Permanently delete archived records past retention', 'business', 'write', row(Y, N, N, N, N)),
   action('business.activity.read', "See the business's activity log (staff: only entries about records they may read)", 'business', 'read', row(Y, Y, Y, Y, G)),
   action('business.settings.read', 'See module settings', 'business', 'read', row(Y, Y, N, Y, N)),
-  action('business.settings.write', 'Change module settings and portal toggles', 'business', 'write', row(Y, Y, N, N, N)),
+  // Business admins also get this in a module that runs its admin inside the app (adminInApp).
+  action('business.settings.write', 'Change module settings (business admins too, where the module runs its admin inside the app)', 'business', 'write', row(Y, Y, N, N, N)),
+  action('business.portals.write', 'Switch portals on and off', 'business', 'write', row(Y, Y, N, N, N)),
   action('business.sandbox.use', 'Use test mode (sandbox data)', 'business', 'read', row(Y, Y, N, Y, G)),
   action('business.sandbox.reset', 'Reset the sandbox to fresh fake data', 'business', 'write', row(Y, Y, N, Y, N)),
 

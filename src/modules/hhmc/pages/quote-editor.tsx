@@ -21,6 +21,7 @@ import {
   type SectionKey,
 } from '../services/pricing';
 import { formatMoney } from '@/ui/format';
+import { CHARGE_GROUPS, chargeGroupOf, GROUP_SECTION, type ChargeGroup } from '../charge-groups';
 
 type Action = (previous: ActionResult | null, formData: FormData) => Promise<ActionResult>;
 
@@ -48,6 +49,7 @@ export function QuoteEditor({
   removeLine: Record<string, () => Promise<ActionResult>> | null;
   saveOptions: Action;
 }) {
+  const [group, setGroup] = useState<ChargeGroup>('Moving');
   const [itemId, setItemId] = useState('');
   const [qty, setQty] = useState('');
   const [rate, setRate] = useState('');
@@ -58,6 +60,8 @@ export function QuoteEditor({
   const [feeOn, setFeeOn] = useState(options.convenienceFeeOn);
 
   const item = catalog.find((c) => c.id === itemId);
+  // Picking a group filters the Item list (charge-groups.ts says which item is in which group).
+  const groupItems = catalog.filter((c) => chargeGroupOf(c) === group);
   const draftQty = parseQty(qty || '0');
   const draftRate = rate ? parseMoney(rate) : (item?.rateCents ?? null);
   const draftDiscount = discountType ? (discountType === 'percent' ? parseQty(discount || '0') : parseMoney(discount || '0')) : null;
@@ -125,17 +129,35 @@ export function QuoteEditor({
             submitLabel="Add line"
             onSuccess={() => {
               setItemId('');
+              setSection(GROUP_SECTION[group]);
               setQty('');
               setRate('');
               setDiscountType('');
               setDiscount('');
             }}
           >
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
+              <Field label="Charge type" htmlFor="ql-group">
+                <select
+                  id="ql-group"
+                  value={group}
+                  onChange={(e) => {
+                    const next = e.target.value as ChargeGroup;
+                    setGroup(next);
+                    setItemId('');
+                    setSection(GROUP_SECTION[next]);
+                  }}
+                  className={inputClass}
+                >
+                  {CHARGE_GROUPS.map((g) => (
+                    <option key={g} value={g}>{`${g} (${catalog.filter((c) => chargeGroupOf(c) === g).length})`}</option>
+                  ))}
+                </select>
+              </Field>
               <Field label="Item" htmlFor="ql-item" className="lg:col-span-2">
                 <select id="ql-item" name="catalogItemId" value={itemId} onChange={(e) => setItemId(e.target.value)} className={inputClass}>
                   <option value="">Type my own…</option>
-                  {catalog.map((c) => (
+                  {groupItems.map((c) => (
                     <option key={c.id} value={c.id}>{`${c.name} · ${usd(c.rateCents)}/${c.unit}`}</option>
                   ))}
                 </select>

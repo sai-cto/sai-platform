@@ -30,6 +30,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ busin
   const config = await guarded(() => getModuleConfig(ctx));
   const mod = getModule(config.moduleKey);
   const canWrite = ctx.permissions.has('business.settings.write');
+  const canPortals = ctx.permissions.has('business.portals.write');
   const slug = ctx.business.slug;
 
   return (
@@ -37,9 +38,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ busin
       <PageHeader
         title="Settings"
         description={
-          canWrite
+          canWrite && canPortals
             ? 'Module configuration and portal switches. Every change is logged.'
-            : 'You can see these settings. Only the tech team can change them.'
+            : canWrite
+              ? 'How the app works for this business. Every change is logged; portals are switched on and off by the tech team.'
+              : 'You can see these settings. Only the tech team can change them.'
         }
       />
 
@@ -95,7 +98,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ busin
                 ) : (
                   <Badge tone="amber">Off</Badge>
                 )}
-                {canWrite && built ? (
+                {canPortals && built ? (
                   <ConfirmButton
                     action={setPortalAction.bind(null, slug, p.kind, !on)}
                     confirmTitle={`Turn the ${p.label.toLowerCase()} ${on ? 'off' : 'on'}?`}

@@ -13,7 +13,14 @@
  *   key: it is visible in the page).
  */
 
-export type Route = { distanceTenths: number; driveMinutes: number };
+import { stateCode } from './us-states';
+
+/** `states`: the US states the route passes through (two-letter codes), or null when they could
+ *  not be checked (the route was found but the state lookup failed). */
+export type Route = { distanceTenths: number; driveMinutes: number; states?: string[] | null };
+
+/** At most this many points along the route are looked up for their state (Geocoding API). */
+export const ROUTE_STATE_SAMPLES = 25;
 
 export function mapsConfigured(): boolean {
   return Boolean(process.env.GOOGLE_MAPS_API_KEY);
@@ -36,8 +43,9 @@ export async function routeThrough(stops: string[]): Promise<Route | null | 'not
     headers: {
       'Content-Type': 'application/json',
       'X-Goog-Api-Key': key,
-      // Only the two numbers we use (Google bills by the fields asked for).
-      'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration',
+      // Only what we use (Google bills by the fields asked for): the two numbers, and the line of
+      // the route and its turn-by-turn text to find the states it passes through.
+      'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.navigationInstruction.instructions',
     },
     body: JSON.stringify({
       origin: { address: stops[0] },
@@ -50,12 +58,111 @@ export async function routeThrough(stops: string[]): Promise<Route | null | 'not
     signal: AbortSignal.timeout(8000),
   }).catch(() => null);
   if (!response?.ok) return null;
-  const body = (await response.json().catch(() => null)) as { routes?: { distanceMeters?: number; duration?: string }[] } | null;
+  const body = (await response.json().catch(() => null)) as RoutesBody | null;
   const route = body?.routes?.[0];
   const seconds = route?.duration ? Number(/^(\d+(?:\.\d+)?)s$/.exec(route.duration)?.[1]) : NaN;
   if (!route || typeof route.distanceMeters !== 'number' || !Number.isFinite(seconds)) return null;
+  const instructions = (route.legs ?? []).flatMap((l) => l.steps ?? []).map((st) => st.navigationInstruction?.instructions ?? '');
+  const states = await statesAlong(key, route.polyline?.encodedPolyline ?? null, instructions);
   // metres → tenths of a mile; seconds → minutes (rounded up).
-  return { distanceTenths: Math.round(route.distanceMeters / 160.9344), driveMinutes: Math.ceil(seconds / 60) };
+  return { distanceTenths: Math.round(route.distanceMeters / 160.9344), driveMinutes: Math.ceil(seconds / 60), states };
+}
+
+type RoutesBody = {
+  routes?: {
+    distanceMeters?: number;
+    duration?: string;
+    polyline?: { encodedPolyline?: string };
+    legs?: { steps?: { navigationInstruction?: { instructions?: string } }[] }[];
+  }[];
+};
+
+/** Google's encoded polyline → [lat, lng] points (the published algorithm). */
+export function decodePolyline(encoded: string): [number, number][] {
+  const points: [number, number][] = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+  const next = () => {
+    let result = 0;
+    let shift = 0;
+    let byte: number;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+    return result & 1 ? ~(result >> 1) : result >> 1;
+  };
+  while (index < encoded.length) {
+    lat += next();
+    lng += next();
+    points.push([lat / 1e5, lng / 1e5]);
+  }
+  return points;
+}
+
+/** Up to `count` points spread evenly along the line (by distance), ends included. */
+export function samplePoints(points: [number, number][], count: number): [number, number][] {
+  if (points.length <= count) return points;
+  const km = (a: [number, number], b: [number, number]) => {
+    const rad = Math.PI / 180;
+    const dLat = (b[0] - a[0]) * rad;
+    const dLng = (b[1] - a[1]) * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * rad) * Math.cos(b[0] * rad) * Math.sin(dLng / 2) ** 2;
+    return 12742 * Math.asin(Math.sqrt(h));
+  };
+  const along = [0];
+  for (let i = 1; i < points.length; i++) along.push(along[i - 1] + km(points[i - 1], points[i]));
+  const total = along[along.length - 1];
+  const out: [number, number][] = [];
+  let j = 0;
+  for (let k = 0; k < count; k++) {
+    const target = (total * k) / (count - 1);
+    while (j < points.length - 1 && along[j] < target) j++;
+    out.push(points[j]);
+  }
+  return out;
+}
+
+/**
+ * The states a route passes through: "Entering New Jersey" in Google's directions, plus the
+ * state of points sampled along the route (Geocoding API, same key). Null when nothing could
+ * be looked up, so the work request says "route not checked" instead of guessing.
+ */
+async function statesAlong(key: string, polyline: string | null, instructions: string[]): Promise<string[] | null> {
+  const found = new Set<string>();
+  for (const text of instructions) {
+    for (const m of text.matchAll(/Entering ([A-Z][A-Za-z.]*(?: [A-Z][A-Za-z.]*)*)/g)) {
+      const code = stateCode(m[1]);
+      if (code) found.add(code);
+    }
+  }
+  if (!polyline) return found.size ? [...found].sort() : null;
+  const samples = samplePoints(decodePolyline(polyline), ROUTE_STATE_SAMPLES);
+  const looked = await Promise.all(samples.map(([lat, lng]) => stateAt(key, lat, lng)));
+  if (looked.every((s) => s === undefined)) return found.size ? [...found].sort() : null;
+  for (const s of looked) if (s) found.add(s);
+  return [...found].sort();
+}
+
+/** The US state at a point; null outside the US; undefined when the lookup failed. */
+async function stateAt(key: string, lat: number, lng: number): Promise<string | null | undefined> {
+  const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
+  url.searchParams.set('latlng', `${lat},${lng}`);
+  url.searchParams.set('result_type', 'administrative_area_level_1');
+  url.searchParams.set('key', key);
+  const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(8000) }).catch(() => null);
+  if (!response?.ok) return undefined;
+  const body = (await response.json().catch(() => null)) as {
+    status?: string;
+    results?: { address_components?: { short_name?: string; types?: string[] }[] }[];
+  } | null;
+  if (!body || (body.status !== 'OK' && body.status !== 'ZERO_RESULTS')) return undefined;
+  const parts = body.results?.[0]?.address_components ?? [];
+  const country = parts.find((p) => p.types?.includes('country'))?.short_name;
+  const state = parts.find((p) => p.types?.includes('administrative_area_level_1'))?.short_name;
+  return country === 'US' && state ? stateCode(state) : null;
 }
 
 /** A Google Maps directions link for the route. Needs no key; Google sees the addresses only

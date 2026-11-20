@@ -101,9 +101,9 @@ test('a manager runs one move from lead to paid; the customer signs and pays thr
   await expect(customer.getByText(/✓ Deposit paid/)).toBeVisible();
 
   await page.reload();
-  await page.getByRole('button', { name: 'Book this move' }).click();
-  await confirm(page, 'Book');
-  await expect(page.getByText('Booked', { exact: true }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Confirm move' }).click();
+  await confirm(page, 'Confirm');
+  await expect(page.getByText('Confirmed', { exact: true }).first()).toBeVisible();
   const jobUrl = page.url();
   await page.getByLabel(/Actual hours/).fill('2');
   await page.getByRole('button', { name: 'Save', exact: true }).first().click();
@@ -118,7 +118,7 @@ test('a manager runs one move from lead to paid; the customer signs and pays thr
   await customer.getByRole('button', { name: /by card/ }).click();
   await expect(customer.getByText('Paid in full. Thank you!')).toBeVisible();
   await page.goto(jobUrl);
-  await expect(page.getByText('Closed', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Completed · paid', { exact: true }).first()).toBeVisible();
 });
 
 test('staff can run a move but cannot manage people', async ({ page }) => {

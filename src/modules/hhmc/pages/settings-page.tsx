@@ -4,16 +4,17 @@
  * all separate"). Areas: Line items (by cost category), Discounts, Automatic emails ("When X →
  * send Y", with the email text right there; no tags), Documents and branding, Trucks.
  * The numbers (deposit %, tax %, card fee %, long-distance miles, Cornellian $/hr, branding)
- * are module settings in the console's Settings tab (tech team).
+ * are module settings in Business settings (an area of this Settings since the managers' feedback round 1).
  */
 import Link from 'next/link';
 import type { PortalPageProps } from '@/core/modules/contract';
 import { can } from '@/core/rbac/permissions';
 import { ActionForm } from '@/ui/action-form';
 import { ConfirmButton } from '@/ui/confirm-button';
-import { formatMoney } from '@/ui/format';
+import { formatDateTime, formatMoney } from '@/ui/format';
 import { Card, Field, PageHeader, Table, Td, Th, inputClass } from '@/ui/layout';
-import { addTruckAction, catalogItemAction, newCatalogItemAction, ruleAction, runDueEmailsAction, templateAction } from '../actions';
+import { addTruckAction, catalogItemAction, newCatalogItemAction, ruleAction, runDueEmailsAction, templateAction, termsPdfAction } from '../actions';
+import { termsPdfInfo } from '../services/terms-pdf';
 import { truckSizeOf } from '../rules';
 import { CORE, P } from '../permissions';
 import type { AutomationTrigger } from '../schema';
@@ -21,17 +22,19 @@ import { CATEGORIES, UNITS } from '../services/settings';
 import { settingsPage } from '../services/views';
 import { brandOf, loadSettings } from '../settings';
 import { Disclosure } from './disclosure';
+import { adminSettingsLinks } from '@/core/modules/portal';
+import { SectionAreasNav } from '@/ui/section-nav';
 import { areaClass } from './jobs';
 import { Check, Select } from './parts';
 
-const AREAS = [
+export const SETTINGS_AREAS = [
   { key: 'items', label: 'Line items' },
   { key: 'discounts', label: 'Discounts' },
   { key: 'emails', label: 'Automatic emails' },
   { key: 'documents', label: 'Documents and branding' },
   { key: 'trucks', label: 'Trucks' },
 ] as const;
-type Area = (typeof AREAS)[number]['key'];
+type Area = (typeof SETTINGS_AREAS)[number]['key'];
 
 export const TRIGGER_TEXT: Record<AutomationTrigger, string> = {
   estimate_sent: 'an estimate is sent',
@@ -59,26 +62,23 @@ export async function SettingsPage({ ctx, searchParams, basePath }: PortalPagePr
   const mode = ctx.environment;
   const canWrite = can(ctx, P.catalogWrite);
   const isTech = ctx.role === 'tech' || ctx.role === 'super_admin';
-  const area: Area = AREAS.find((a) => a.key === searchParams.area)?.key ?? 'items';
-  const consoleSettings = can(ctx, 'business.settings.read') ? <Link className="underline" href={`/console/${slug}/settings`}>Settings tab</Link> : 'Settings tab (tech team)';
+  const area: Area = SETTINGS_AREAS.find((a) => a.key === searchParams.area)?.key ?? 'items';
+  const consoleSettings = can(ctx, 'business.settings.read') ? <Link className="underline" href={`/console/${slug}/settings`}>Business settings</Link> : 'Business settings';
   const templateFor = (key: string) => data.templates.find((t) => t.key === key);
   const brand = brandOf(settings, ctx.business.name);
+  const termsPdf = area === 'documents' && can(ctx, CORE.filesRead) ? await termsPdfInfo(ctx) : null;
 
   return (
     <>
-      <PageHeader title="Settings" description="One page per area. Pick one below." />
-      <nav aria-label="Settings areas" className="mb-5 flex flex-wrap gap-1 border-b border-zinc-200">
-        {AREAS.map((a) => (
-          <Link
-            key={a.key}
-            href={`${basePath}/settings?area=${a.key}`}
-            aria-current={a.key === area ? 'page' : undefined}
-            className={`-mb-px flex min-h-11 items-center border-b-2 px-3 py-2 text-sm sm:min-h-0 ${a.key === area ? 'border-zinc-900 font-medium text-zinc-900' : 'border-transparent text-zinc-600 hover:text-zinc-900'}`}
-          >
-            {a.label}
-          </Link>
-        ))}
-      </nav>
+      <PageHeader title="Settings" description="Everything about how Hired Hands runs, one area at a time." />
+      <SectionAreasNav
+        label="Settings areas"
+        links={[
+          ...SETTINGS_AREAS.map((a) => ({ label: a.label, href: `${basePath}/settings?area=${a.key}`, active: a.key === area })),
+          // Business settings and People and access, run from the app (adminInApp).
+          ...adminSettingsLinks(ctx).map((l) => ({ label: l.label, href: l.href, active: false })),
+        ]}
+      />
 
       {area === 'items' ? (
         <div className="space-y-5">
@@ -200,7 +200,7 @@ export async function SettingsPage({ ctx, searchParams, basePath }: PortalPagePr
 
       {area === 'documents' ? (
         <div className="space-y-5">
-          <Card title="Branding on estimates and invoices" description={<>Changed in the console&apos;s {consoleSettings}.</>}>
+          <Card title="Branding on estimates and invoices" description={<>Changed in {consoleSettings}.</>}>
             <div className="overflow-hidden rounded-md border border-zinc-200 text-sm">
               <div className="px-4 py-3 text-white" style={{ backgroundColor: brand.color }}>{brand.header}</div>
               <div className="space-y-1 px-4 py-3 text-zinc-600">
@@ -208,6 +208,32 @@ export async function SettingsPage({ ctx, searchParams, basePath }: PortalPagePr
                 <p className="text-xs">{brand.footer}</p>
               </div>
             </div>
+          </Card>
+          <Card
+            title="Terms & Conditions (PDF)"
+            description="The full terms. Customers can open it from their estimate link before signing, and each signed estimate records which version they were shown."
+          >
+            {termsPdf ? (
+              <p className="text-sm">
+                {can(ctx, CORE.filesRead) ? (
+                  <a className="underline" href={`/console/${slug}/${mode}/files/${termsPdf.fileId}`} target="_blank" rel="noopener noreferrer">{termsPdf.filename}</a>
+                ) : (
+                  termsPdf.filename
+                )}
+                <span className="block text-xs text-zinc-500">{`Version ${termsPdf.version} · uploaded ${formatDateTime(termsPdf.uploadedAt)}`}</span>
+              </p>
+            ) : (
+              <p className="text-sm text-amber-800">No PDF yet: customers see only the terms text below until one is uploaded.</p>
+            )}
+            {canWrite && can(ctx, CORE.filesWrite) ? (
+              <div className="mt-3">
+                <ActionForm action={termsPdfAction.bind(null, slug, mode)} submitLabel={termsPdf ? 'Upload a new version' : 'Upload'} submitVariant="secondary">
+                  <Field label="PDF file" htmlFor="terms-pdf" help="Up to 10 MB. Earlier versions are kept.">
+                    <input id="terms-pdf" name="file" type="file" accept="application/pdf,.pdf" required className="block text-sm" />
+                  </Field>
+                </ActionForm>
+              </div>
+            ) : null}
           </Card>
           <Card title="Terms, valuation and other email wording" flush>
             <ul className="divide-y divide-zinc-100">
@@ -229,7 +255,7 @@ export async function SettingsPage({ ctx, searchParams, basePath }: PortalPagePr
                 ))}
             </ul>
           </Card>
-          <p className="text-sm text-zinc-600">{`Deposit ${settings.depositPercent}% · service tax ${settings.serviceTaxPercent}% · card fee ${settings.convenienceFeePercent}% · ${settings.roundingMinutes}-minute billing · estimates expire after ${settings.estimateExpiryDays} days.`} Changed in the {consoleSettings}.</p>
+          <p className="text-sm text-zinc-600">{`Deposit ${settings.depositPercent}% · service tax ${settings.serviceTaxPercent}% · card fee ${settings.convenienceFeePercent}% · ${settings.roundingMinutes}-minute billing · estimates expire after ${settings.estimateExpiryDays} days.`} Changed in {consoleSettings}.</p>
         </div>
       ) : null}
 

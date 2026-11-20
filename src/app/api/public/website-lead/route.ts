@@ -5,9 +5,10 @@ import { runPublicIntake } from '@/core/intake/intake';
 /**
  * The Hired Hands website's quote form posts here and a lead is created (docs/DECISIONS.md, WEB-1).
  *
- * Nobody signs in, so the door is narrow: the business ("hhmc") and the intake are fixed here,
- * the environment comes from WEBSITE_INTAKE_ENVIRONMENT (default "sandbox", so a first test
- * never lands among real leads), and the intake holds only "add a lead".
+ * Nobody signs in, so the door is narrow: the intake is fixed here (and with it the business,
+ * whose slug is the intake's module key), the environment comes from
+ * WEBSITE_INTAKE_ENVIRONMENT (default "sandbox", so a first test never lands among real
+ * leads), and the intake holds only "add a lead".
  *
  *   WEBSITE_INTAKE_ORIGINS      comma-separated site addresses allowed to post, for example
  *                               "https://hiredhands-site.vercel.app,https://hiredhandsmoving.com".
@@ -18,8 +19,10 @@ import { runPublicIntake } from '@/core/intake/intake';
  * that sets its own Origin header: the hidden "website" field and the small per-address limit
  * below catch the common bots, and Vercel's firewall rate limit is the real defence.
  */
-const BUSINESS = 'hhmc';
 const INTAKE = 'hhmc.website-lead';
+// A module's key is the slug of the business it serves (ModuleManifest.key), and an intake's
+// key starts with its module's: the business is never written down separately.
+const BUSINESS = INTAKE.slice(0, INTAKE.indexOf('.'));
 const MAX_BYTES = 20_000;
 const LIMIT = 5; // requests per address per window
 const WINDOW_MS = 10 * 60_000;

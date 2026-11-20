@@ -66,7 +66,8 @@ in any other business they hold nothing and the business does not appear to exis
 | Permanently delete archived records past retention | `business.data.purge` | write | ✅ | — | — | — | — |
 | See the business's activity log (staff: only entries about records they may read) | `business.activity.read` | read | ✅ | ✅ | ✅ | ✅ | 🔑 |
 | See module settings | `business.settings.read` | read | ✅ | ✅ | — | ✅ | — |
-| Change module settings and portal toggles | `business.settings.write` | write | ✅ | ✅ | — | — | — |
+| Change module settings (business admins too, where the module runs its admin inside the app) | `business.settings.write` | write | ✅ | ✅ | — | — | — |
+| Switch portals on and off | `business.portals.write` | write | ✅ | ✅ | — | — | — |
 | Use test mode (sandbox data) | `business.sandbox.use` | read | ✅ | ✅ | — | ✅ | 🔑 |
 | Reset the sandbox to fresh fake data | `business.sandbox.reset` | write | ✅ | ✅ | — | ✅ | — |
 | See customers | `customers.read` | read | ✅ | ✅ | ✅ | ✅ | 🔑 |

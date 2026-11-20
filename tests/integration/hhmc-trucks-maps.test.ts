@@ -17,7 +17,7 @@ import { resourceEntity } from '@/core/records/core-entities';
 import { CORE } from '@/modules/hhmc/permissions';
 import { applyBuilder, buildLines, refreshMileage, type BuilderInput, type CatalogRow } from '@/modules/hhmc/services/builder';
 import { loadJob } from '@/modules/hhmc/services/common';
-import { customerLinkFor, sendEstimate, signEstimateByLink } from '@/modules/hhmc/services/estimates';
+import { customerLinkFor, payDepositByLink, sendEstimate, signEstimateByLink } from '@/modules/hhmc/services/estimates';
 import { createJob, updateJob } from '@/modules/hhmc/services/jobs';
 import { convertLead, createLead } from '@/modules/hhmc/services/leads';
 import { directionsLink, embedMapUrl, formatRoute, routeStops, routeThrough } from '@/modules/hhmc/services/maps';
@@ -134,11 +134,11 @@ describe('mileage through every stop', () => {
     const route = await routeThrough(['A', 'B', 'C', 'D']);
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe('https://routes.googleapis.com/directions/v2:computeRoutes');
-    expect(calls[0].headers['X-Goog-FieldMask']).toBe('routes.distanceMeters,routes.duration');
+    expect(calls[0].headers['X-Goog-FieldMask']).toBe('routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.navigationInstruction.instructions');
     expect(calls[0].body.origin.address).toBe('A');
     expect(calls[0].body.intermediates.map((i) => i.address)).toEqual(['B', 'C']);
     expect(calls[0].body.destination.address).toBe('D');
-    expect(route).toEqual({ distanceTenths: 1125, driveMinutes: 145 });
+    expect(route).toEqual({ distanceTenths: 1125, driveMinutes: 145, states: null }); // no route line in the fake: states not checked
   });
 
   it('no route found (an empty answer) is "not found", never zero miles', async () => {
@@ -243,7 +243,7 @@ describe('picking specific trucks', () => {
       const job = await newCustomerJob(ctx, { moveDate: moveDay, truckIds: [truck.id] });
       const est = await sendEstimate(ctx, job.id);
       const link = await customerLinkFor(ctx, est.id);
-      await signEstimateByLink(await buildLinkContext(link.split('/l/')[1]), { valuationInitials: 'RR', signatureName: 'Robin Route', agree: true, ip: null, userAgent: null });
+      { const c = await buildLinkContext(link.split('/l/')[1]); await signEstimateByLink(c, { valuationInitials: 'RR', signatureName: 'Robin Route', agree: true, ip: null, userAgent: null }); await payDepositByLink(c, { attemptKey: `dep${tag()}` }); }
       return job;
     };
     const first = await booked();
@@ -264,7 +264,7 @@ describe('picking specific trucks', () => {
     const days = await withScope(ctx, P.jobsRead, (s) => jobDaysOf(s, job.id));
     expect(days.map((d) => d.trucks)).toEqual([2]);
     const est = await sendEstimate(ctx, job.id);
-    await signEstimateByLink(await buildLinkContext((await customerLinkFor(ctx, est.id)).split('/l/')[1]), { valuationInitials: 'RR', signatureName: 'Robin Route', agree: true, ip: null, userAgent: null });
+    { const c = await buildLinkContext((await customerLinkFor(ctx, est.id)).split('/l/')[1]); await signEstimateByLink(c, { valuationInitials: 'RR', signatureName: 'Robin Route', agree: true, ip: null, userAgent: null }); await payDepositByLink(c, { attemptKey: `dep${tag()}` }); }
     await bookJob(ctx, job.id);
     const d = days[0].dayDate;
     const schedule = await scheduleBetween(ctx, d, (await import('@/modules/hhmc/rules')).addDays(d, 1));
@@ -276,7 +276,7 @@ describe('picking specific trucks', () => {
     const truck = await addTruck(ctx, `Test truck ${tag()} · 22'`);
     const job = await newCustomerJob(ctx, { moveDate: day(95 + (counter % 20)), truckIds: [truck.id] });
     const est = await sendEstimate(ctx, job.id);
-    await signEstimateByLink(await buildLinkContext((await customerLinkFor(ctx, est.id)).split('/l/')[1]), { valuationInitials: 'RR', signatureName: 'Robin Route', agree: true, ip: null, userAgent: null });
+    { const c = await buildLinkContext((await customerLinkFor(ctx, est.id)).split('/l/')[1]); await signEstimateByLink(c, { valuationInitials: 'RR', signatureName: 'Robin Route', agree: true, ip: null, userAgent: null }); await payDepositByLink(c, { attemptKey: `dep${tag()}` }); }
     await withScope(ctx, CORE.schedulingWrite, (s) => archiveRecord(s, resourceEntity, truck.id));
     await expect(bookJob(ctx, job.id)).rejects.toThrow(/retired/);
   });
@@ -295,7 +295,7 @@ describe('mileage once the price is settled', () => {
     const job = await newCustomerJob(ctx);
     await refreshMileage(ctx, job.id);
     const est = await sendEstimate(ctx, job.id);
-    await signEstimateByLink(await buildLinkContext((await customerLinkFor(ctx, est.id)).split('/l/')[1]), { valuationInitials: 'RR', signatureName: 'Robin Route', agree: true, ip: null, userAgent: null });
+    { const c = await buildLinkContext((await customerLinkFor(ctx, est.id)).split('/l/')[1]); await signEstimateByLink(c, { valuationInitials: 'RR', signatureName: 'Robin Route', agree: true, ip: null, userAgent: null }); await payDepositByLink(c, { attemptKey: `dep${tag()}` }); }
     vi.unstubAllGlobals();
     fakeGoogle([300], [300]);
     await expect(refreshMileage(ctx, job.id, { force: true })).rejects.toThrow(/price is settled/);

@@ -1,8 +1,8 @@
 /**
- * The calendar: ONE calendar of booked moves, estimates, work requests and invoices due,
- * colour-coded with a legend (managers: "only the monthly calendar is useful and you can't
- * color code it"). Month is the main view; Week and Day remain (ref §10: replaces Monthly
- * Schedule, Daily Job Chart, Availability, Weekly Schedule and Events).
+ * The calendar: ONE calendar of confirmed moves (managers' feedback round 1: "Calendar shows
+ * only confirmed moves"; a move is Confirmed once its deposit is paid and it is booked).
+ * Month is the main view; Week and Day remain (ref §10: replaces Monthly Schedule, Daily Job
+ * Chart, Availability, Weekly Schedule and Events).
  *
  * - Every event carries a text label and a symbol as well as its colour (never colour alone).
  * - The legend's items show or hide a kind: plain links, the state is in the URL
@@ -18,11 +18,10 @@ import { Badge } from '@/ui/badge';
 import { buttonClass } from '@/ui/button';
 import { cn } from '@/ui/cn';
 import { ConfirmButton } from '@/ui/confirm-button';
-import { formatMoney } from '@/ui/format';
 import { Card, EmptyState, Field, PageHeader, inputClass } from '@/ui/layout';
 import { soldOutAction, unSoldOutAction } from '../actions';
 import { CORE, P } from '../permissions';
-import { ESTIMATE_STATUS_LABELS, INVOICE_STATUS_LABELS, addDays, isDateText, localDate } from '../rules';
+import { addDays, isDateText, localDate } from '../rules';
 import { scheduleBetween, type ScheduleDay } from '../services/booking';
 import {
   CALENDAR_KIND_LABELS,
@@ -79,9 +78,6 @@ const titleFor = (view: View, anchor: string, from: string) =>
  */
 const KIND_LOOK: Record<CalendarKind, { chip: string; sub: string; symbol: string; short: string }> = {
   booked: { chip: 'border-emerald-600 bg-emerald-50 text-emerald-950 hover:bg-emerald-100', sub: 'text-emerald-800', symbol: '■', short: 'Move' },
-  estimate: { chip: 'border-sky-600 bg-sky-50 text-sky-950 hover:bg-sky-100', sub: 'text-sky-800', symbol: '◆', short: 'Estimate' },
-  request: { chip: 'border-dashed border-zinc-500 bg-zinc-100 text-zinc-900 hover:bg-zinc-200', sub: 'text-zinc-700', symbol: '○', short: 'Request' },
-  invoice: { chip: 'border-amber-600 bg-amber-50 text-amber-950 hover:bg-amber-100', sub: 'text-amber-900', symbol: '$', short: 'Due' },
 };
 
 function Capacity({ day, crew, trucks }: { day: ScheduleDay; crew: number; trucks: number }) {
@@ -98,21 +94,7 @@ function Capacity({ day, crew, trucks }: { day: ScheduleDay; crew: number; truck
 
 /** The two lines of an event: what and who, then the detail for its kind. */
 function eventText(e: CalendarEvent, tz: string): { main: string; detail: string } {
-  switch (e.kind) {
-    case 'booked':
-      return { main: `${formatTime(e.startsAt, tz)} · ${e.customerName}`, detail: `M:${e.crewSize} / T:${e.trucks} · ${e.jobNumber}` };
-    case 'estimate': {
-      const status = e.estimateStatus ? ESTIMATE_STATUS_LABELS[e.estimateStatus] : 'No live estimate';
-      return { main: e.customerName, detail: `${status}${e.expired ? ', expired' : ''} · ${e.jobNumber}` };
-    }
-    case 'request':
-      return { main: e.customerName, detail: `Not estimated · ${e.jobNumber}` };
-    case 'invoice':
-      return {
-        main: `${formatMoney(e.balanceCents)} · ${e.customerName}`,
-        detail: `${e.invoiceNumber} · ${e.pastDue ? 'Past due' : INVOICE_STATUS_LABELS[e.invoiceStatus]}`,
-      };
-  }
+  return { main: `${formatTime(e.startsAt, tz)} · ${e.customerName}`, detail: `M:${e.crewSize} / T:${e.trucks} · ${e.jobNumber}` };
 }
 
 export async function SchedulePage({ ctx, searchParams, basePath }: PortalPageProps) {
@@ -145,7 +127,7 @@ export async function SchedulePage({ ctx, searchParams, basePath }: PortalPagePr
   const counts = new Map<CalendarKind, number>();
   for (const d of days) if (inPeriod(d.date)) for (const e of d.events) counts.set(e.kind, (counts.get(e.kind) ?? 0) + 1);
 
-  const href = (e: CalendarEvent) => (e.kind === 'invoice' ? `${basePath}/invoices/${e.invoiceId}` : `${basePath}/jobs/${e.jobId}`);
+  const href = (e: CalendarEvent) => `${basePath}/jobs/${e.jobId}`;
   const event = (e: CalendarEvent) => {
     const look = KIND_LOOK[e.kind];
     const text = eventText(e, tz);

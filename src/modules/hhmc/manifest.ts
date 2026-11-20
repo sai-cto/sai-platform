@@ -4,6 +4,7 @@
  * docs/hhmc-analysis/movegistics-reference.md.
  */
 import { defineModule } from '@/core/modules/contract';
+import { termsPdfByLink } from './services/terms-pdf';
 import { formatMoney, formatNumber } from '@/ui/format';
 import { entities, jobEntity } from './entities';
 import { ContactPage, ContactsPage } from './pages/contacts';
@@ -15,7 +16,7 @@ import { JobPage } from './pages/job-page';
 import { JobsPage, NewJobPage } from './pages/jobs';
 import { LeadPage, LeadsPage, NewLeadPage } from './pages/leads';
 import { SchedulePage } from './pages/schedule-page';
-import { SettingsPage } from './pages/settings-page';
+import { SETTINGS_AREAS, SettingsPage } from './pages/settings-page';
 import { HowToTestPage } from './pages/how-to-test';
 import { EstimatePrintPage, InvoicePrintPage } from './pages/print-pages';
 import { CORE, P, permissions } from './permissions';
@@ -98,6 +99,8 @@ export const hhmcModule = defineModule({
     {
       key: 'hhmc.estimate',
       permissions: [P.customerEstimate, P.jobsRead, P.jobsWrite, P.estimatesWrite, P.catalogRead, CORE.customersRead, CORE.paymentsRead, CORE.paymentsWrite, CORE.notificationsWrite, CORE.filesRead, CORE.filesWrite],
+      // The full Terms & Conditions PDF, readable before signing.
+      files: termsPdfByLink,
     },
     {
       key: 'hhmc.invoice',
@@ -162,6 +165,10 @@ export const hhmcModule = defineModule({
   ],
 
   settings: { schema: settingsSchema, defaults: settingsDefaults, fields: settingsFields },
+  // HHMC's admins run everything from inside the app (managers' feedback round 1, Nov 2026):
+  // Data, Activity log and one Settings (with Business settings and People and access).
+  adminInApp: true,
+  settingsAreas: SETTINGS_AREAS.map((a) => ({ key: a.key, label: a.label })),
 
   seedDemoData,
 });
